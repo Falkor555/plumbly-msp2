@@ -1,0 +1,101 @@
+# =========================================================
+# Plumbly — .gitignore
+# Monorepo : frontend (React/Vite), backend (NestJS/Prisma), Docker
+# =========================================================
+
+# ---------- Dépendances ----------
+node_modules/
+.pnp
+.pnp.js
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ---------- Builds ----------
+dist/
+dist-ssr/
+build/
+out/
+.vite/
+*.tsbuildinfo
+
+# ---------- Variables d'environnement (secrets) ----------
+.env
+.env.*
+!.env.example
+
+# ---------- Logs ----------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---------- Tests et couverture ----------
+coverage/
+.nyc_output/
+junit.xml
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# ---------- Prisma ----------
+# Les migrations (prisma/migrations) sont versionnées, pas les bases locales
+*.db
+*.db-journal
+*.sqlite
+
+# ---------- Docker ----------
+# Données persistées en local par les conteneurs
+docker-data/
+pgdata/
+postgres-data/
+mongo-data/
+docker-compose.override.yml
+
+# ---------- Caches ----------
+.cache/
+.eslintcache
+.stylelintcache
+.prettiercache
+.turbo/
+.parcel-cache/
+.temp/
+.tmp/
+
+# ---------- IDE et éditeurs ----------
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+
+# ---------- Claude Code (réglages personnels) ----------
+.claude/settings.local.json
+
+# ---------- Système ----------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---------- Divers ----------
+*.pid
+*.seed
+*.pid.lock
+*.tgz
+.npm/
+.history/
