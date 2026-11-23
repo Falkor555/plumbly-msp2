@@ -49,7 +49,6 @@ Certaines requêtes sont toutefois **écrites directement en SQL**, avec `$query
 | --- | --- | --- |
 | Unitaires | [Vitest](https://vitest.dev/) + [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) | [Jest](https://jestjs.io/) (intégré par défaut à NestJS) |
 | Intégration | Vitest + [MSW](https://mswjs.io/) (simulation de l'API) | Jest + [Supertest](https://github.com/ladjs/supertest) + [Testcontainers](https://testcontainers.com/) (PostgreSQL réel dans Docker) |
-| End-to-end *(optionnel)* | [Playwright](https://playwright.dev/) | — |
 
 **Pourquoi ces choix :**
 
@@ -58,8 +57,7 @@ Certaines requêtes sont toutefois **écrites directement en SQL**, avec `$query
 - **MSW** intercepte les appels réseau, ce qui permet de tester le front sans lancer le back-end.
 - **Jest** est déjà configuré dans tout projet NestJS. Il fonctionne avec le module de test de Nest (`@nestjs/testing`).
 - **Supertest** envoie de vraies requêtes HTTP à l'application NestJS pour vérifier les routes de bout en bout côté API.
-- **Testcontainers** lance une vraie base PostgreSQL éphémère pendant les tests d'intégration. On teste donc sur le même moteur qu'en production, et non sur une base simulée.
-- **Playwright** permet, si besoin, de tester les parcours complets dans un vrai navigateur.
+- **Testcontainers** lance une vraie base PostgreSQL éphémère pendant les tests d'intégration. On teste donc sur le même moteur que l'application, et non sur une base simulée.
 
 ## Structure du projet
 

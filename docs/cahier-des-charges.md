@@ -32,10 +32,10 @@ Aujourd'hui, cette organisation repose souvent sur un agenda papier, un tableur 
 
 | Membre | Rôle principal |
 | --- | --- |
-| Loïc BOTSY | Cahier des charges, UML, tests, CI ; authentification et interventions (front et back) |
-| Arnaud BIDEL | Modélisation des données, maquettes, Docker ; clients, techniciens et tournées (front et back) |
+| Loïc BOTSY | Cahier des charges, user stories, UML, maquettes et données de ses écrans, tests d'intégration ; authentification, interventions et journal NoSQL (front et back) |
+| Arnaud BIDEL | Modélisation des données, charte et maquettes, Docker, environnement de test ; clients, techniciens et tournées (front et back) |
 
-Projet réalisé dans le cadre de la formation CDA9 (titre professionnel Concepteur Développeur d'Applications).
+Projet réalisé dans le cadre de la formation CDA9 (titre professionnel Concepteur Développeur d'Applications), pour la validation du CCP 2, dans le respect des compétences du CCP 1.
 
 ## 2. Acteurs et personas
 
@@ -285,7 +285,6 @@ Les mesures suivent le [Top 10 OWASP](https://owasp.org/www-project-top-ten/) et
 - Temps de réponse de l'API inférieur à 500 ms pour 95 % des requêtes courantes.
 - Premier affichage de la tournée du jour en moins de 2 s sur une connexion 4G.
 - Listes paginées (20 éléments par page par défaut).
-- Sauvegarde quotidienne de la base PostgreSQL.
 
 ### 6.5 Compatibilité
 
@@ -296,13 +295,13 @@ Les mesures suivent le [Top 10 OWASP](https://owasp.org/www-project-top-ten/) et
 ### 6.6 Maintenabilité
 
 - Code en TypeScript strict, côté front et back.
-- ESLint et Prettier appliqués par la CI.
+- ESLint et Prettier lancés avant chaque pull request.
 - Conventions de commit ([Conventional Commits](https://www.conventionalcommits.org/fr/)) et relecture obligatoire des pull requests.
 - Documentation de l'API générée avec Swagger (OpenAPI).
 
 ## 7. Maquettage et ergonomie
 
-Les maquettes sont réalisées dans Figma par Arnaud, en trois étapes : zoning, wireframes, puis maquettes haute fidélité. Le lien Figma sera ajouté ici et dans le README.
+Les maquettes sont réalisées dans Figma par Arnaud, et par Loïc pour les écrans de connexion et d'interventions, en trois étapes : zoning, wireframes, puis maquettes haute fidélité. Le lien Figma sera ajouté ici et dans le README.
 
 ### 7.1 Liste des écrans
 
@@ -353,14 +352,12 @@ flowchart TB
         MG[("MongoDB (proposé)<br/><small>journal des actions</small>")]
     end
 
-    CI["GitHub Actions : lint, tests, images Docker"]
 
     G --> F
     T --> F
     F -- "HTTPS, REST JSON /api/v1, jeton JWT" --> C
     R -- "Prisma et SQL manuel" --> PG
     R -. "driver MongoDB" .-> MG
-    CI -. "construit et teste" .-> DC
 ```
 
 Le front ne parle qu'à l'API ; seule la couche repository accède aux bases, ce qui garde les règles de gestion indépendantes du stockage.
@@ -380,8 +377,7 @@ Le front ne parle qu'à l'API ; seule la couche repository accède aux bases, ce
 | Base NoSQL | MongoDB (proposé) | Journal des actions et historique des statuts, documents sans schéma fixe |
 | Authentification | Passport + JWT, argon2 | Standard NestJS, hachage robuste |
 | Documentation API | Swagger (OpenAPI) | Générée depuis les décorateurs NestJS |
-| Conteneurs | Docker, Docker Compose | Environnement identique pour le binôme, la CI et la production |
-| CI/CD | GitHub Actions | Intégré au dépôt et au GitHub Project |
+| Conteneurs | Docker, Docker Compose | Environnement identique sur les postes du binôme, lancé en une commande |
 
 ### 8.2 Architecture en couches de l'API
 
@@ -406,7 +402,7 @@ Cette séparation permet de tester chaque couche isolément et de changer la sou
 - **PostgreSQL** stocke les données métier structurées et liées : utilisateurs, clients, adresses, techniciens, interventions, tournées.
 - **MongoDB** stockerait le journal des actions (qui a fait quoi, quand, avec quelles données avant et après). Ces documents sont nombreux, s'ajoutent sans jamais être modifiés et ont une structure variable selon l'action.
 
-Ce choix est à valider (voir section 14) : il couvre la compétence « composants d'accès aux données SQL et NoSQL » du titre CDA.
+Ce choix est à valider (voir section 14) : il couvre la compétence « Développer des composants d'accès aux données SQL et NoSQL » du CCP 2.
 
 ## 9. Modèle de données
 
@@ -448,7 +444,9 @@ Un jeu de données fictif (seed) d'environ 5 techniciens, 50 clients et 200 inte
 
 ## 10. Stratégie de tests
 
-Les tests d'intégration de l'API sont écrits dès la semaine 1, à partir des user stories, avant le développement : ils échouent au départ puis passent au vert au fil de la semaine 2. Aucune pull request n'est fusionnée si la CI est rouge.
+Les tests d'intégration de l'API sont écrits dès la semaine 1, à partir des user stories, avant le développement : ils échouent au départ puis passent au vert au fil de la semaine 2. Une pull request n'est fusionnée que si tous les tests passent en local.
+
+Les tests unitaires répondent aux attendus du CCP 1 (composants métier testés). Les tests d'intégration sont conservés comme outil de qualité. En revanche, le plan de tests formel, la recette et les tests end-to-end relèvent du CCP 3 et sont hors périmètre.
 
 ### 10.1 Niveaux de tests
 
@@ -458,9 +456,7 @@ Les tests d'intégration de l'API sont écrits dès la semaine 1, à partir des 
 | Unitaire front | Composants, formulaires, hooks | Vitest, React Testing Library | Composants critiques couverts |
 | Intégration back | Routes de l'API de bout en bout, avec une vraie base | Jest, Supertest, Testcontainers (PostgreSQL) | Chaque user story Must couverte |
 | Intégration front | Écrans branchés sur une API simulée | Vitest, MSW | Parcours principaux |
-| End-to-end (optionnel) | Parcours complets dans un vrai navigateur | Playwright | Connexion, création et planification d'une intervention |
 | Sécurité | Accès refusés, injections, entrées invalides | Tests d'intégration dédiés, `npm audit` | Aucune faille connue critique |
-| Recette | Validation manuelle des user stories | Cahier de recette | 100 % des Must validées |
 
 ### 10.2 Exemples de cas de test d'intégration
 
@@ -480,48 +476,39 @@ Les tests d'intégration de l'API sont écrits dès la semaine 1, à partir des 
 ### 10.3 Organisation
 
 - Base de test créée à la volée par Testcontainers, migrations Prisma appliquées, puis seed dédié aux tests.
-- Commandes : `npm run test` (unitaires), `npm run test:e2e` (intégration), `npm run test:cov` (couverture).
-- Le plan de tests et le cahier de recette sont ajoutés dans `docs/`.
+- Commandes : `npm run test` (unitaires), `npm run test:e2e` (intégration de l'API, nom par défaut dans NestJS), `npm run test:cov` (couverture).
+- Les tests sont lancés en local avant chaque pull request.
 
-## 11. Déploiement et DevOps
+## 11. Environnement de développement et gestion du code
 
-Chaque pull request déclenche la CI ; chaque fusion sur `main` produit des images Docker prêtes à déployer. L'hébergeur de production reste à choisir (voir section 14).
+L'application tourne en local avec Docker Compose sur le poste de chaque membre du binôme ; la démonstration se fait sur cet environnement. Le déploiement en production et l'intégration continue (CI/CD) relèvent du CCP 3 et sont hors périmètre.
 
-### 11.1 Environnements
+### 11.1 Environnement de développement
 
-| Environnement | Usage | Base de données | Lancement |
-| --- | --- | --- | --- |
-| Développement | Poste de chaque membre du binôme | PostgreSQL (et MongoDB) dans Docker, données de seed | `docker compose up` |
-| Test | CI GitHub Actions | Conteneurs éphémères (Testcontainers) | À chaque pull request |
-| Production | Démonstration au jury | Base dédiée, sauvegardée chaque jour | Déploiement depuis `main` |
+| Élément | Contenu | Lancement |
+| --- | --- | --- |
+| Services Docker | Front-end, API, PostgreSQL et MongoDB | `docker compose up` |
+| Données | Migrations Prisma et jeu de données fictif (seed) | `npx prisma migrate dev`, `npx prisma db seed` |
+| Tests | Bases éphémères créées par Testcontainers | `npm run test`, `npm run test:e2e` |
+| Qualité | ESLint, Prettier, vérification des types TypeScript | `npm run lint`, `npm run build` |
 
-### 11.2 Pipeline CI/CD (GitHub Actions)
+### 11.2 Gestion du code
 
-1. Installation des dépendances (avec cache npm).
-2. Lint (ESLint) et vérification du formatage (Prettier).
-3. Vérification des types TypeScript et build du front et du back.
-4. Tests unitaires, puis tests d'intégration avec rapport de couverture.
-5. Audit des dépendances (`npm audit`).
-6. Sur `main` uniquement : construction des images Docker et publication sur GitHub Container Registry.
-7. Déploiement en production (manuel ou automatique selon l'hébergeur choisi).
-
-### 11.3 Gestion du code
-
-- Branche `main` protégée : fusion uniquement par pull request, CI verte et relecture de l'autre membre du binôme.
+- Branche `develop` par défaut : toutes les branches partent de `develop` et y sont fusionnées par pull request.
+- Une seule fusion finale de `develop` vers `main`, à la fin du projet.
 - Une branche par issue, créée depuis le GitHub Project (`12-ecrire-tests-integration`).
-- Messages de commit au format Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`).
-- Versions identifiées par des tags (`v0.1.0` pour le MVP).
+- Avant chaque pull request : lint et tests en local ; relecture par l'autre membre du binôme.
+- Messages de commit clairs et en français, décrivant le changement.
 
-### 11.4 Documentation du déploiement
+### 11.3 Documentation technique
 
-- `README.md` : installation, variables d'environnement, commandes.
+- `README.md` : présentation, installation, variables d'environnement, commandes.
 - `.env.example` : liste de toutes les variables sans leurs valeurs secrètes.
-- `docs/deploiement.md` : procédure de mise en production, de sauvegarde et de restauration de la base.
 - Documentation Swagger de l'API accessible sur `/api/docs` en développement.
 
 ## 12. Gestion de projet
 
-Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une semaine de conception, une semaine de développement du MVP. Les 24 tâches sont suivies dans le [GitHub Project du dépôt](https://github.com/users/Falkor555/projects/6).
+Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une semaine de conception, une semaine de développement du MVP. Les 25 tâches sont suivies dans le [GitHub Project du dépôt](https://github.com/users/Falkor555/projects/6).
 
 ### 12.1 Organisation
 
@@ -529,7 +516,7 @@ Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une s
 - **Une card = une issue = une branche = une pull request** ; `Closes #n` dans la pull request ferme l'issue.
 - **Point quotidien** de 10 minutes : ce qui est fait, ce qui est prévu, ce qui bloque.
 - **Relecture croisée** : chaque pull request est relue par l'autre membre du binôme.
-- **Outils** : GitHub (code, issues, Project, Actions), Figma (maquettes), Discord ou Teams (communication).
+- **Outils** : GitHub (code, issues, Project, pull requests), Figma (maquettes), Discord ou Teams (communication).
 
 ### 12.2 Planning
 
@@ -537,9 +524,9 @@ Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une s
 | --- | --- | --- |
 | Semaine 1, J1–J2 | Besoins définis | Cahier des charges, personas, user stories, MCD / MLD, UML |
 | Semaine 1, J2–J4 | Maquettes validées | Zoning, wireframes, maquettes haute fidélité |
-| Semaine 1, J3–J5 | Socle technique prêt | Docker, NestJS + Prisma, React + Vite + Tailwind, CI, outils de test, tests d'intégration écrits |
-| Semaine 2, J6–J9 | MVP développé | Authentification, clients, techniciens, interventions, tournées, planning, requêtes SQL |
-| Semaine 2, J10 | MVP livré (`v0.1.0`) | Recette, corrections, README, préparation de la démo et du dossier |
+| Semaine 1, J3–J5 | Socle technique prêt | Docker, NestJS + Prisma, React + Vite + Tailwind, outils de test, tests d'intégration écrits |
+| Semaine 2, J6–J9 | MVP développé | Authentification, clients, techniciens, interventions, tournées, planning, requêtes SQL, journal NoSQL |
+| Semaine 2, J10 | MVP terminé | Corrections, finalisation, README, préparation de la démo et du dossier |
 
 ### 12.3 Répartition
 
@@ -547,20 +534,26 @@ La répartition suit les cards du [GitHub Project](https://github.com/users/Falk
 
 | Domaine | Loïc BOTSY | Arnaud BIDEL |
 | --- | --- | --- |
-| Analyse et conception | Cahier des charges (#1), personas et user stories (#2), diagrammes UML (#3) | MCD et MLD (#4) |
-| Maquettage | — | Zoning et wireframes (#5), maquettes et charte graphique (#6) |
-| Socle technique | React, Vite et Tailwind (#9), CI GitHub Actions (#10) | Monorepo et docker-compose (#7), NestJS et Prisma (#8) |
-| Tests (semaine 1) | Environnement de test (#11), tests d'intégration de l'API (#12) | — |
-| Back-end (semaine 2) | Authentification et rôles (#13), CRUD interventions et statuts (#17) | CRUD clients et techniciens (#15), planification des tournées (#19) |
+| Domaine | Loïc BOTSY | Arnaud BIDEL |
+| --- | --- | --- |
+| Analyse des besoins | Cahier des charges (#1), personas et user stories (#2) | — |
+| Conception | Diagrammes UML (#3) ; MCD / MLD : utilisateurs, interventions, historique (#4) | MCD / MLD : clients, techniciens, tournées (#4) |
+| Maquettage | Maquettes des écrans connexion et interventions (#26) | Zoning et wireframes (#5), maquettes et charte graphique (#6) |
+| Socle technique | React, Vite et Tailwind (#9) | Monorepo et docker-compose (#7), NestJS et Prisma (#8), environnement de test (#11) |
+| Tests (semaine 1) | Tests d'intégration de l'API (#12) | — |
+| Back-end (semaine 2) | Authentification et rôles (#13), CRUD interventions et statuts (#17), journal des actions MongoDB (#27) | CRUD clients et techniciens (#15), planification des tournées (#19) |
 | Front-end (semaine 2) | Connexion et routes protégées (#14), écrans des interventions (#18) | Écrans clients et techniciens (#16), vue planning (#20) |
-| En commun | Requêtes SQL manuelles (#21), tests unitaires (#22), recette (#23), README, démo et dossier (#24) | Idem |
+| En commun | Requêtes SQL manuelles (#21), tests unitaires (#22), corrections et finalisation (#23), README, démo et dossier (#24) | Idem |
 
 | Période | Loïc BOTSY | Arnaud BIDEL |
 | --- | --- | --- |
+| Semaine 1, J1–J2 | Cahier des charges (#1), user stories (#2), UML (#3), MCD / MLD (#4) | MCD / MLD (#4), zoning et wireframes (#5) |
+| Semaine 1, J3–J4 | Maquettes de ses écrans (#26), init front (#9) | Maquettes et charte (#6), Docker (#7), NestJS et Prisma (#8) |
+| Semaine 1, J4–J5 | Tests d'intégration de l'API (#12) | Environnement de test (#11) |
 | Semaine 2, J6–J7 | Authentification : API (#13) et écrans (#14) | Clients et techniciens : API (#15) et écrans (#16) |
-| Semaine 2, J8–J9 | Interventions : API (#17) et écrans (#18) | Tournées et planning : API (#19) et écrans (#20) |
+| Semaine 2, J8–J9 | Interventions : API (#17) et écrans (#18), journal MongoDB (#27) | Tournées et planning : API (#19) et écrans (#20) |
 | Semaine 2, J9 | Requêtes SQL de son domaine (#21) | Requêtes SQL de son domaine (#21) |
-| Semaine 2, J10 | Recette, README, démo (#23, #24) | Recette, README, démo (#23, #24) |
+| Semaine 2, J10 | Corrections, README, démo (#23, #24) | Corrections, README, démo (#23, #24) |
 
 Points d'attention :
 
@@ -573,9 +566,8 @@ Points d'attention :
 - [ ] User stories, diagrammes UML, MCD et MLD
 - [ ] Maquettes Figma
 - [ ] Code source sur GitHub avec README
-- [ ] Plan de tests et cahier de recette
-- [ ] Application déployée et démontrable
-- [ ] Documentation de déploiement
+- [ ] Tests unitaires et d'intégration
+- [ ] Application fonctionnelle en local (Docker) et démontrable
 - [ ] Dossier de projet et support de présentation
 
 ### 12.5 Risques
@@ -587,44 +579,50 @@ Points d'attention :
 | Dépendance entre front et back | Blocage du front | Contrat d'API défini tôt (Swagger), API simulée avec MSW |
 | Absence d'un membre | Retard | Relecture croisée pour que chacun connaisse tout le code |
 
-## 13. Correspondance avec le titre CDA
+## 13. Correspondance avec les CCP 1 et 2 du titre CDA
 
-Plumbly couvre les 11 compétences des trois CCP du titre Concepteur Développeur d'Applications. Les intitulés ci-dessous sont repris de mémoire et sont à vérifier avec le REAC fourni par la formation.
+Plumbly est présenté pour la validation du **CCP 2**, et doit aussi respecter les compétences du **CCP 1**, sur lequel le CCP 2 s'appuie. Les 8 compétences de ces deux blocs sont couvertes par le projet. Les intitulés ci-dessous sont repris de mémoire et sont à vérifier avec le REAC fourni par la formation.
 
 ### CCP 1 : Développer une application sécurisée
 
-| Compétence | Où elle est démontrée dans Plumbly | Sections |
-| --- | --- | --- |
-| Installer et configurer son environnement de travail en fonction du projet | Docker Compose, Node, ESLint / Prettier, variables d'environnement, Git et GitHub | 8.1, 11.1 |
-| Développer des interfaces utilisateur | Front React + Tailwind responsive et accessible, formulaires validés, vue mobile technicien | 6.3, 7 |
-| Développer des composants métier | Services NestJS portant les règles de gestion : statuts, conflits de planning, droits | 5, 8.2 |
-| Contribuer à la gestion d'un projet informatique | Kanban GitHub Project, issues, branches, pull requests, relecture croisée, planning | 12 |
+| Compétence | Où elle est démontrée dans Plumbly | Sections | Cards |
+| --- | --- | --- | --- |
+| Installer et configurer son environnement de travail en fonction du projet | Docker Compose, Node, ESLint / Prettier, variables d'environnement, Git et GitHub, outils de test | 8.1, 11.1 | #7, #8, #9, #11 |
+| Développer des interfaces utilisateur | Front React + Tailwind responsive et accessible, formulaires validés, vue mobile du technicien | 6.3, 7 | #14, #16, #18, #20 |
+| Développer des composants métier | Services NestJS portant les règles de gestion : statuts, conflits de planning, droits | 5, 8.2 | #13, #15, #17, #19 |
+| Contribuer à la gestion d'un projet informatique | Kanban GitHub Project, issues, branches, pull requests, relecture croisée, planning et répartition | 12 | toutes |
 
 ### CCP 2 : Concevoir et développer une application sécurisée organisée en couches
 
-| Compétence | Où elle est démontrée dans Plumbly | Sections |
+| Compétence | Où elle est démontrée dans Plumbly | Sections | Cards |
+| --- | --- | --- | --- |
+| Analyser les besoins et maquetter une application | Cahier des charges, personas, user stories priorisées, règles de gestion, zoning, wireframes, maquettes Figma | 1 à 5, 7 | #1, #2, #5, #6, #26 |
+| Définir l'architecture logicielle d'une application | Architecture trois tiers, API REST organisée en couches (contrôleur, service, repository), diagrammes UML, choix techniques justifiés | 8 | #3, #8 |
+| Concevoir et mettre en place une base de données relationnelle | Dictionnaire de données, MCD / MLD Merise, schéma Prisma, migrations, contraintes d'intégrité, index, jeu d'essai | 9 | #4, #8 |
+| Développer des composants d'accès aux données SQL et NoSQL | Repositories Prisma, requêtes SQL écrites à la main (jointures, agrégations, transaction), journal des actions dans MongoDB | 8.4, 9.3 | #13, #15, #17, #19, #21, #27 |
+
+La sécurité, exigée par l'intitulé des deux CCP, est présente à chaque niveau : validation des saisies et routes protégées dans l'interface, contrôle d'accès par rôle dans les composants métier (6.1), mots de passe hachés et contraintes d'intégrité en base (6.1, 9.2), requêtes paramétrées contre l'injection SQL (9.3).
+
+Le CCP 3 (plan de tests et recette, déploiement, CI/CD) n'est pas présenté : ces éléments ont été retirés du projet et du kanban. Les tests unitaires (attendus au CCP 1) et les tests d'intégration sont conservés. À l'oral, un test montre par exemple qu'une règle de gestion ou un contrôle d'accès fonctionne.
+
+### 13.1 Ce que Loïc présente à l'oral
+
+| CCP | Compétence | Éléments produits par Loïc |
 | --- | --- | --- |
-| Analyser les besoins et maquetter une application | Cahier des charges, personas, user stories, zoning, wireframes, maquettes Figma | 2, 4, 7 |
-| Définir l'architecture logicielle d'une application | Architecture trois tiers, API REST en couches (contrôleur, service, repository), diagrammes UML | 8 |
-| Concevoir et mettre en place une base de données relationnelle | MCD / MLD Merise, schéma Prisma, migrations, contraintes d'intégrité, index, seed | 9 |
-| Développer des composants d'accès aux données SQL et NoSQL | Repositories Prisma, requêtes SQL manuelles et transaction, journal des actions dans MongoDB | 8.4, 9.3 |
-
-### CCP 3 : Préparer le déploiement d'une application sécurisée
-
-| Compétence | Où elle est démontrée dans Plumbly | Sections |
-| --- | --- | --- |
-| Préparer et exécuter les plans de tests d'une application | Plan de tests, tests unitaires et d'intégration, tests de sécurité, cahier de recette | 10 |
-| Préparer et documenter le déploiement d'une application | README, `.env.example`, procédure de déploiement, Swagger | 11.4 |
-| Contribuer à la mise en production dans une démarche DevOps | Pipeline GitHub Actions, images Docker, déploiement depuis `main` | 11.2 |
-
-La sécurité, transversale aux trois CCP, est traitée en section 6.1 et vérifiée par les tests de la section 10.
+| 1 | Environnement de travail | React, Vite et Tailwind (#9), service MongoDB dans Docker Compose (#27), Git et branches par issue |
+| 1 | Interfaces utilisateur | Connexion et routes protégées (#14), écrans des interventions (#18) |
+| 1 | Composants métier | Services d'authentification et des interventions : rôles, cycle de vie des statuts (#13, #17), avec leurs tests unitaires (#22) |
+| 1 | Gestion de projet | Création et suivi du GitHub Project, issues, branches, pull requests, planning |
+| 2 | Analyser les besoins et maquetter | Cahier des charges, personas et user stories (#1, #2) ; wireframes et maquettes des écrans connexion et interventions (#26) |
+| 2 | Définir l'architecture | Diagrammes UML (#3) ; modules authentification et interventions en couches (#13, #17) |
+| 2 | Concevoir la base de données | MCD / MLD des utilisateurs, des interventions et de l'historique (#4) ; tables correspondantes dans le schéma Prisma (#13, #17) |
+| 2 | Accès aux données SQL et NoSQL | Repositories des utilisateurs et des interventions, requêtes SQL de reporting (#17, #21), journal des actions dans MongoDB (#27) |
 
 ## 14. Points à décider et glossaire
 
 ### 14.1 Points à décider
 
 - [ ] Base NoSQL : MongoDB pour le journal des actions, ou autre usage (Redis pour le cache) ?
-- [ ] Hébergement de production : VPS avec Docker, Render, Railway ou autre ?
 - [ ] Horaires et jours ouvrés paramétrables (RG11) ?
 - [ ] Durée de conservation des données client (6.2) ?
 - [ ] Liste des types d'intervention et durées par défaut
@@ -643,6 +641,5 @@ La sécurité, transversale aux trois CCP, est traitée en section 6.1 et vérif
 | ORM | Outil qui fait le lien entre le code et la base de données relationnelle (ici Prisma) |
 | DTO | Data Transfer Object : objet décrivant les données échangées par l'API |
 | JWT | JSON Web Token : jeton signé qui prouve l'identité de l'utilisateur |
-| CI/CD | Intégration et déploiement continus |
 | REAC | Référentiel emploi activités compétences du titre professionnel |
-| CCP | Certificat de compétences professionnelles, bloc du titre CDA |
+| CCP | Certificat de compétences professionnelles, bloc du titre CDA (ici les CCP 1 et 2) |
