@@ -32,14 +32,14 @@ Aujourd'hui, cette organisation repose souvent sur un agenda papier, un tableur 
 
 | Membre | Rôle principal |
 | --- | --- |
-| Loïc BOTSY | Cahier des charges, user stories, UML, maquettes et données de ses écrans, tests d'intégration ; authentification, interventions et journal NoSQL (front et back) |
+| Loïc BOTSY | Cahier des charges, user stories, UML, maquettes et données de ses écrans, tests d'intégration ; authentification et interventions (front et back) |
 | Arnaud BIDEL | Modélisation des données, charte et maquettes, Docker, environnement de test ; clients, techniciens et tournées (front et back) |
 
 Projet réalisé dans le cadre de la formation CDA9 (titre professionnel Concepteur Développeur d'Applications), pour la validation du CCP 2, dans le respect des compétences du CCP 1.
 
 ## 2. Acteurs et personas
 
-Trois rôles utilisent Plumbly : l'administrateur, le gestionnaire et le technicien. Chaque rôle a des droits distincts (voir 5.5).
+Trois rôles utilisent Plumbly : l'administrateur, le gestionnaire et le technicien. Chaque rôle a des droits distincts (voir 5.5). Les personas complets (journée type, objectifs, critères d'ergonomie) sont détaillés dans [personas.md](personas.md).
 
 | Acteur | Description | Usage principal | Support |
 | --- | --- | --- | --- |
@@ -84,10 +84,10 @@ Le MVP livré en deux semaines couvre l'authentification, la gestion des clients
 - Vue planning jour / semaine par technicien
 - Vue « ma tournée du jour » sur mobile pour le technicien
 - Tableau de bord : indicateurs d'activité calculés en SQL
-- Journal des actions (historique des changements de statut)
 
 ### 3.2 Évolutions envisagées
 
+- Journal des actions et historique des changements de statut
 - Carte des interventions et optimisation automatique de l'ordre de tournée (API de géolocalisation)
 - Notifications par e-mail ou SMS au client (rappel, arrivée du technicien)
 - Rapport d'intervention avec photos et signature du client
@@ -104,7 +104,7 @@ Le MVP livré en deux semaines couvre l'authentification, la gestion des clients
 
 ## 4. Besoins fonctionnels
 
-Les besoins sont exprimés en user stories, priorisées selon la méthode MoSCoW : M = Must (MVP), S = Should, C = Could, W = Won't (pas pour cette version).
+Les besoins sont exprimés en user stories, priorisées selon la méthode MoSCoW : M = Must (MVP), S = Should, C = Could, W = Won't (pas pour cette version). Les critères d'acceptation détaillés, au format « Étant donné / Quand / Alors », sont dans [user-stories.md](user-stories.md).
 
 ### 4.1 Authentification et comptes
 
@@ -143,7 +143,7 @@ Les besoins sont exprimés en user stories, priorisées selon la méthode MoSCoW
 | US16 | En tant que gestionnaire, je veux modifier ou annuler une intervention afin de suivre les changements du client. | M | Motif obligatoire en cas d'annulation |
 | US17 | En tant que technicien, je veux passer une intervention à « en cours » puis « terminée » afin d'informer le gestionnaire. | M | Seules les transitions autorisées sont possibles (voir 5.1) |
 | US18 | En tant que technicien, je veux ajouter un compte rendu à une intervention terminée afin de tracer ce qui a été fait. | S | Texte libre, 2 000 caractères maximum |
-| US19 | En tant que gestionnaire, je veux voir l'historique des changements de statut afin de savoir qui a fait quoi et quand. | S | Date, auteur, ancien et nouveau statut |
+| US19 | En tant que gestionnaire, je veux voir l'historique des changements de statut afin de savoir qui a fait quoi et quand. | W | Reportée : pas de journal des actions dans cette version |
 
 ### 4.5 Tournées et planning
 
@@ -201,7 +201,7 @@ stateDiagram-v2
 | RG04 | Une intervention « planifiée » retirée de sa tournée revient à « à planifier ». |
 | RG05 | Une intervention peut être « annulée » par un gestionnaire tant qu'elle n'est pas « terminée » ; le motif est obligatoire. |
 | RG06 | Une intervention « terminée » ou « annulée » n'est plus modifiable. |
-| RG07 | Chaque changement de statut est historisé : date, auteur, ancien et nouveau statut. |
+| RG07 | Reportée : l'historique des changements de statut n'est pas prévu dans cette version. |
 
 ### 5.2 Planification
 
@@ -263,7 +263,6 @@ Les mesures suivent le [Top 10 OWASP](https://owasp.org/www-project-top-ten/) et
 | CSRF et vol de session | Jeton d'accès de courte durée (15 min) et jeton de rafraîchissement en cookie `httpOnly`, `Secure`, `SameSite=Strict` |
 | Configuration | CORS limité à l'origine du front ; secrets dans des variables d'environnement, jamais dans le dépôt |
 | Dépendances vulnérables | `npm audit` et Dependabot sur le dépôt GitHub |
-| Traçabilité | Journalisation des connexions et des actions sensibles (création de compte, annulation) |
 
 ### 6.2 RGPD
 
@@ -311,7 +310,7 @@ Les maquettes sont réalisées dans Figma par Arnaud, et par Loïc pour les écr
 | Tableau de bord | Administrateur, gestionnaire | Ordinateur | US26 à US28 |
 | Liste et fiche client | Administrateur, gestionnaire | Ordinateur | US06 à US10 |
 | Liste et fiche technicien | Administrateur, gestionnaire | Ordinateur | US11 à US13 |
-| Liste et fiche intervention | Administrateur, gestionnaire | Ordinateur | US14 à US16, US19 |
+| Liste et fiche intervention | Administrateur, gestionnaire | Ordinateur | US14 à US16 |
 | Planning jour / semaine | Administrateur, gestionnaire | Ordinateur | US20 à US23, US25 |
 | Ma tournée du jour | Technicien | Mobile | US24 |
 | Détail d'intervention (terrain) | Technicien | Mobile | US17, US18 |
@@ -333,7 +332,7 @@ Les maquettes sont réalisées dans Figma par Arnaud, et par Loïc pour les écr
 
 ## 8. Architecture technique
 
-Plumbly est une application web en trois tiers : un front-end React (SPA), une API REST NestJS organisée en couches et une base PostgreSQL, le tout conteneurisé avec Docker.
+Plumbly est une application web en trois tiers : un front-end React (SPA), une API REST NestJS organisée en couches et une base PostgreSQL, le tout conteneurisé avec Docker. Chaque choix est justifié dans un ADR (Architecture Decision Record), dans [docs/adr](adr/README.md).
 
 ```mermaid
 flowchart TB
@@ -349,7 +348,6 @@ flowchart TB
             C --> S --> R
         end
         PG[("PostgreSQL<br/><small>données métier relationnelles</small>")]
-        MG[("MongoDB (proposé)<br/><small>journal des actions</small>")]
     end
 
 
@@ -357,7 +355,6 @@ flowchart TB
     T --> F
     F -- "HTTPS, REST JSON /api/v1, jeton JWT" --> C
     R -- "Prisma et SQL manuel" --> PG
-    R -. "driver MongoDB" .-> MG
 ```
 
 Le front ne parle qu'à l'API ; seule la couche repository accède aux bases, ce qui garde les règles de gestion indépendantes du stockage.
@@ -374,7 +371,6 @@ Le front ne parle qu'à l'API ; seule la couche repository accède aux bases, ce
 | ORM | Prisma | Schéma déclaratif, migrations versionnées, client typé |
 | SQL manuel | `$queryRaw` / `$executeRaw` de Prisma | Requêtes de reporting, jointures et agrégations maîtrisées |
 | Base relationnelle | PostgreSQL | Fiable, transactions, contraintes d'intégrité, open source |
-| Base NoSQL | MongoDB (proposé) | Journal des actions et historique des statuts, documents sans schéma fixe |
 | Authentification | Passport + JWT, argon2 | Standard NestJS, hachage robuste |
 | Documentation API | Swagger (OpenAPI) | Générée depuis les décorateurs NestJS |
 | Conteneurs | Docker, Docker Compose | Environnement identique sur les postes du binôme, lancé en une commande |
@@ -397,12 +393,10 @@ Cette séparation permet de tester chaque couche isolément et de changer la sou
 - Format d'erreur unique : `{ statusCode, message, error }`.
 - Pagination : `?page=1&limit=20`, filtres en paramètres de requête.
 
-### 8.4 Données SQL et NoSQL
+### 8.4 Choix d'une base SQL
 
 - **PostgreSQL** stocke les données métier structurées et liées : utilisateurs, clients, adresses, techniciens, interventions, tournées.
-- **MongoDB** stockerait le journal des actions (qui a fait quoi, quand, avec quelles données avant et après). Ces documents sont nombreux, s'ajoutent sans jamais être modifiés et ont une structure variable selon l'action.
-
-Ce choix est à valider (voir section 14) : il couvre la compétence « Développer des composants d'accès aux données SQL et NoSQL » du CCP 2.
+- **Pas de base NoSQL** : la compétence « Développer des composants d'accès aux données SQL ou NoSQL » se valide avec l'une ou l'autre. Le binôme a choisi **SQL**, adapté à des données fortement liées et soumises à des contraintes d'intégrité (voir [ADR 0005](adr/0005-postgresql-prisma-et-sql-manuel.md)).
 
 ## 9. Modèle de données
 
@@ -420,8 +414,6 @@ Le modèle comporte 8 entités relationnelles. C'est une première version : Arn
 | Intervention | id, type, description, urgence, statut, durée estimée, créneau prévu, ordre dans la tournée, compte rendu, motif d'annulation, créée le, terminée le | 1 client ; 1 adresse ; 0 ou 1 tournée ; 1 créateur |
 | Tournée | id, date | 1 technicien ; 0 à n interventions ; unique par (technicien, date) |
 | Type d'intervention | id, libellé, durée par défaut | 0 à n interventions |
-
-Côté NoSQL, la collection **journal\_actions** contiendrait un document par action : date, utilisateur, type d'action, entité concernée et données avant / après.
 
 ### 9.2 Contraintes d'intégrité
 
@@ -487,7 +479,7 @@ L'application tourne en local avec Docker Compose sur le poste de chaque membre 
 
 | Élément | Contenu | Lancement |
 | --- | --- | --- |
-| Services Docker | Front-end, API, PostgreSQL et MongoDB | `docker compose up` |
+| Services Docker | Front-end, API et PostgreSQL | `docker compose up` |
 | Données | Migrations Prisma et jeu de données fictif (seed) | `npx prisma migrate dev`, `npx prisma db seed` |
 | Tests | Bases éphémères créées par Testcontainers | `npm run test`, `npm run test:e2e` |
 | Qualité | ESLint, Prettier, vérification des types TypeScript | `npm run lint`, `npm run build` |
@@ -508,7 +500,7 @@ L'application tourne en local avec Docker Compose sur le poste de chaque membre 
 
 ## 12. Gestion de projet
 
-Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une semaine de conception, une semaine de développement du MVP. Les 25 tâches sont suivies dans le [GitHub Project du dépôt](https://github.com/users/Falkor555/projects/6).
+Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une semaine de conception, une semaine de développement du MVP. Les 24 tâches sont suivies dans le [GitHub Project du dépôt](https://github.com/users/Falkor555/projects/6).
 
 ### 12.1 Organisation
 
@@ -525,7 +517,7 @@ Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une s
 | Semaine 1, J1–J2 | Besoins définis | Cahier des charges, personas, user stories, MCD / MLD, UML |
 | Semaine 1, J2–J4 | Maquettes validées | Zoning, wireframes, maquettes haute fidélité |
 | Semaine 1, J3–J5 | Socle technique prêt | Docker, NestJS + Prisma, React + Vite + Tailwind, outils de test, tests d'intégration écrits |
-| Semaine 2, J6–J9 | MVP développé | Authentification, clients, techniciens, interventions, tournées, planning, requêtes SQL, journal NoSQL |
+| Semaine 2, J6–J9 | MVP développé | Authentification, clients, techniciens, interventions, tournées, planning, requêtes SQL |
 | Semaine 2, J10 | MVP terminé | Corrections, finalisation, README, préparation de la démo et du dossier |
 
 ### 12.3 Répartition
@@ -537,11 +529,11 @@ La répartition suit les cards du [GitHub Project](https://github.com/users/Falk
 | Domaine | Loïc BOTSY | Arnaud BIDEL |
 | --- | --- | --- |
 | Analyse des besoins | Cahier des charges (#1), personas et user stories (#2) | — |
-| Conception | Diagrammes UML (#3) ; MCD / MLD : utilisateurs, interventions, historique (#4) | MCD / MLD : clients, techniciens, tournées (#4) |
+| Conception | Diagrammes UML (#3) ; MCD / MLD : utilisateurs, interventions (#4) | MCD / MLD : clients, techniciens, tournées (#4) |
 | Maquettage | Maquettes des écrans connexion et interventions (#26) | Zoning et wireframes (#5), maquettes et charte graphique (#6) |
 | Socle technique | React, Vite et Tailwind (#9) | Monorepo et docker-compose (#7), NestJS et Prisma (#8), environnement de test (#11) |
 | Tests (semaine 1) | Tests d'intégration de l'API (#12) | — |
-| Back-end (semaine 2) | Authentification et rôles (#13), CRUD interventions et statuts (#17), journal des actions MongoDB (#27) | CRUD clients et techniciens (#15), planification des tournées (#19) |
+| Back-end (semaine 2) | Authentification et rôles (#13), CRUD interventions et statuts (#17) | CRUD clients et techniciens (#15), planification des tournées (#19) |
 | Front-end (semaine 2) | Connexion et routes protégées (#14), écrans des interventions (#18) | Écrans clients et techniciens (#16), vue planning (#20) |
 | En commun | Requêtes SQL manuelles (#21), tests unitaires (#22), corrections et finalisation (#23), README, démo et dossier (#24) | Idem |
 
@@ -551,7 +543,7 @@ La répartition suit les cards du [GitHub Project](https://github.com/users/Falk
 | Semaine 1, J3–J4 | Maquettes de ses écrans (#26), init front (#9) | Maquettes et charte (#6), Docker (#7), NestJS et Prisma (#8) |
 | Semaine 1, J4–J5 | Tests d'intégration de l'API (#12) | Environnement de test (#11) |
 | Semaine 2, J6–J7 | Authentification : API (#13) et écrans (#14) | Clients et techniciens : API (#15) et écrans (#16) |
-| Semaine 2, J8–J9 | Interventions : API (#17) et écrans (#18), journal MongoDB (#27) | Tournées et planning : API (#19) et écrans (#20) |
+| Semaine 2, J8–J9 | Interventions : API (#17) et écrans (#18) | Tournées et planning : API (#19) et écrans (#20) |
 | Semaine 2, J9 | Requêtes SQL de son domaine (#21) | Requêtes SQL de son domaine (#21) |
 | Semaine 2, J10 | Corrections, README, démo (#23, #24) | Corrections, README, démo (#23, #24) |
 
@@ -599,7 +591,7 @@ Plumbly est présenté pour la validation du **CCP 2**, et doit aussi respecter 
 | Analyser les besoins et maquetter une application | Cahier des charges, personas, user stories priorisées, règles de gestion, zoning, wireframes, maquettes Figma | 1 à 5, 7 | #1, #2, #5, #6, #26 |
 | Définir l'architecture logicielle d'une application | Architecture trois tiers, API REST organisée en couches (contrôleur, service, repository), diagrammes UML, choix techniques justifiés | 8 | #3, #8 |
 | Concevoir et mettre en place une base de données relationnelle | Dictionnaire de données, MCD / MLD Merise, schéma Prisma, migrations, contraintes d'intégrité, index, jeu d'essai | 9 | #4, #8 |
-| Développer des composants d'accès aux données SQL et NoSQL | Repositories Prisma, requêtes SQL écrites à la main (jointures, agrégations, transaction), journal des actions dans MongoDB | 8.4, 9.3 | #13, #15, #17, #19, #21, #27 |
+| Développer des composants d'accès aux données SQL ou NoSQL (SQL retenu) | Repositories Prisma, requêtes SQL écrites à la main (jointures, agrégations, transaction), requêtes paramétrées | 8.4, 9.3 | #13, #15, #17, #19, #21 |
 
 La sécurité, exigée par l'intitulé des deux CCP, est présente à chaque niveau : validation des saisies et routes protégées dans l'interface, contrôle d'accès par rôle dans les composants métier (6.1), mots de passe hachés et contraintes d'intégrité en base (6.1, 9.2), requêtes paramétrées contre l'injection SQL (9.3).
 
@@ -609,20 +601,19 @@ Le CCP 3 (plan de tests et recette, déploiement, CI/CD) n'est pas présenté : 
 
 | CCP | Compétence | Éléments produits par Loïc |
 | --- | --- | --- |
-| 1 | Environnement de travail | React, Vite et Tailwind (#9), service MongoDB dans Docker Compose (#27), Git et branches par issue |
+| 1 | Environnement de travail | React, Vite et Tailwind (#9), Docker Compose (#7), Git et branches par issue |
 | 1 | Interfaces utilisateur | Connexion et routes protégées (#14), écrans des interventions (#18) |
 | 1 | Composants métier | Services d'authentification et des interventions : rôles, cycle de vie des statuts (#13, #17), avec leurs tests unitaires (#22) |
 | 1 | Gestion de projet | Création et suivi du GitHub Project, issues, branches, pull requests, planning |
 | 2 | Analyser les besoins et maquetter | Cahier des charges, personas et user stories (#1, #2) ; wireframes et maquettes des écrans connexion et interventions (#26) |
 | 2 | Définir l'architecture | Diagrammes UML (#3) ; modules authentification et interventions en couches (#13, #17) |
-| 2 | Concevoir la base de données | MCD / MLD des utilisateurs, des interventions et de l'historique (#4) ; tables correspondantes dans le schéma Prisma (#13, #17) |
-| 2 | Accès aux données SQL et NoSQL | Repositories des utilisateurs et des interventions, requêtes SQL de reporting (#17, #21), journal des actions dans MongoDB (#27) |
+| 2 | Concevoir la base de données | MCD / MLD des utilisateurs et des interventions (#4) ; tables correspondantes dans le schéma Prisma (#13, #17) |
+| 2 | Accès aux données (SQL) | Repositories des utilisateurs et des interventions, requêtes SQL de reporting et transaction (#17, #21) |
 
 ## 14. Points à décider et glossaire
 
 ### 14.1 Points à décider
 
-- [ ] Base NoSQL : MongoDB pour le journal des actions, ou autre usage (Redis pour le cache) ?
 - [ ] Horaires et jours ouvrés paramétrables (RG11) ?
 - [ ] Durée de conservation des données client (6.2) ?
 - [ ] Liste des types d'intervention et durées par défaut
