@@ -7,9 +7,9 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 | Priorité | Signification | Nombre |
 | --- | --- | --- |
 | **M** — Must | Indispensable au MVP, livré en semaine 2 | 19 |
-| **S** — Should | Important, livré si le temps le permet | 6 |
+| **S** — Should | Important, livré si le temps le permet | 7 |
 | **C** — Could | Confort, prévu pour une version suivante | 3 |
-| **W** — Won't | Reporté à une version suivante | 1 |
+| **W** — Won't | Hors périmètre de cette version (voir cahier des charges, 3.3) | — |
 
 ## Vue d'ensemble
 
@@ -33,7 +33,7 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 | US16 | Interventions | Modifier ou annuler une intervention | Gestionnaire | M | #17, #18 |
 | US17 | Interventions | Changer le statut sur le terrain | Technicien | M | #17, #18 |
 | US18 | Interventions | Rédiger un compte rendu | Technicien | S | #17, #18 |
-| US19 | Interventions | Consulter l'historique des statuts | Gestionnaire | W | — |
+| US19 | Interventions | Consulter l'historique des statuts | Gestionnaire | S | #27 |
 | US20 | Tournées | Créer une tournée | Gestionnaire | M | #19, #20 |
 | US21 | Tournées | Affecter une intervention | Gestionnaire | M | #19, #20 |
 | US22 | Tournées | Réordonner une tournée | Gestionnaire | M | #19, #20 |
@@ -198,13 +198,12 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 - **Étant donné** une intervention que je viens de terminer, **quand** je saisis un compte rendu, **alors** il est enregistré et visible par le gestionnaire.
 - **Étant donné** un texte de plus de 2 000 caractères, **quand** je valide, **alors** un message indique la limite.
 
-### US19 — Consulter l'historique des statuts · Won't (reportée)
+### US19 — Consulter l'historique des statuts · Should
 
 **En tant que** gestionnaire, **je veux** voir l'historique des changements de statut d'une intervention **afin de** savoir qui a fait quoi et quand.
 
-> Reportée : le journal des actions n'est pas prévu dans cette version. Les critères ci-dessous servent de référence pour une version suivante.
-
 - **Étant donné** la fiche d'une intervention, **quand** j'ouvre l'historique, **alors** chaque changement apparaît avec la date, l'auteur, l'ancien et le nouveau statut (RG07).
+- **Étant donné** un changement de statut, **quand** il est enregistré, **alors** une entrée est ajoutée au journal des actions dans MongoDB.
 
 ---
 

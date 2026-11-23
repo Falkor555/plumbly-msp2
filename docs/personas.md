@@ -148,7 +148,7 @@ Sophie et Karim sont les **personas principaux** : l'application doit d'abord le
 | Gérer les comptes et les rôles | | | ● | US03 |
 | Gérer clients et adresses | ● | | | US06 à US10 |
 | Gérer techniciens et indisponibilités | ● | | | US11 à US13 |
-| Créer et suivre les interventions | ● | | | US14 à US16 |
+| Créer et suivre les interventions | ● | | | US14 à US16, US19 |
 | Mettre à jour le statut sur le terrain | | ● | | US17, US18 |
 | Planifier les tournées | ● | | | US20 à US23, US25 |
 | Consulter sa tournée du jour | | ● | | US24 |

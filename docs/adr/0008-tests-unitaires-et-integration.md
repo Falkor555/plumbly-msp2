@@ -11,7 +11,7 @@ Les règles de gestion (statuts, conflits de planning, droits) sont le cœur de 
 ## Décision
 
 - **Tests unitaires** : Jest et `@nestjs/testing` pour les services, avec des repositories simulés ; Vitest et React Testing Library pour les composants front.
-- **Tests d'intégration** : Jest et Supertest sur l'API, avec une vraie base PostgreSQL éphémère lancée par **Testcontainers** ; MSW pour simuler l'API dans les tests front.
+- **Tests d'intégration** : Jest et Supertest sur l'API, avec de vraies bases PostgreSQL et MongoDB éphémères lancées par **Testcontainers** ; MSW pour simuler l'API dans les tests front.
 - Les tests d'intégration sont écrits **avant** le développement, à partir des user stories (card #12).
 - Les tests sont lancés en local avant chaque pull request ; pas de CI, ni de tests end-to-end, ni de plan de tests formel.
 
