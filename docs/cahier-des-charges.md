@@ -22,10 +22,10 @@ Aujourd'hui, cette organisation repose souvent sur un agenda papier, un tableur 
 
 | Objectif | Indicateur de réussite |
 | --- | --- |
-| Centraliser les clients, techniciens et interventions | 100 % des interventions saisies dans Plumbly |
+| Centraliser les clients, techniciens et interventions | Toute intervention créée manuellement par le gestionnaire est enregistrée dans Plumbly |
 | Planifier les tournées sans conflit | Aucun technicien affecté à deux interventions sur le même créneau |
 | Donner au technicien sa tournée du jour sur mobile | Tournée consultable en moins de 3 clics après connexion |
-| Suivre l'avancement en temps réel | Statut de chaque intervention à jour en fin de journée |
+| Suivre l'avancement | Le technicien met à jour le statut de ses interventions ; le gestionnaire dispose d'une vue consolidée |
 | Mesurer l'activité | Tableau de bord avec au moins 3 indicateurs |
 
 ### 1.4 Équipe projet
@@ -72,28 +72,30 @@ Michel est le gérant. Il veut suivre l'activité sans entrer dans le détail du
 
 ## 3. Périmètre
 
-Le MVP livré en deux semaines couvre l'authentification, la gestion des clients, des techniciens et des interventions, la planification des tournées et un tableau de bord simple. Le reste est prévu en évolution.
+Le MVP livré en deux semaines couvre l'authentification, la gestion des clients, des techniciens et des interventions, la planification des tournées, le journal des actions et un tableau de bord simple. Le reste est prévu en évolution.
 
 ### 3.1 Inclus dans le MVP
 
 - Authentification et gestion des rôles (administrateur, gestionnaire, technicien)
 - Gestion des clients et de leurs adresses d'intervention
-- Gestion des techniciens et de leurs disponibilités
+- Gestion des techniciens et de leurs indisponibilités
 - Création et suivi des interventions avec statuts
 - Planification des tournées : affectation et ordre des interventions
 - Vue planning jour / semaine par technicien
 - Vue « ma tournée du jour » sur mobile pour le technicien
 - Tableau de bord : indicateurs d'activité calculés en SQL
-- Journal des actions (historique des changements de statut)
+- Journal des actions dans MongoDB, incluant l'historique des changements de statut
 
 ### 3.2 Évolutions envisagées
 
+- Export CSV des interventions
 - Carte des interventions et optimisation automatique de l'ordre de tournée (API de géolocalisation)
 - Notifications par e-mail ou SMS au client (rappel, arrivée du technicien)
 - Rapport d'intervention avec photos et signature du client
 - Gestion des devis et des factures
 - Gestion du stock de pièces dans les camionnettes
 - Application mobile installable (PWA) avec mode hors ligne
+- Gestion des jours fériés dans le planning
 
 ### 3.3 Hors périmètre
 
@@ -111,7 +113,7 @@ Les besoins sont exprimés en user stories, priorisées selon la méthode MoSCoW
 | ID | User story | Priorité | Critères d'acceptation |
 | --- | --- | --- | --- |
 | US01 | En tant qu'utilisateur, je veux me connecter avec mon e-mail et mon mot de passe afin d'accéder à mon espace. | M | Identifiants invalides = message générique ; redirection selon le rôle |
-| US02 | En tant qu'utilisateur, je veux me déconnecter afin de sécuriser ma session. | M | Le jeton est invalidé côté client ; retour à la page de connexion |
+| US02 | En tant qu'utilisateur, je veux me déconnecter afin de sécuriser ma session. | M | Le refresh token est révoqué côté serveur ; retour à la page de connexion |
 | US03 | En tant qu'administrateur, je veux créer, modifier et désactiver des comptes afin de gérer l'accès à l'application. | M | Un compte désactivé ne peut plus se connecter |
 | US04 | En tant qu'utilisateur, je veux réinitialiser mon mot de passe afin de retrouver l'accès à mon compte. | S | Lien à usage unique, valable 30 minutes |
 | US05 | En tant qu'utilisateur, je veux consulter et modifier mes informations afin de les garder à jour. | C | Changement de mot de passe avec saisie de l'ancien |
@@ -139,7 +141,7 @@ Les besoins sont exprimés en user stories, priorisées selon la méthode MoSCoW
 | ID | User story | Priorité | Critères d'acceptation |
 | --- | --- | --- | --- |
 | US14 | En tant que gestionnaire, je veux créer une intervention (client, adresse, type, description, urgence, durée estimée) afin d'enregistrer une demande. | M | Statut initial « à planifier » |
-| US15 | En tant que gestionnaire, je veux filtrer les interventions par statut, urgence, technicien et date afin de prioriser mon travail. | M | Filtres combinables |
+| US15 | En tant que gestionnaire, je veux filtrer les interventions par statut, urgence, technicien et date afin de prioriser mon travail. | M | Filtres combinables ; les interventions urgentes apparaissent en tête des listes « à planifier » |
 | US16 | En tant que gestionnaire, je veux modifier ou annuler une intervention afin de suivre les changements du client. | M | Motif obligatoire en cas d'annulation |
 | US17 | En tant que technicien, je veux passer une intervention à « en cours » puis « terminée » afin d'informer le gestionnaire. | M | Seules les transitions autorisées sont possibles (voir 5.1) |
 | US18 | En tant que technicien, je veux ajouter un compte rendu à une intervention terminée afin de tracer ce qui a été fait. | S | Texte libre, 2 000 caractères maximum |
@@ -149,21 +151,21 @@ Les besoins sont exprimés en user stories, priorisées selon la méthode MoSCoW
 
 | ID | User story | Priorité | Critères d'acceptation |
 | --- | --- | --- | --- |
-| US20 | En tant que gestionnaire, je veux créer la tournée d'un technicien pour une date afin d'organiser sa journée. | M | Une seule tournée par technicien et par jour |
+| US20 | En tant que gestionnaire, je veux créer la tournée d'un technicien pour une date afin d'organiser sa journée. | M | Une seule tournée par technicien et par jour ; technicien actif et non archivé |
 | US21 | En tant que gestionnaire, je veux affecter une intervention à une tournée sur un créneau afin de la planifier. | M | Conflit de créneau ou indisponibilité = refus avec message explicite |
-| US22 | En tant que gestionnaire, je veux réordonner les interventions d'une tournée afin d'optimiser les trajets. | M | Ordre enregistré et visible par le technicien |
+| US22 | En tant que gestionnaire, je veux réordonner les interventions d'une tournée afin d'optimiser les trajets. | M | Ordre enregistré et visible par le technicien ; opération transactionnelle |
 | US23 | En tant que gestionnaire, je veux voir le planning de tous les techniciens par jour et par semaine afin de repérer les créneaux libres. | M | Vue jour et vue semaine, filtre par technicien |
 | US24 | En tant que technicien, je veux voir ma tournée du jour sur mon téléphone afin de savoir où aller. | M | Ordre, horaire, adresse cliquable (ouvre l'application de navigation), téléphone cliquable |
-| US25 | En tant que gestionnaire, je veux insérer une urgence dans une tournée déjà planifiée afin de réagir rapidement. | S | Les interventions suivantes sont décalées et signalées |
+| US25 | En tant que gestionnaire, je veux insérer une urgence dans une tournée déjà planifiée afin de réagir rapidement. | S | Le décalage des interventions suivantes est proposé au gestionnaire, puis validé avant enregistrement |
 
 ### 4.6 Tableau de bord
 
 | ID | User story | Priorité | Critères d'acceptation |
 | --- | --- | --- | --- |
-| US26 | En tant qu'administrateur, je veux voir le nombre d'interventions par statut et par technicien sur une période afin de suivre l'activité. | M | Période paramétrable ; requête SQL écrite à la main |
+| US26 | En tant qu'administrateur, je veux voir le nombre d'interventions par statut et par technicien sur une période afin de suivre l'activité. | M | Période paramétrable ; totaux cohérents avec les données de démonstration |
 | US27 | En tant qu'administrateur, je veux connaître le délai moyen entre la demande et la réalisation afin de mesurer la réactivité. | S | Délai en heures, par type d'intervention |
-| US28 | En tant que gestionnaire, je veux voir les interventions en retard ou non planifiées depuis plus de 48 h afin de les traiter en priorité. | S | Liste triée par ancienneté |
-| US29 | En tant qu'administrateur, je veux exporter la liste des interventions en CSV afin de l'exploiter ailleurs. | C | Export filtré selon la vue courante |
+| US28 | En tant que gestionnaire, je veux voir les interventions en retard ou non planifiées depuis plus de 48 h afin de les traiter en priorité. | S | Liste triée par ancienneté ; une intervention planifiée non démarrée 15 minutes après son heure de début prévue est considérée en retard |
+| US29 | En tant qu'administrateur, je veux exporter la liste des interventions en CSV afin de l'exploiter ailleurs. | C | Export filtré selon la vue courante ; évolution, hors MVP |
 
 ## 5. Règles de gestion
 
@@ -181,7 +183,7 @@ stateDiagram-v2
     Annulee: Annulée
 
     APlanifier --> Planifiee: affectée à une tournée (gestionnaire)
-    Planifiee --> APlanifier: retirée de la tournée
+    Planifiee --> APlanifier: retirée de la tournée avant démarrage
     Planifiee --> EnCours: démarre (technicien affecté)
     EnCours --> Terminee: termine (technicien affecté)
     APlanifier --> Annulee: annulation + motif (gestionnaire)
@@ -198,37 +200,41 @@ stateDiagram-v2
 | RG01 | Une intervention est créée au statut « à planifier ». |
 | RG02 | Elle passe à « planifiée » uniquement lorsqu'elle est affectée à une tournée sur un créneau. |
 | RG03 | Seul le technicien affecté peut la passer à « en cours », puis à « terminée ». |
-| RG04 | Une intervention « planifiée » retirée de sa tournée revient à « à planifier ». |
+| RG04 | Une intervention « planifiée » retirée de sa tournée avant son démarrage revient au statut « à planifier ». |
 | RG05 | Une intervention peut être « annulée » par un gestionnaire tant qu'elle n'est pas « terminée » ; le motif est obligatoire. |
-| RG06 | Une intervention « terminée » ou « annulée » n'est plus modifiable. |
-| RG07 | Chaque changement de statut est historisé : date, auteur, ancien et nouveau statut. |
+| RG06 | Une intervention « terminée » ou « annulée » n'est plus modifiable, hormis la consultation de son historique. |
+| RG07 | Chaque changement de statut est historisé dans MongoDB : date, auteur, ancien et nouveau statut. |
 
 ### 5.2 Planification
 
 | ID | Règle |
 | --- | --- |
-| RG08 | Un technicien a au plus une tournée par jour. |
-| RG09 | Deux interventions d'un même technicien ne peuvent pas se chevaucher (heure de début + durée estimée). |
+| RG08 | Un technicien actif et non archivé a au plus une tournée par jour. |
+| RG09 | Deux interventions planifiées pour un même technicien ne doivent pas se chevaucher : pour toute intervention existante A, une nouvelle intervention B est refusée si B.debut < A.fin et B.fin > A.debut. |
 | RG10 | On ne peut pas planifier un technicien sur une période d'indisponibilité. |
-| RG11 | Les créneaux sont compris entre 7 h 00 et 19 h 00, du lundi au samedi (paramètre à confirmer). |
+| RG11 | Les créneaux sont compris entre 7 h 00 et 19 h 00, du lundi au samedi, sur le fuseau horaire Europe/Paris. La gestion des jours fériés est une évolution. |
 | RG12 | Une tournée ne peut pas être créée pour une date passée. |
 | RG13 | L'ordre des interventions dans une tournée est un entier unique par tournée, à partir de 1. |
+| RG14 | Le réordonnancement des interventions est réalisé dans une transaction afin de ne jamais laisser deux interventions avec le même ordre. |
+| RG15 | Une intervention « en cours » ne peut plus être déplacée ou réordonnée. |
+| RG16 | Une intervention « terminée » ne peut pas être réordonnée. |
 
-### 5.3 Urgences
+### 5.3 Urgences et retards
 
 | ID | Règle |
 | --- | --- |
-| RG14 | Une intervention a un niveau d'urgence : normale, prioritaire ou urgente. |
-| RG15 | Les interventions urgentes apparaissent en tête des listes « à planifier ». |
-| RG16 | Une intervention urgente non planifiée depuis plus de 4 h est signalée sur le tableau de bord. |
+| RG17 | Une intervention a un niveau d'urgence : normale, prioritaire ou urgente. |
+| RG18 | Les interventions urgentes apparaissent en tête des listes « à planifier ». |
+| RG19 | Une intervention urgente non planifiée depuis plus de 4 h est signalée sur le tableau de bord. |
+| RG20 | Une intervention planifiée non démarrée 15 minutes après son heure de début prévue est considérée en retard. |
 
 ### 5.4 Clients et données
 
 | ID | Règle |
 | --- | --- |
-| RG17 | Un client a au moins une adresse d'intervention. |
-| RG18 | Un client ou un technicien lié à des interventions n'est jamais supprimé : il est archivé. |
-| RG19 | L'e-mail d'un compte utilisateur est unique. |
+| RG21 | Un client a au moins une adresse d'intervention. |
+| RG22 | Un client ou un technicien lié à des interventions n'est jamais supprimé : il est archivé. |
+| RG23 | L'e-mail d'un compte utilisateur est unique. |
 
 ### 5.5 Droits par rôle
 
@@ -249,40 +255,42 @@ L'application doit être sécurisée dès la conception, conforme au RGPD, acces
 
 ### 6.1 Sécurité
 
-Les mesures suivent le [Top 10 OWASP](https://owasp.org/www-project-top-ten/) et les recommandations de l'ANSSI.
+Les mesures suivent l'[OWASP Top 10 2025](https://owasp.org/www-project-top-ten/) et les recommandations de l'ANSSI.
 
 | Risque | Mesure prévue |
 | --- | --- |
 | Contrôle d'accès défaillant | Guards NestJS sur chaque route : authentification JWT puis vérification du rôle ; un technicien n'accède qu'à ses propres données |
-| Stockage des mots de passe | Hachage avec argon2 (ou bcrypt) ; jamais de mot de passe en clair ni dans les logs |
+| Stockage des mots de passe | Hachage avec argon2 ; jamais de mot de passe en clair ni dans les logs |
 | Politique de mot de passe | 12 caractères minimum, majuscule, minuscule, chiffre et caractère spécial |
 | Force brute | Limitation du nombre de tentatives de connexion (`@nestjs/throttler`) |
 | Injection SQL | Requêtes Prisma paramétrées ; requêtes SQL manuelles avec `$queryRaw` et paramètres liés, jamais de concaténation |
-| Entrées invalides | Validation de tous les DTO avec class-validator ; rejet des champs inconnus (`whitelist`) |
+| Entrées invalides | Validation de tous les DTO avec `class-validator` ; `whitelist` et `forbidNonWhitelisted` activés |
 | XSS | Pas de `dangerouslySetInnerHTML` ; React échappe l'affichage ; en-têtes de sécurité avec Helmet |
-| CSRF et vol de session | Jeton d'accès de courte durée (15 min) et jeton de rafraîchissement en cookie `httpOnly`, `Secure`, `SameSite=Strict` |
+| CSRF et vol de session | Access token JWT de 15 minutes ; refresh token de 7 jours en cookie `httpOnly`, `Secure`, `SameSite=Strict` |
+| Révocation de session | Refresh token révocable en base ; déconnexion, changement de mot de passe ou désactivation de compte invalident le refresh token |
 | Configuration | CORS limité à l'origine du front ; secrets dans des variables d'environnement, jamais dans le dépôt |
 | Dépendances vulnérables | `npm audit` et Dependabot sur le dépôt GitHub |
-| Traçabilité | Journalisation des connexions et des actions sensibles (création de compte, annulation) |
+| Traçabilité | Journalisation des connexions et des actions sensibles ; aucun mot de passe, jeton ou donnée personnelle complète n'est journalisé |
 
 ### 6.2 RGPD
 
+- **Responsable de traitement** : l'entreprise de plomberie fictive utilisée pour la démonstration.
 - **Données personnelles traitées** : nom, téléphone, e-mail et adresse des clients ; identité et planning des techniciens.
 - **Minimisation** : seules les données nécessaires à l'intervention sont collectées.
-- **Durée de conservation** : données client conservées 3 ans après la dernière intervention, puis anonymisées (durée à valider).
+- **Durée de conservation** : données client conservées 3 ans après la dernière intervention, puis anonymisées ; durée à valider avec l'entreprise fictive ou le formateur.
 - **Droits des personnes** : export et anonymisation d'un client sur demande (droit d'accès et d'effacement).
 - **Registre des traitements** et mentions légales accessibles depuis l'application.
 - **Données de test** : uniquement des données fictives (seed), jamais de vraies données clients.
 
 ### 6.3 Accessibilité et ergonomie
 
-- Respect des critères essentiels du [RGAA](https://accessibilite.numerique.gouv.fr/) (WCAG 2.1 niveau AA) : contrastes, navigation au clavier, libellés de formulaires, textes alternatifs.
+- Application des critères applicables du [RGAA 4.1.2](https://accessibilite.numerique.gouv.fr/) (WCAG 2.1 niveau AA) : contrastes, navigation au clavier, libellés de formulaires, textes alternatifs.
 - Zones tactiles d'au moins 44 × 44 px sur la vue technicien.
 - Messages d'erreur clairs, indiquant comment corriger.
 
 ### 6.4 Performance et disponibilité
 
-- Temps de réponse de l'API inférieur à 500 ms pour 95 % des requêtes courantes.
+- Temps de réponse de l'API inférieur à 500 ms pour 95 % des requêtes courantes, mesuré en local avec Docker sur le jeu de données de démonstration.
 - Premier affichage de la tournée du jour en moins de 2 s sur une connexion 4G.
 - Listes paginées (20 éléments par page par défaut).
 
@@ -301,7 +309,7 @@ Les mesures suivent le [Top 10 OWASP](https://owasp.org/www-project-top-ten/) et
 
 ## 7. Maquettage et ergonomie
 
-Les maquettes sont réalisées dans Figma par Arnaud, et par Loïc pour les écrans de connexion et d'interventions, en trois étapes : zoning, wireframes, puis maquettes haute fidélité. Le lien Figma sera ajouté ici et dans le README.
+Les maquettes sont réalisées dans Figma par Arnaud, et par Loïc pour les écrans de connexion et d'interventions, en trois étapes : zoning, wireframes, puis maquettes haute fidélité. Le lien Figma sera ajouté ici et dans le README dès que les maquettes sont stabilisées.
 
 ### 7.1 Liste des écrans
 
@@ -333,7 +341,7 @@ Les maquettes sont réalisées dans Figma par Arnaud, et par Loïc pour les écr
 
 ## 8. Architecture technique
 
-Plumbly est une application web en trois tiers : un front-end React (SPA), une API REST NestJS organisée en couches et une base PostgreSQL, le tout conteneurisé avec Docker.
+Plumbly est une application web en trois tiers : un front-end React (SPA), une API REST NestJS organisée en couches, une base PostgreSQL et une base MongoDB pour le journal, le tout conteneurisé avec Docker.
 
 ```mermaid
 flowchart TB
@@ -349,18 +357,17 @@ flowchart TB
             C --> S --> R
         end
         PG[("PostgreSQL<br/><small>données métier relationnelles</small>")]
-        MG[("MongoDB (proposé)<br/><small>journal des actions</small>")]
+        MG[("MongoDB<br/><small>journal des actions</small>")]
     end
-
 
     G --> F
     T --> F
     F -- "HTTPS, REST JSON /api/v1, jeton JWT" --> C
     R -- "Prisma et SQL manuel" --> PG
-    R -. "driver MongoDB" .-> MG
+    R -- "driver MongoDB" --> MG
 ```
 
-Le front ne parle qu'à l'API ; seule la couche repository accède aux bases, ce qui garde les règles de gestion indépendantes du stockage.
+Le front-end ne contient aucune logique d'autorisation sensible : les droits sont contrôlés côté API. Seule la couche repository accède aux bases ; les services ne manipulent ni Prisma ni SQL directement.
 
 ### 8.1 Stack
 
@@ -368,13 +375,13 @@ Le front ne parle qu'à l'API ; seule la couche repository accède aux bases, ce
 | --- | --- | --- |
 | Front-end | React + TypeScript, Vite | Écosystème riche, composants réutilisables, build rapide |
 | Style | Tailwind CSS | Charte appliquée via la configuration, responsive simple |
-| Routing et données front | React Router, TanStack Query (proposé) | Routes protégées, cache et rechargement des données de l'API |
-| Formulaires | React Hook Form + Zod (proposé) | Validation côté client typée |
+| Routing et données front | React Router, TanStack Query | Routes protégées, cache et rechargement des données de l'API |
+| Formulaires | React Hook Form + Zod | Validation côté client typée |
 | Back-end | NestJS (Node.js, TypeScript) | Architecture modulaire en couches, injection de dépendances, guards, tests intégrés |
 | ORM | Prisma | Schéma déclaratif, migrations versionnées, client typé |
 | SQL manuel | `$queryRaw` / `$executeRaw` de Prisma | Requêtes de reporting, jointures et agrégations maîtrisées |
 | Base relationnelle | PostgreSQL | Fiable, transactions, contraintes d'intégrité, open source |
-| Base NoSQL | MongoDB (proposé) | Journal des actions et historique des statuts, documents sans schéma fixe |
+| Base NoSQL | MongoDB | Journal des actions et historique des statuts, documents sans schéma fixe |
 | Authentification | Passport + JWT, argon2 | Standard NestJS, hachage robuste |
 | Documentation API | Swagger (OpenAPI) | Générée depuis les décorateurs NestJS |
 | Conteneurs | Docker, Docker Compose | Environnement identique sur les postes du binôme, lancé en une commande |
@@ -385,7 +392,7 @@ Chaque module métier NestJS (auth, users, clients, technicians, interventions, 
 
 1. **Contrôleur** : reçoit la requête HTTP, valide le DTO, applique les guards, renvoie la réponse.
 2. **Service** : porte les règles de gestion (section 5) ; ne connaît ni HTTP ni SQL.
-3. **Repository** : accède aux données via Prisma ou en SQL manuel ; seul point de contact avec la base.
+3. **Repository** : accède aux données via Prisma, SQL manuel ou MongoDB ; seul point de contact avec les bases.
 4. **Modèle / DTO** : objets d'entrée et de sortie, séparés des entités de la base.
 
 Cette séparation permet de tester chaque couche isolément et de changer la source de données sans toucher au métier.
@@ -400,32 +407,32 @@ Cette séparation permet de tester chaque couche isolément et de changer la sou
 ### 8.4 Données SQL et NoSQL
 
 - **PostgreSQL** stocke les données métier structurées et liées : utilisateurs, clients, adresses, techniciens, interventions, tournées.
-- **MongoDB** stockerait le journal des actions (qui a fait quoi, quand, avec quelles données avant et après). Ces documents sont nombreux, s'ajoutent sans jamais être modifiés et ont une structure variable selon l'action.
+- **MongoDB** stocke le journal des actions (qui a fait quoi, quand, avec quelles données avant et après). Ces documents sont nombreux, s'ajoutent sans jamais être modifiés et ont une structure variable selon l'action.
 
-Ce choix est à valider (voir section 14) : il couvre la compétence « Développer des composants d'accès aux données SQL et NoSQL » du CCP 2.
+Le journal est implémenté dans une collection MongoDB `journal_actions`, alimentée par le service des interventions. Ce choix couvre la compétence « Développer des composants d'accès aux données SQL et NoSQL » du CCP 2.
 
 ## 9. Modèle de données
 
-Le modèle comporte 8 entités relationnelles. C'est une première version : Arnaud la détaillera dans le MCD et le MLD (méthode Merise), puis dans `schema.prisma`.
+Le modèle comporte 8 entités relationnelles. Arnaud le détaillera dans le MCD et le MLD (méthode Merise), puis dans `schema.prisma`.
 
 ### 9.1 Entités principales
 
 | Entité | Attributs principaux | Relations |
 | --- | --- | --- |
-| Utilisateur | id, e-mail (unique), mot de passe haché, nom, prénom, rôle, actif, créé le | 0 ou 1 technicien |
-| Technicien | id, téléphone, couleur planning, compétences, archivé | 1 utilisateur ; 0 à n indisponibilités ; 0 à n tournées |
+| Utilisateur | id, e-mail (unique), mot de passe haché, nom, prénom, rôle, actif, dernière connexion, créé le | 0 ou 1 technicien |
+| Technicien | id, téléphone, couleur planning, compétences, archivé, archivé le | 1 utilisateur ; 0 à n indisponibilités ; 0 à n tournées |
 | Indisponibilité | id, début, fin, motif | 1 technicien |
-| Client | id, type (particulier / professionnel), nom, prénom, raison sociale, téléphone, e-mail, archivé | 1 à n adresses ; 0 à n interventions |
+| Client | id, type (particulier / professionnel), nom, prénom, raison sociale, téléphone, e-mail, archivé, archivé le | 1 à n adresses ; 0 à n interventions |
 | Adresse | id, rue, complément, code postal, ville, informations d'accès (code, étage) | 1 client ; 0 à n interventions |
-| Intervention | id, type, description, urgence, statut, durée estimée, créneau prévu, ordre dans la tournée, compte rendu, motif d'annulation, créée le, terminée le | 1 client ; 1 adresse ; 0 ou 1 tournée ; 1 créateur |
-| Tournée | id, date | 1 technicien ; 0 à n interventions ; unique par (technicien, date) |
-| Type d'intervention | id, libellé, durée par défaut | 0 à n interventions |
+| Intervention | id, type, description, urgence, statut, durée estimée (minutes), date-heure de début, date-heure de fin prévue, ordre dans la tournée, compte rendu, motif d'annulation, créée le, terminée le | 1 client ; 1 adresse ; 0 ou 1 tournée ; 1 créateur |
+| Tournée | id, date, statut, créé par | 1 technicien ; 0 à n interventions ; unique par (technicien, date) |
+| Type d'intervention | id, libellé, durée par défaut modifiable | 0 à n interventions |
 
-Côté NoSQL, la collection **journal\_actions** contiendrait un document par action : date, utilisateur, type d'action, entité concernée et données avant / après.
+Côté NoSQL, la collection **journal_actions** contient un document par action : date, utilisateur, type d'action, entité concernée et données avant / après.
 
 ### 9.2 Contraintes d'intégrité
 
-- Clés étrangères avec suppression restreinte : on archive au lieu de supprimer (RG18).
+- Clés étrangères avec suppression restreinte : on archive au lieu de supprimer (RG22).
 - Contrainte d'unicité sur (technicien, date) pour les tournées (RG08) et sur (tournée, ordre) pour les interventions (RG13).
 - Statut, urgence et rôle stockés sous forme d'énumérations PostgreSQL.
 - Index sur les colonnes filtrées souvent : statut, date de tournée, nom du client, ville.
@@ -444,7 +451,7 @@ Un jeu de données fictif (seed) d'environ 5 techniciens, 50 clients et 200 inte
 
 ## 10. Stratégie de tests
 
-Les tests d'intégration de l'API sont écrits dès la semaine 1, à partir des user stories, avant le développement : ils échouent au départ puis passent au vert au fil de la semaine 2. Une pull request n'est fusionnée que si tous les tests passent en local.
+Les scénarios de tests d'intégration sont rédigés dès la semaine 1 à partir des user stories Must. Leur implémentation débute dès que les contrats d'API et le socle technique sont disponibles, puis les tests sont maintenus au fil du développement. Une pull request n'est fusionnée que si tous les tests passent en local.
 
 Les tests unitaires répondent aux attendus du CCP 1 (composants métier testés). Les tests d'intégration sont conservés comme outil de qualité. En revanche, le plan de tests formel, la recette et les tests end-to-end relèvent du CCP 3 et sont hors périmètre.
 
@@ -463,7 +470,7 @@ Les tests unitaires répondent aux attendus du CCP 1 (composants métier testés
 | ID | Scénario | Résultat attendu |
 | --- | --- | --- |
 | TI01 | Connexion avec un mot de passe erroné | 401, message générique |
-| TI02 | Un technicien appelle `GET /clients` | 403 |
+| TI02 | Un technicien appelle GET /clients | 403 |
 | TI03 | Création d'une intervention valide | 201, statut « à planifier » |
 | TI04 | Affectation sur un créneau déjà occupé | 409, message de conflit |
 | TI05 | Affectation pendant une indisponibilité | 409 |
@@ -472,12 +479,18 @@ Les tests unitaires répondent aux attendus du CCP 1 (composants métier testés
 | TI08 | Annulation sans motif | 400 |
 | TI09 | Tableau de bord sur une période | 200, totaux cohérents avec le seed |
 | TI10 | Recherche client avec `' OR 1=1 --` | 200, aucun résultat inattendu |
+| TI11 | Un technicien consulte une intervention qui ne lui est pas affectée | 403 ou 404 |
+| TI12 | Création d'une tournée pour une date passée | 400 ou 409 |
+| TI13 | Création d'une deuxième tournée pour le même technicien et la même date | 409 |
+| TI14 | Réordonnancement avec deux interventions au même ordre | 400 ou 409, transaction annulée |
 
 ### 10.3 Organisation
 
-- Base de test créée à la volée par Testcontainers, migrations Prisma appliquées, puis seed dédié aux tests.
-- Commandes : `npm run test` (unitaires), `npm run test:e2e` (intégration de l'API, nom par défaut dans NestJS), `npm run test:cov` (couverture).
-- Les tests sont lancés en local avant chaque pull request.
+Base de test créée à la volée par Testcontainers, migrations Prisma appliquées, puis seed dédié aux tests.
+
+Commandes : `npm run test` (unitaires), `npm run test:e2e` (intégration de l'API), `npm run test:cov` (couverture).
+
+Les tests sont lancés en local avant chaque pull request.
 
 ## 11. Environnement de développement et gestion du code
 
@@ -496,7 +509,7 @@ L'application tourne en local avec Docker Compose sur le poste de chaque membre 
 
 - Branche `develop` par défaut : toutes les branches partent de `develop` et y sont fusionnées par pull request.
 - Une seule fusion finale de `develop` vers `main`, à la fin du projet.
-- Une branche par issue, créée depuis le GitHub Project (`12-ecrire-tests-integration`).
+- Une branche par issue, créée depuis le GitHub Project.
 - Avant chaque pull request : lint et tests en local ; relecture par l'autre membre du binôme.
 - Messages de commit clairs et en français, décrivant le changement.
 
@@ -508,15 +521,15 @@ L'application tourne en local avec Docker Compose sur le poste de chaque membre 
 
 ## 12. Gestion de projet
 
-Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une semaine de conception, une semaine de développement du MVP. Les 25 tâches sont suivies dans le [GitHub Project du dépôt](https://github.com/users/Falkor555/projects/6).
+Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une semaine de conception, une semaine de développement du MVP. Les 25 tâches sont suivies dans le GitHub Project du dépôt.
 
 ### 12.1 Organisation
 
-- **Kanban** : Backlog → To do → In progress → In review → Done.
-- **Une card = une issue = une branche = une pull request** ; `Closes #n` dans la pull request ferme l'issue.
-- **Point quotidien** de 10 minutes : ce qui est fait, ce qui est prévu, ce qui bloque.
-- **Relecture croisée** : chaque pull request est relue par l'autre membre du binôme.
-- **Outils** : GitHub (code, issues, Project, pull requests), Figma (maquettes), Discord ou Teams (communication).
+- Kanban : Backlog → To do → In progress → In review → Done.
+- Une card = une issue = une branche = une pull request ; `Closes #n` dans la pull request ferme l'issue.
+- Point quotidien de 10 minutes : ce qui est fait, ce qui est prévu, ce qui bloque.
+- Relecture croisée : chaque pull request est relue par l'autre membre du binôme.
+- Outils : GitHub (code, issues, Project, pull requests), Figma (maquettes), Discord ou Teams (communication).
 
 ### 12.2 Planning
 
@@ -530,45 +543,35 @@ Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une s
 
 ### 12.3 Répartition
 
-La répartition suit les cards du [GitHub Project](https://github.com/users/Falkor555/projects/6). En semaine 2, chaque membre développe ses fonctionnalités **de bout en bout** : API NestJS, accès aux données et écrans React. Ainsi, chacun peut présenter à l'oral du front-end, du back-end et de la base de données.
+La répartition suit les cards du GitHub Project. En semaine 2, chaque membre développe ses fonctionnalités de bout en bout : API NestJS, accès aux données et écrans React.
 
 | Domaine | Loïc BOTSY | Arnaud BIDEL |
 | --- | --- | --- |
-| Domaine | Loïc BOTSY | Arnaud BIDEL |
-| --- | --- | --- |
-| Analyse des besoins | Cahier des charges (#1), personas et user stories (#2) | — |
-| Conception | Diagrammes UML (#3) ; MCD / MLD : utilisateurs, interventions, historique (#4) | MCD / MLD : clients, techniciens, tournées (#4) |
-| Maquettage | Maquettes des écrans connexion et interventions (#26) | Zoning et wireframes (#5), maquettes et charte graphique (#6) |
-| Socle technique | React, Vite et Tailwind (#9) | Monorepo et docker-compose (#7), NestJS et Prisma (#8), environnement de test (#11) |
-| Tests (semaine 1) | Tests d'intégration de l'API (#12) | — |
-| Back-end (semaine 2) | Authentification et rôles (#13), CRUD interventions et statuts (#17), journal des actions MongoDB (#27) | CRUD clients et techniciens (#15), planification des tournées (#19) |
-| Front-end (semaine 2) | Connexion et routes protégées (#14), écrans des interventions (#18) | Écrans clients et techniciens (#16), vue planning (#20) |
-| En commun | Requêtes SQL manuelles (#21), tests unitaires (#22), corrections et finalisation (#23), README, démo et dossier (#24) | Idem |
+| Analyse des besoins | Cahier des charges, personas et user stories | — |
+| Conception | Diagrammes UML ; MCD / MLD utilisateurs, interventions, historique | MCD / MLD clients, techniciens, tournées |
+| Maquettage | Maquettes connexion et interventions | Zoning, wireframes, maquettes et charte graphique |
+| Socle technique | React, Vite et Tailwind | Monorepo, docker-compose, NestJS et Prisma, environnement de test |
+| Tests | Tests d'intégration de l'API | — |
+| Back-end | Authentification, CRUD interventions et statuts, journal MongoDB | CRUD clients et techniciens, planification des tournées |
+| Front-end | Connexion, routes protégées, écrans interventions | Écrans clients et techniciens, vue planning |
+| En commun | Requêtes SQL, tests unitaires, corrections, README, démo | Idem |
 
-| Période | Loïc BOTSY | Arnaud BIDEL |
-| --- | --- | --- |
-| Semaine 1, J1–J2 | Cahier des charges (#1), user stories (#2), UML (#3), MCD / MLD (#4) | MCD / MLD (#4), zoning et wireframes (#5) |
-| Semaine 1, J3–J4 | Maquettes de ses écrans (#26), init front (#9) | Maquettes et charte (#6), Docker (#7), NestJS et Prisma (#8) |
-| Semaine 1, J4–J5 | Tests d'intégration de l'API (#12) | Environnement de test (#11) |
-| Semaine 2, J6–J7 | Authentification : API (#13) et écrans (#14) | Clients et techniciens : API (#15) et écrans (#16) |
-| Semaine 2, J8–J9 | Interventions : API (#17) et écrans (#18), journal MongoDB (#27) | Tournées et planning : API (#19) et écrans (#20) |
-| Semaine 2, J9 | Requêtes SQL de son domaine (#21) | Requêtes SQL de son domaine (#21) |
-| Semaine 2, J10 | Corrections, README, démo (#23, #24) | Corrections, README, démo (#23, #24) |
+**Dépendances entre modules** :
 
-Points d'attention :
-
-- Le module d'authentification (#13) est utilisé par tous les autres. Ses guards seront livrés en premier, dès J6 ; d'ici là, Arnaud peut développer ses routes sans les guards.
-- La planification (#19) s'appuie sur le modèle des interventions, déjà défini dans le schéma Prisma dès la semaine 1 (#8). Les deux membres doivent se mettre d'accord sur le service des interventions dès J8.
+- Arnaud dépend des guards d'authentification et du modèle utilisateur/technicien de Loïc.
+- Loïc dépend des modèles client, adresse, technicien et tournée d'Arnaud.
+- Le planning mobilise les deux domaines.
+- Un contrat d'API Swagger minimal (DTO, routes, codes d'erreur, rôles autorisés) est défini dès la semaine 1.
 
 ### 12.4 Livrables
 
-- [ ] Cahier des charges (ce document)
-- [ ] User stories, diagrammes UML, MCD et MLD
-- [ ] Maquettes Figma
-- [ ] Code source sur GitHub avec README
-- [ ] Tests unitaires et d'intégration
-- [ ] Application fonctionnelle en local (Docker) et démontrable
-- [ ] Dossier de projet et support de présentation
+- Cahier des charges (ce document)
+- User stories, diagrammes UML, MCD et MLD
+- Maquettes Figma
+- Code source sur GitHub avec README
+- Tests unitaires et d'intégration
+- Application fonctionnelle en local (Docker) et démontrable
+- Dossier de projet et support de présentation
 
 ### 12.5 Risques
 
@@ -581,7 +584,7 @@ Points d'attention :
 
 ## 13. Correspondance avec les CCP 1 et 2 du titre CDA
 
-Plumbly est présenté pour la validation du **CCP 2**, et doit aussi respecter les compétences du **CCP 1**, sur lequel le CCP 2 s'appuie. Les 8 compétences de ces deux blocs sont couvertes par le projet. Les intitulés ci-dessous sont repris de mémoire et sont à vérifier avec le REAC fourni par la formation.
+Plumbly est présenté pour la validation du CCP 2, et doit aussi respecter les compétences du CCP 1, sur lequel le CCP 2 s'appuie. Les 8 compétences de ces deux blocs sont couvertes par le projet. Les intitulés ci-dessous sont repris de mémoire et sont à vérifier avec le REAC fourni par la formation.
 
 ### CCP 1 : Développer une application sécurisée
 
@@ -601,32 +604,36 @@ Plumbly est présenté pour la validation du **CCP 2**, et doit aussi respecter 
 | Concevoir et mettre en place une base de données relationnelle | Dictionnaire de données, MCD / MLD Merise, schéma Prisma, migrations, contraintes d'intégrité, index, jeu d'essai | 9 | #4, #8 |
 | Développer des composants d'accès aux données SQL et NoSQL | Repositories Prisma, requêtes SQL écrites à la main (jointures, agrégations, transaction), journal des actions dans MongoDB | 8.4, 9.3 | #13, #15, #17, #19, #21, #27 |
 
-La sécurité, exigée par l'intitulé des deux CCP, est présente à chaque niveau : validation des saisies et routes protégées dans l'interface, contrôle d'accès par rôle dans les composants métier (6.1), mots de passe hachés et contraintes d'intégrité en base (6.1, 9.2), requêtes paramétrées contre l'injection SQL (9.3).
+La sécurité est présente à chaque niveau : validation des saisies et routes protégées dans l'interface, contrôle d'accès par rôle dans les composants métier, mots de passe hachés et contraintes d'intégrité en base, requêtes paramétrées contre l'injection SQL.
 
-Le CCP 3 (plan de tests et recette, déploiement, CI/CD) n'est pas présenté : ces éléments ont été retirés du projet et du kanban. Les tests unitaires (attendus au CCP 1) et les tests d'intégration sont conservés. À l'oral, un test montre par exemple qu'une règle de gestion ou un contrôle d'accès fonctionne.
+Le CCP 3 (plan de tests et recette, déploiement, CI/CD) n'est pas présenté : ces éléments ont été retirés du projet et du kanban. Les tests unitaires et les tests d'intégration sont conservés.
 
 ### 13.1 Ce que Loïc présente à l'oral
 
 | CCP | Compétence | Éléments produits par Loïc |
 | --- | --- | --- |
-| 1 | Environnement de travail | React, Vite et Tailwind (#9), service MongoDB dans Docker Compose (#27), Git et branches par issue |
-| 1 | Interfaces utilisateur | Connexion et routes protégées (#14), écrans des interventions (#18) |
-| 1 | Composants métier | Services d'authentification et des interventions : rôles, cycle de vie des statuts (#13, #17), avec leurs tests unitaires (#22) |
+| 1 | Environnement de travail | React, Vite et Tailwind, service MongoDB dans Docker Compose, Git et branches par issue |
+| 1 | Interfaces utilisateur | Connexion et routes protégées, écrans des interventions |
+| 1 | Composants métier | Services d'authentification et des interventions : rôles, cycle de vie des statuts, avec leurs tests unitaires |
 | 1 | Gestion de projet | Création et suivi du GitHub Project, issues, branches, pull requests, planning |
-| 2 | Analyser les besoins et maquetter | Cahier des charges, personas et user stories (#1, #2) ; wireframes et maquettes des écrans connexion et interventions (#26) |
-| 2 | Définir l'architecture | Diagrammes UML (#3) ; modules authentification et interventions en couches (#13, #17) |
-| 2 | Concevoir la base de données | MCD / MLD des utilisateurs, des interventions et de l'historique (#4) ; tables correspondantes dans le schéma Prisma (#13, #17) |
-| 2 | Accès aux données SQL et NoSQL | Repositories des utilisateurs et des interventions, requêtes SQL de reporting (#17, #21), journal des actions dans MongoDB (#27) |
+| 2 | Analyser les besoins et maquetter | Cahier des charges, personas et user stories ; wireframes et maquettes des écrans connexion et interventions |
+| 2 | Définir l'architecture | Diagrammes UML ; modules authentification et interventions en couches |
+| 2 | Concevoir la base de données | MCD / MLD des utilisateurs, des interventions et de l'historique ; tables correspondantes dans le schéma Prisma |
+| 2 | Accès aux données SQL et NoSQL | Repositories des utilisateurs et des interventions, requêtes SQL de reporting, journal des actions dans MongoDB |
 
-## 14. Points à décider et glossaire
+## 14. Décisions retenues et glossaire
 
-### 14.1 Points à décider
+### 14.1 Décisions retenues
 
-- [ ] Base NoSQL : MongoDB pour le journal des actions, ou autre usage (Redis pour le cache) ?
-- [ ] Horaires et jours ouvrés paramétrables (RG11) ?
-- [ ] Durée de conservation des données client (6.2) ?
-- [ ] Liste des types d'intervention et durées par défaut
-- [ ] Lien Figma des maquettes
+- **Base NoSQL** : MongoDB est inclus dans le MVP pour le journal des actions (`journal_actions`).
+- **Créneaux ouvrés** : 7 h 00–19 h 00, du lundi au samedi, fuseau Europe/Paris ; jours fériés en évolution.
+- **Durée de conservation RGPD** : 3 ans après la dernière intervention, puis anonymisation ; à valider avec l'entreprise fictive ou le formateur.
+- **Types d'intervention** : fuite, débouchage, remplacement de chauffe-eau, entretien, autre.
+- **Durées par défaut** : fuite 1 h, débouchage 1 h, remplacement de chauffe-eau 2 h, entretien 1 h, autre 1 h ; modifiables par le gestionnaire.
+- **Export CSV** : évolution, hors MVP.
+- **Lien Figma** : à insérer dès que les maquettes sont stabilisées.
+- **JWT** : access token 15 min, refresh token 7 jours, cookie `httpOnly`, `Secure`, `SameSite=Strict`, révocable côté serveur.
+- **Retard** : intervention planifiée non démarrée 15 minutes après son heure de début prévue.
 
 ### 14.2 Glossaire
 
