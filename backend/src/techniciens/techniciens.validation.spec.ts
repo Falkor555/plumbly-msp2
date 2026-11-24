@@ -3,6 +3,8 @@ import {
   lireFiltresTechniciens,
   lireModificationTechnicien,
   lireNouveauTechnicien,
+  lireNouvelleIndisponibilite,
+  lirePeriodeIndisponibilites,
 } from './techniciens.validation.js';
 
 /** Messages d'une erreur 400, tels que l'API les renvoie. */
@@ -79,6 +81,67 @@ describe('validation des techniciens', () => {
       expect(messagesDe(() => lireModificationTechnicien({ utilisateurId: 8 }))).toEqual([
         'Le champ utilisateurId n’est pas autorisé',
       ]);
+    });
+  });
+
+  describe('indisponibilités', () => {
+    it('lit une période avec fuseau et un motif', () => {
+      expect(
+        lireNouvelleIndisponibilite({
+          debut: '2026-12-09T08:00:00+04:00',
+          fin: '2026-12-10T19:00:00+04:00',
+          motif: ' Congés ',
+        }),
+      ).toEqual({
+        debut: new Date('2026-12-09T04:00:00Z'),
+        fin: new Date('2026-12-10T15:00:00Z'),
+        motif: 'Congés',
+      });
+    });
+
+    it('accepte une indisponibilité sans motif', () => {
+      expect(
+        lireNouvelleIndisponibilite({ debut: '2026-12-09T04:00:00Z', fin: '2026-12-09T05:00:00Z' })
+          .motif,
+      ).toBeNull();
+    });
+
+    it.each([
+      ['avant', '2026-12-09T07:00:00+04:00'],
+      ['égale', '2026-12-09T08:00:00+04:00'],
+    ])('refuse une fin %s au début', (_cas, fin) => {
+      expect(
+        messagesDe(() => lireNouvelleIndisponibilite({ debut: '2026-12-09T08:00:00+04:00', fin })),
+      ).toEqual(['fin doit être postérieure à debut']);
+    });
+
+    it('refuse une date-heure sans fuseau et un motif trop long', () => {
+      expect(
+        messagesDe(() =>
+          lireNouvelleIndisponibilite({
+            debut: '2026-12-09T08:00:00',
+            fin: '2026-12-09T10:00:00+04:00',
+            motif: 'm'.repeat(256),
+          }),
+        ),
+      ).toEqual([
+        'debut doit être une date-heure ISO 8601 avec fuseau, par exemple 2026-12-08T08:00:00+04:00',
+        'motif ne doit pas dépasser 255 caractères',
+      ]);
+    });
+
+    it('lit une période de liste, chaque borne étant facultative', () => {
+      expect(lirePeriodeIndisponibilites({})).toEqual({});
+      expect(lirePeriodeIndisponibilites({ au: '2026-12-31' })).toEqual({ au: '2026-12-31' });
+    });
+
+    it('refuse une date invalide et une période à l’envers', () => {
+      expect(messagesDe(() => lirePeriodeIndisponibilites({ du: '2026-02-30' }))).toEqual([
+        'du doit être une date AAAA-MM-JJ',
+      ]);
+      expect(
+        messagesDe(() => lirePeriodeIndisponibilites({ du: '2026-12-31', au: '2026-12-01' })),
+      ).toEqual(['du doit précéder au']);
     });
   });
 

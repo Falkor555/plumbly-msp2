@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -13,12 +14,15 @@ import {
 import { Roles } from '../commun/autorisation/roles.decorator.js';
 import { RolesGuard } from '../commun/autorisation/roles.guard.js';
 import { lireIdentifiant, type PageApi } from '../commun/validation.js';
+import type { IndisponibiliteApi } from '../tournees/tournees.types.js';
 import { TechniciensService } from './techniciens.service.js';
 import type { TechnicienApi } from './techniciens.types.js';
 import {
   lireFiltresTechniciens,
   lireModificationTechnicien,
   lireNouveauTechnicien,
+  lireNouvelleIndisponibilite,
+  lirePeriodeIndisponibilites,
 } from './techniciens.validation.js';
 
 /**
@@ -59,5 +63,42 @@ export class TechniciensController {
   @HttpCode(HttpStatus.OK)
   archiver(@Param('id') id: string): Promise<TechnicienApi> {
     return this.service.archiver(lireIdentifiant(id));
+  }
+
+  /** US12 : liste triée par date de début, non paginée. */
+  @Get(':id/unavailabilities')
+  listerIndisponibilites(
+    @Param('id') id: string,
+    @Query() requete: Record<string, unknown>,
+  ): Promise<IndisponibiliteApi[]> {
+    return this.service.listerIndisponibilites(
+      lireIdentifiant(id),
+      lirePeriodeIndisponibilites(requete),
+    );
+  }
+
+  /** US12 et RG10 */
+  @Post(':id/unavailabilities')
+  ajouterIndisponibilite(
+    @Param('id') id: string,
+    @Body() corps: unknown,
+  ): Promise<IndisponibiliteApi> {
+    return this.service.ajouterIndisponibilite(
+      lireIdentifiant(id),
+      lireNouvelleIndisponibilite(corps),
+    );
+  }
+
+  /** US12 */
+  @Delete(':id/unavailabilities/:unavailabilityId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  supprimerIndisponibilite(
+    @Param('id') id: string,
+    @Param('unavailabilityId') idIndisponibilite: string,
+  ): Promise<void> {
+    return this.service.supprimerIndisponibilite(
+      lireIdentifiant(id),
+      lireIdentifiant(idIndisponibilite),
+    );
   }
 }

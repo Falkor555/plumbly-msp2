@@ -26,6 +26,19 @@ export interface FiltresTechniciens extends Pagination {
   tri: TriTechniciens;
 }
 
+/** POST /technicians/:id/unavailabilities (US12). */
+export interface NouvelleIndisponibilite {
+  debut: Date;
+  fin: Date;
+  motif: string | null;
+}
+
+/** GET /technicians/:id/unavailabilities : jours de La Réunion, bornes incluses. */
+export interface PeriodeIndisponibilites {
+  du?: string;
+  au?: string;
+}
+
 // ---------- Données renvoyées (contrat d'API, section 6.6) ----------
 
 /** Nom, prénom, e-mail et état du compte viennent du compte utilisateur lié, en lecture seule. */

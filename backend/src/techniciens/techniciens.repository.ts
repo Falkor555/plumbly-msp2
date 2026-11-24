@@ -3,9 +3,12 @@ import { versColonneDate } from '../commun/fuseau-metier.js';
 import { Prisma, type Role, StatutIntervention } from '../generated/prisma/client.ts';
 import { dansLOrdreDe, echapperMotif } from '../prisma/outils-de-recherche.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { IndisponibiliteApi } from '../tournees/tournees.types.js';
+import type { InterventionRecouverte, Periode } from './regles-techniciens.js';
 import type {
   FiltresTechniciens,
   ModificationTechnicien,
+  NouvelleIndisponibilite,
   TriTechniciens,
 } from './techniciens.types.js';
 
@@ -40,7 +43,37 @@ export interface OperationsSurTechnicien {
   compterInterventionsAVenir(idTechnicien: number, aPartirDu: string): Promise<number>;
   modifierTechnicien(idTechnicien: number, modification: ModificationTechnicien): Promise<void>;
   archiverTechnicien(idTechnicien: number, le: Date): Promise<void>;
+  /** Interventions planifiées ou en cours du technicien qui chevauchent la période (RG10). */
+  listerInterventionsQuiRecouvrent(
+    idTechnicien: number,
+    periode: Periode,
+  ): Promise<InterventionRecouverte[]>;
+  listerIndisponibilitesQuiRecouvrent(idTechnicien: number, periode: Periode): Promise<Periode[]>;
+  creerIndisponibilite(
+    idTechnicien: number,
+    indisponibilite: NouvelleIndisponibilite,
+  ): Promise<IndisponibiliteApi>;
+  trouverIndisponibilite(idIndisponibilite: number): Promise<IndisponibiliteDuTechnicien | null>;
+  supprimerIndisponibilite(idIndisponibilite: number): Promise<void>;
 }
+
+export interface IndisponibiliteDuTechnicien {
+  id: number;
+  idTechnicien: number;
+  fin: Date;
+}
+
+/** Bornes de GET /technicians/:id/unavailabilities, en instants. */
+export interface BornesIndisponibilites {
+  /** Indisponibilités qui finissent après cet instant. */
+  finApres?: Date;
+  /** Indisponibilités qui commencent avant cet instant. */
+  debutAvant?: Date;
+}
+
+// Statuts qui occupent le technicien sur son créneau : une indisponibilité ne peut pas les recouvrir.
+const STATUTS_OCCUPANT_LE_TECHNICIEN = [StatutIntervention.PLANIFIEE, StatutIntervention.EN_COURS];
+const CHAMPS_INDISPONIBILITE = { id: true, debut: true, fin: true, motif: true } as const;
 
 const CODE_PRISMA_UNICITE = 'P2002';
 
@@ -77,6 +110,29 @@ export class TechniciensRepository {
       ...AVEC_COMPTE,
     });
     return { techniciens: dansLOrdreDe(ids, techniciens), total };
+  }
+
+  async existe(idTechnicien: number): Promise<boolean> {
+    const technicien = await this.prisma.technicien.findUnique({
+      where: { id: idTechnicien },
+      select: { id: true },
+    });
+    return technicien !== null;
+  }
+
+  listerIndisponibilites(
+    idTechnicien: number,
+    { finApres, debutAvant }: BornesIndisponibilites,
+  ): Promise<IndisponibiliteApi[]> {
+    return this.prisma.indisponibilite.findMany({
+      where: {
+        idTechnicien,
+        fin: finApres === undefined ? undefined : { gt: finApres },
+        debut: debutAvant === undefined ? undefined : { lt: debutAvant },
+      },
+      select: CHAMPS_INDISPONIBILITE,
+      orderBy: [{ debut: 'asc' }, { id: 'asc' }],
+    });
   }
 
   trouver(idTechnicien: number): Promise<TechnicienAvecCompte | null> {
@@ -176,6 +232,51 @@ function creerOperations(tx: Prisma.TransactionClient): OperationsSurTechnicien 
         where: { id: idTechnicien },
         data: { archive: true, archiveLe: le },
       });
+    },
+
+    async listerInterventionsQuiRecouvrent(idTechnicien, { debut, fin }) {
+      const interventions = await tx.intervention.findMany({
+        where: {
+          tournee: { idTechnicien },
+          statut: { in: STATUTS_OCCUPANT_LE_TECHNICIEN },
+          debutPrevu: { lt: fin },
+          finPrevue: { gt: debut },
+        },
+        select: { id: true, debutPrevu: true, finPrevue: true },
+        orderBy: { debutPrevu: 'asc' },
+      });
+      // Filtrées sur debutPrevu et finPrevue : les deux sont renseignées.
+      return interventions.map(({ id, debutPrevu, finPrevue }) => ({
+        id,
+        debut: debutPrevu as Date,
+        fin: finPrevue as Date,
+      }));
+    },
+
+    listerIndisponibilitesQuiRecouvrent(idTechnicien, { debut, fin }) {
+      return tx.indisponibilite.findMany({
+        where: { idTechnicien, debut: { lt: fin }, fin: { gt: debut } },
+        select: { debut: true, fin: true },
+        orderBy: { debut: 'asc' },
+      });
+    },
+
+    creerIndisponibilite(idTechnicien, indisponibilite) {
+      return tx.indisponibilite.create({
+        data: { ...indisponibilite, idTechnicien },
+        select: CHAMPS_INDISPONIBILITE,
+      });
+    },
+
+    trouverIndisponibilite(idIndisponibilite) {
+      return tx.indisponibilite.findUnique({
+        where: { id: idIndisponibilite },
+        select: { id: true, idTechnicien: true, fin: true },
+      });
+    },
+
+    async supprimerIndisponibilite(idIndisponibilite) {
+      await tx.indisponibilite.delete({ where: { id: idIndisponibilite } });
     },
   };
 }

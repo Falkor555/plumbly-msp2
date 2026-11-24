@@ -4,11 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { jourMetier } from '../commun/fuseau-metier.js';
+import { ajouterJours, debutDuJourMetier, jourMetier } from '../commun/fuseau-metier.js';
 import { Horloge } from '../commun/horloge.js';
 import { type PageApi, paginer } from '../commun/validation.js';
 import { Role } from '../generated/prisma/client.ts';
-import { choisirCouleur } from './regles-techniciens.js';
+import type { IndisponibiliteApi } from '../tournees/tournees.types.js';
+import {
+  choisirCouleur,
+  verifierAucuneIndisponibiliteRecouverte,
+  verifierAucuneInterventionRecouverte,
+} from './regles-techniciens.js';
 import { versTechnicienApi } from './techniciens.presentation.js';
 import {
   type OperationsSurTechnicien,
@@ -19,6 +24,8 @@ import type {
   FiltresTechniciens,
   ModificationTechnicien,
   NouveauTechnicien,
+  NouvelleIndisponibilite,
+  PeriodeIndisponibilites,
   TechnicienApi,
 } from './techniciens.types.js';
 
@@ -111,6 +118,74 @@ export class TechniciensService {
       await operations.archiverTechnicien(idTechnicien, maintenant);
     });
     return this.consulter(idTechnicien);
+  }
+
+  /**
+   * US12 : sans période, les indisponibilités en cours et à venir. Les jours sont ceux de
+   * La Réunion : « au » inclut toute la journée.
+   */
+  async listerIndisponibilites(
+    idTechnicien: number,
+    { du, au }: PeriodeIndisponibilites,
+  ): Promise<IndisponibiliteApi[]> {
+    if (!(await this.depot.existe(idTechnicien))) {
+      throw new NotFoundException('Technicien introuvable.');
+    }
+    return this.depot.listerIndisponibilites(idTechnicien, {
+      finApres: this.finApres(du, au),
+      debutAvant: au === undefined ? undefined : debutDuJourMetier(ajouterJours(au, 1)),
+    });
+  }
+
+  /** Depuis minuit le jour « du » ; sans aucune borne, depuis maintenant. */
+  private finApres(du: string | undefined, au: string | undefined): Date | undefined {
+    if (du !== undefined) {
+      return debutDuJourMetier(du);
+    }
+    return au === undefined ? this.horloge.maintenant() : undefined;
+  }
+
+  /**
+   * US12 et RG10 : la période ne recouvre ni une intervention planifiée ou en cours, ni une
+   * autre indisponibilité. La ligne du technicien est verrouillée d'abord : deux ajouts
+   * simultanés passent l'un après l'autre et ne peuvent pas se recouvrir.
+   */
+  ajouterIndisponibilite(
+    idTechnicien: number,
+    nouvelle: NouvelleIndisponibilite,
+  ): Promise<IndisponibiliteApi> {
+    return this.depot.modifierTechnicien(async (operations) => {
+      const technicien = await this.verrouillerTechnicien(operations, idTechnicien);
+      if (technicien.archive) {
+        throw new BadRequestException(
+          'Ce technicien est archivé : on ne peut plus lui ajouter d’indisponibilité.',
+        );
+      }
+      verifierAucuneInterventionRecouverte(
+        await operations.listerInterventionsQuiRecouvrent(idTechnicien, nouvelle),
+      );
+      verifierAucuneIndisponibiliteRecouverte(
+        await operations.listerIndisponibilitesQuiRecouvrent(idTechnicien, nouvelle),
+      );
+      return operations.creerIndisponibilite(idTechnicien, nouvelle);
+    });
+  }
+
+  /** US12 : une indisponibilité terminée reste dans l'historique. */
+  async supprimerIndisponibilite(idTechnicien: number, idIndisponibilite: number): Promise<void> {
+    await this.depot.modifierTechnicien(async (operations) => {
+      await this.verrouillerTechnicien(operations, idTechnicien);
+      const indisponibilite = await operations.trouverIndisponibilite(idIndisponibilite);
+      if (indisponibilite === null || indisponibilite.idTechnicien !== idTechnicien) {
+        throw new NotFoundException('Indisponibilité introuvable pour ce technicien.');
+      }
+      if (indisponibilite.fin <= this.horloge.maintenant()) {
+        throw new BadRequestException(
+          'Cette indisponibilité est terminée : elle est conservée dans l’historique.',
+        );
+      }
+      await operations.supprimerIndisponibilite(idIndisponibilite);
+    });
   }
 
   private async verrouillerTechnicien(

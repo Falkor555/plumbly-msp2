@@ -248,4 +248,127 @@ describe('techniciens (e2e)', () => {
         .expect(400);
     });
   });
+
+  describe('indisponibilités (US12, RG10)', () => {
+    const url = (idTechnicien: number) => `/technicians/${idTechnicien}/unavailabilities`;
+    const periode = (debut: string, fin: string, motif?: string) => ({
+      debut: `${debut}+04:00`,
+      fin: `${fin}+04:00`,
+      motif,
+    });
+
+    it('refuse 409 une période qui recouvre une intervention planifiée, en la citant', async () => {
+      const id = await creerFiche(fixtures.kevin);
+      const idIntervention = await interventionDuTechnicien(
+        id,
+        DEMAIN,
+        StatutIntervention.PLANIFIEE,
+      );
+
+      const reponse = await gestionnaire()
+        .post(url(id))
+        .send(periode(`${DEMAIN}T07:00:00`, `${DEMAIN}T12:00:00`, 'Rendez-vous médical'))
+        .expect(409);
+
+      expect(reponse.body.message).toContain(`n° ${idIntervention} le 08/12/2026 de 08:00 à 09:00`);
+      expect(await application.prisma.indisponibilite.count()).toBe(0);
+    });
+
+    it('accepte une période qui touche l’intervention sans la recouvrir', async () => {
+      const id = await creerFiche(fixtures.kevin);
+      await interventionDuTechnicien(id, DEMAIN, StatutIntervention.PLANIFIEE);
+
+      await gestionnaire()
+        .post(url(id))
+        .send(periode(`${DEMAIN}T09:00:00`, `${DEMAIN}T19:00:00`))
+        .expect(201);
+    });
+
+    it('refuse 400 une fin antérieure au début', async () => {
+      const id = await creerFiche(fixtures.kevin);
+
+      const reponse = await gestionnaire()
+        .post(url(id))
+        .send(periode(`${DEMAIN}T12:00:00`, `${DEMAIN}T08:00:00`))
+        .expect(400);
+
+      expect(reponse.body.message).toEqual(['fin doit être postérieure à debut']);
+    });
+
+    it('refuse 409 deux indisponibilités qui se recouvrent', async () => {
+      const id = await creerFiche(fixtures.kevin);
+      await gestionnaire()
+        .post(url(id))
+        .send(periode('2026-12-10T07:00:00', '2026-12-11T19:00:00', 'Congés'))
+        .expect(201);
+
+      const reponse = await gestionnaire()
+        .post(url(id))
+        .send(periode('2026-12-11T08:00:00', '2026-12-11T10:00:00'))
+        .expect(409);
+
+      expect(reponse.body.message).toContain('du 10/12/2026 07:00 au 11/12/2026 19:00');
+    });
+
+    it('liste les indisponibilités à venir par défaut, ou celles d’une période', async () => {
+      const id = await creerFiche(fixtures.kevin);
+      const { prisma } = application;
+      for (const [debut, fin, motif] of [
+        ['2026-12-01T07:00:00+04:00', '2026-12-01T19:00:00+04:00', 'Passée'],
+        ['2026-12-07T07:00:00+04:00', '2026-12-07T12:00:00+04:00', 'En cours'],
+        ['2026-12-20T07:00:00+04:00', '2026-12-21T19:00:00+04:00', 'À venir'],
+      ]) {
+        await prisma.indisponibilite.create({
+          data: { idTechnicien: id, debut: new Date(debut), fin: new Date(fin), motif },
+        });
+      }
+      const motifs = async (query: Record<string, string>) =>
+        (await gestionnaire().get(url(id)).query(query).expect(200)).body.map(
+          (indisponibilite: { motif: string }) => indisponibilite.motif,
+        );
+
+      expect(await motifs({})).toEqual(['En cours', 'À venir']);
+      expect(await motifs({ du: '2026-12-01', au: '2026-12-01' })).toEqual(['Passée']);
+      expect(await motifs({ au: '2026-12-07' })).toEqual(['Passée', 'En cours']);
+      await gestionnaire().get(url(id)).query({ du: '2026-13-01' }).expect(400);
+      await gestionnaire().get(url(999)).expect(404);
+    });
+
+    it('supprime une indisponibilité à venir (204), refuse une terminée (400)', async () => {
+      const id = await creerFiche(fixtures.kevin);
+      const { prisma } = application;
+      const terminee = await prisma.indisponibilite.create({
+        data: {
+          idTechnicien: id,
+          debut: new Date('2026-12-01T07:00:00+04:00'),
+          fin: new Date('2026-12-01T19:00:00+04:00'),
+        },
+      });
+      const creee = await gestionnaire()
+        .post(url(id))
+        .send(periode('2026-12-20T07:00:00', '2026-12-20T19:00:00'))
+        .expect(201);
+
+      await gestionnaire()
+        .delete(`${url(id)}/${creee.body.id}`)
+        .expect(204);
+      await gestionnaire()
+        .delete(`${url(id)}/${terminee.id}`)
+        .expect(400);
+      expect(await prisma.indisponibilite.count()).toBe(1);
+    });
+
+    it('répond 404 pour l’indisponibilité d’un autre technicien', async () => {
+      const idKevin = await creerFiche(fixtures.kevin);
+      const idMathieu = await creerFiche(fixtures.mathieu);
+      const deMathieu = await gestionnaire()
+        .post(url(idMathieu))
+        .send(periode('2026-12-20T07:00:00', '2026-12-20T19:00:00'))
+        .expect(201);
+
+      await gestionnaire()
+        .delete(`${url(idKevin)}/${deMathieu.body.id}`)
+        .expect(404);
+    });
+  });
 });

@@ -27,6 +27,13 @@ const TECHNICIEN: TechnicienAvecCompte = {
   },
 };
 
+const INDISPONIBILITE = {
+  id: 4,
+  debut: new Date('2026-12-09T04:00:00Z'),
+  fin: new Date('2026-12-10T15:00:00Z'),
+  motif: 'Congés',
+};
+
 const COMPTE: CompteARattacher = { id: 7, role: 'TECHNICIEN', actif: true, aDejaUneFiche: false };
 
 function creerService(
@@ -37,6 +44,13 @@ function creerService(
     compterInterventionsAVenir: vi.fn().mockResolvedValue(0),
     modifierTechnicien: vi.fn().mockResolvedValue(undefined),
     archiverTechnicien: vi.fn().mockResolvedValue(undefined),
+    listerInterventionsQuiRecouvrent: vi.fn().mockResolvedValue([]),
+    listerIndisponibilitesQuiRecouvrent: vi.fn().mockResolvedValue([]),
+    creerIndisponibilite: vi.fn().mockResolvedValue(INDISPONIBILITE),
+    trouverIndisponibilite: vi
+      .fn()
+      .mockResolvedValue({ id: 4, idTechnicien: 2, fin: new Date('2026-12-10T15:00:00Z') }),
+    supprimerIndisponibilite: vi.fn().mockResolvedValue(undefined),
   };
   const depot = {
     rechercher: vi.fn().mockResolvedValue({ techniciens: [TECHNICIEN], total: 1 }),
@@ -44,6 +58,8 @@ function creerService(
     trouverCompte: vi.fn().mockResolvedValue(COMPTE),
     couleursEnService: vi.fn().mockResolvedValue(['#0F766E']),
     creer: vi.fn().mockResolvedValue(TECHNICIEN),
+    existe: vi.fn().mockResolvedValue(true),
+    listerIndisponibilites: vi.fn().mockResolvedValue([]),
     modifierTechnicien: vi.fn((travail: (ops: OperationsSurTechnicien) => Promise<unknown>) =>
       travail(operations),
     ),
@@ -193,6 +209,127 @@ describe('TechniciensService', () => {
         'Ce technicien est déjà archivé.',
       );
       await expect(creerService(null).service.archiver(99)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('indisponibilités (US12)', () => {
+    const NOUVELLE = {
+      debut: new Date('2026-12-09T04:00:00Z'),
+      fin: new Date('2026-12-10T15:00:00Z'),
+      motif: 'Congés',
+    };
+
+    it('liste par défaut les indisponibilités qui ne sont pas terminées', async () => {
+      const { service, depot } = creerService();
+
+      await service.listerIndisponibilites(2, {});
+
+      expect(depot.listerIndisponibilites).toHaveBeenCalledExactlyOnceWith(2, {
+        finApres: MAINTENANT,
+        debutAvant: undefined,
+      });
+    });
+
+    it('traduit du et au en journées entières de La Réunion', async () => {
+      const { service, depot } = creerService();
+
+      await service.listerIndisponibilites(2, { du: '2026-12-01', au: '2026-12-31' });
+
+      expect(depot.listerIndisponibilites).toHaveBeenCalledExactlyOnceWith(2, {
+        finApres: new Date('2026-11-30T20:00:00Z'),
+        debutAvant: new Date('2026-12-31T20:00:00Z'),
+      });
+    });
+
+    it('n’applique pas la borne « maintenant » quand seul au est fourni', async () => {
+      const { service, depot } = creerService();
+
+      await service.listerIndisponibilites(2, { au: '2026-12-31' });
+
+      expect(depot.listerIndisponibilites).toHaveBeenCalledWith(2, {
+        finApres: undefined,
+        debutAvant: new Date('2026-12-31T20:00:00Z'),
+      });
+    });
+
+    it('répond 404 pour la liste d’un technicien inexistant', async () => {
+      const { service, depot } = creerService();
+      depot.existe.mockResolvedValue(false);
+
+      await expect(service.listerIndisponibilites(99, {})).rejects.toThrow(NotFoundException);
+    });
+
+    it('verrouille le technicien avant de vérifier les recouvrements, puis crée', async () => {
+      const { service, operations } = creerService();
+
+      const indisponibilite = await service.ajouterIndisponibilite(2, NOUVELLE);
+
+      const verrou = vi.mocked(operations.verrouillerTechnicien).mock.invocationCallOrder[0];
+      const lecture = vi.mocked(operations.listerInterventionsQuiRecouvrent).mock
+        .invocationCallOrder[0];
+      expect(verrou).toBeLessThan(lecture);
+      expect(operations.creerIndisponibilite).toHaveBeenCalledExactlyOnceWith(2, NOUVELLE);
+      expect(indisponibilite).toEqual(INDISPONIBILITE);
+    });
+
+    it('refuse 409 une période qui recouvre une intervention planifiée, sans rien créer', async () => {
+      const { service, operations } = creerService();
+      vi.mocked(operations.listerInterventionsQuiRecouvrent).mockResolvedValue([
+        { id: 12, debut: new Date('2026-12-09T04:00:00Z'), fin: new Date('2026-12-09T05:00:00Z') },
+      ]);
+
+      await expect(service.ajouterIndisponibilite(2, NOUVELLE)).rejects.toThrow('n° 12');
+      expect(operations.creerIndisponibilite).not.toHaveBeenCalled();
+    });
+
+    it('refuse 409 une période qui recouvre une autre indisponibilité', async () => {
+      const { service, operations } = creerService();
+      vi.mocked(operations.listerIndisponibilitesQuiRecouvrent).mockResolvedValue([NOUVELLE]);
+
+      await expect(service.ajouterIndisponibilite(2, NOUVELLE)).rejects.toThrow(ConflictException);
+      expect(operations.creerIndisponibilite).not.toHaveBeenCalled();
+    });
+
+    it('refuse une indisponibilité pour un technicien archivé', async () => {
+      const { service } = creerService({ id: 2, archive: true });
+
+      await expect(service.ajouterIndisponibilite(2, NOUVELLE)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('supprime une indisponibilité à venir', async () => {
+      const { service, operations } = creerService();
+
+      await service.supprimerIndisponibilite(2, 4);
+
+      expect(operations.supprimerIndisponibilite).toHaveBeenCalledExactlyOnceWith(4);
+    });
+
+    it('refuse 400 de supprimer une indisponibilité terminée, conservée pour l’historique', async () => {
+      const { service, operations } = creerService();
+      vi.mocked(operations.trouverIndisponibilite).mockResolvedValue({
+        id: 4,
+        idTechnicien: 2,
+        fin: MAINTENANT,
+      });
+
+      await expect(service.supprimerIndisponibilite(2, 4)).rejects.toThrow(BadRequestException);
+      expect(operations.supprimerIndisponibilite).not.toHaveBeenCalled();
+    });
+
+    it('répond 404 pour l’indisponibilité d’un autre technicien', async () => {
+      const { service, operations } = creerService();
+      vi.mocked(operations.trouverIndisponibilite).mockResolvedValue({
+        id: 4,
+        idTechnicien: 3,
+        fin: new Date('2026-12-10T15:00:00Z'),
+      });
+
+      await expect(service.supprimerIndisponibilite(2, 4)).rejects.toThrow(
+        'Indisponibilité introuvable pour ce technicien.',
+      );
+      expect(operations.supprimerIndisponibilite).not.toHaveBeenCalled();
     });
   });
 });
