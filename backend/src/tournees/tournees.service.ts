@@ -119,6 +119,12 @@ export class TourneesService {
     auteur: Auteur,
   ): Promise<TourneeApi> {
     const changement = await this.depot.modifierTournee(async (operations) => {
+      // RG10 : le technicien est verrouillé en premier, dans le même ordre que l'ajout d'une
+      // indisponibilité (techniciens.service.ts). Une affectation et une indisponibilité
+      // simultanées passent l'une après l'autre, et la seconde voit la première.
+      if ((await operations.verrouillerTechnicienDeLaTournee(idTournee)) === null) {
+        throw new NotFoundException('Tournée introuvable.');
+      }
       const tournee = await this.verrouillerTournee(operations, idTournee);
       const dateTournee = depuisColonneDate(tournee.dateTournee);
       if (dateTournee < jourMetier(this.horloge.maintenant())) {

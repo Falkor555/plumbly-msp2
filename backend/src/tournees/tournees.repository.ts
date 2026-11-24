@@ -16,7 +16,8 @@ const TECHNICIEN_RESUME = {
   include: { utilisateur: NOM_UTILISATEUR },
 } as const satisfies Prisma.TechnicienDefaultArgs;
 
-const INTERVENTION_DETAILLEE = {
+// Exportée pour l'historique d'un client (#15) : même forme que celle attendue par versInterventionApi.
+export const INTERVENTION_DETAILLEE = {
   include: {
     typeIntervention: true,
     adresse: { include: { client: true } },
@@ -68,6 +69,11 @@ export interface InterventionVerrouillee {
  * Le service y applique les règles de gestion sans connaître Prisma ni SQL.
  */
 export interface OperationsSurTournee {
+  /**
+   * Verrouille la ligne du technicien de la tournée (FOR UPDATE) et renvoie son identifiant :
+   * null si la tournée n'existe pas.
+   */
+  verrouillerTechnicienDeLaTournee(idTournee: number): Promise<number | null>;
   /** Verrouille la ligne de la tournée (FOR UPDATE) : null si elle n'existe pas. */
   verrouillerTournee(idTournee: number): Promise<TourneeVerrouillee | null>;
   verrouillerIntervention(idIntervention: number): Promise<InterventionVerrouillee | null>;
@@ -194,6 +200,20 @@ export class TourneesRepository {
 
 function creerOperations(tx: Prisma.TransactionClient): OperationsSurTournee {
   return {
+    async verrouillerTechnicienDeLaTournee(idTournee) {
+      // Le technicien d'une tournée ne change jamais : le lire sans verrou est sans risque.
+      const tournee = await tx.tournee.findUnique({
+        where: { id: idTournee },
+        select: { idTechnicien: true },
+      });
+      if (tournee === null) {
+        return null;
+      }
+      await tx.$queryRaw`
+        SELECT 1 FROM technicien WHERE id_technicien = ${tournee.idTechnicien} FOR UPDATE`;
+      return tournee.idTechnicien;
+    },
+
     async verrouillerTournee(idTournee) {
       // Prisma ne sait pas écrire FOR UPDATE : verrou posé par une requête paramétrée écrite à la main,
       // puis lecture typée par Prisma. Le verrou dure jusqu'à la fin de la transaction.
