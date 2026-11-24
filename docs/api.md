@@ -447,11 +447,11 @@ Le statut ne se modifie jamais directement : il change uniquement par les routes
 | `POST /interventions` | — | `A_PLANIFIER` | ADMIN, GEST | RG01 |
 | `POST /tours/:id/interventions` (Arnaud) | `A_PLANIFIER` | `PLANIFIEE` | ADMIN, GEST | RG02, RG09, RG10, RG11 |
 | `DELETE /tours/:id/interventions/:interventionId` (Arnaud) | `PLANIFIEE` | `A_PLANIFIER` | ADMIN, GEST | RG04 |
-| `POST /interventions/:id/start` | `PLANIFIEE` | `EN_COURS` | TECH affecté | RG03 |
+| `POST /interventions/:id/start` | `PLANIFIEE` | `EN_COURS` | TECH affecté | RG03, RG24 |
 | `POST /interventions/:id/complete` | `EN_COURS` | `TERMINEE` | TECH affecté | RG03 |
 | `POST /interventions/:id/cancel` | `A_PLANIFIER`, `PLANIFIEE`, `EN_COURS` | `ANNULEE` | ADMIN, GEST | RG05 |
 
-Toute autre transition est refusée (`400`). Chaque changement de statut est enregistré dans le journal des actions (`STATUT_MODIFIE` ou `INTERVENTION_ANNULEE`, RG07). Un technicien « affecté » est celui de la tournée qui contient l'intervention.
+Toute autre transition est refusée (`400`). Chaque changement de statut est enregistré dans le journal des actions (`STATUT_MODIFIE` ou `INTERVENTION_ANNULEE`, RG07). Un technicien « affecté » est celui de la tournée qui contient l'intervention. La table de ces transitions est écrite à un seul endroit du code, `backend/src/interventions/cycle-de-vie.ts`, que les routes des interventions et des tournées appellent avant toute écriture.
 
 L'objet **Intervention** renvoyé par l'API contient des résumés des éléments liés, pour que les écrans s'affichent en un seul appel :
 
@@ -543,7 +543,7 @@ Réponse `200` : l'objet Intervention.
 | `typeInterventionId` | entier | Facultatif ; type existant |
 | `adresseId` | entier | Facultatif, uniquement si l'intervention est « à planifier » |
 
-Le statut, la tournée et l'ordre ne se modifient pas ici (routes d'action et routes des tournées).
+Le statut, la tournée et l'ordre ne se modifient pas ici (routes d'action et routes des tournées). Après « terminée », seul le compte rendu se modifie encore, par `PATCH /interventions/:id/report` : c'est l'unique exception à RG06.
 
 Réponse `200` : l'objet Intervention mis à jour.
 
@@ -578,7 +578,7 @@ Aucun corps. Réponse `200` : l'objet Intervention au statut `EN_COURS`.
 
 | Erreur | Cas |
 | --- | --- |
-| `400` | Intervention qui n'est pas « planifiée » ; tournée qui n'est pas celle du jour |
+| `400` | Intervention qui n'est pas « planifiée » ; tournée qui n'est pas celle du jour (RG24) |
 | `401` | Non connecté |
 | `403` | Utilisateur qui n'est pas le technicien affecté (RG03) |
 | `404` | Intervention inexistante |
@@ -1192,15 +1192,29 @@ Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'i
 | `GET /interventions/:id/history` | 100 entrées au plus, les plus récentes (liste non paginée) |
 | `GET /interventions/:id/history` | `contexte` est présent quand l'entrée en a un, par exemple `{ "motif": "…" }` pour `INTERVENTION_ANNULEE` |
 | `GET /interventions/:id/history` | `nom` et `prenom` de l'auteur valent `null` si son compte n'existe plus dans PostgreSQL |
-| `GET /interventions/:id/history` | Route portée par le module `journal` (`backend/src/journal/historique.controller.ts`) en attendant le module interventions (#17) |
+| `GET /interventions/:id/history` | Route portée par le module `journal` (`backend/src/journal/historique.controller.ts`) et non par le module interventions : elle ne lit que le journal et vérifie l'existence de l'intervention. Elle n'entre pas en conflit avec `GET /interventions/:id`, dont le paramètre ne capte pas de `/` |
+
+### 6.11 Écarts de la mise en œuvre des interventions (#17)
+
+| Route | Écart |
+| --- | --- |
+| `GET /interventions` | `tri` accepte `-urgence` (par défaut : urgentes, puis prioritaires, puis normales, puis la demande la plus ancienne, RG18), `creeLe`, `-creeLe`, `debutPrevu` et `-debutPrevu` (les interventions sans créneau en dernier) ; toute autre valeur répond `400` |
+| `GET /interventions` | `du` et `au` s'utilisent ensemble ou seuls ; ce sont des jours à La Réunion, appliqués au début prévu, bornes incluses. Une intervention sans début prévu n'apparaît pas quand l'un des deux est fourni. Un statut inconnu dans `statut` répond `400` en le nommant |
+| `GET /interventions/:id` | Pour un technicien, l'existence est vérifiée d'abord (`404`), puis l'affectation (`403`), y compris pour une intervention à planifier. Les identifiants se suivent : savoir qu'un numéro existe n'apprend rien |
+| `POST /interventions/:id/start`, `POST /interventions/:id/complete`, `PATCH /interventions/:id/report` | Ordre des refus : `404`, puis `403` si l'intervention est dans la tournée d'un autre technicien, puis `400` pour la transition. Une intervention sans tournée (à planifier, annulée) n'a pas de technicien affecté : elle répond `400`, pas `403`. Un ADMIN ou un GESTIONNAIRE reçoit `403` sur ces trois routes (cahier des charges, 5.5) |
+| `PATCH /interventions/:id` | Une nouvelle durée d'intervention planifiée repasse les vérifications de l'affectation : `400` si le créneau finit après 19 h (RG11), `409` s'il chevauche une autre intervention (RG09) ou une indisponibilité (RG10). Un corps sans aucun champ répond `400` |
+| `PATCH /interventions/:id`, `POST /interventions/:id/cancel` | `409` « L'intervention a été modifiée entre-temps, rechargez la page. » si l'intervention a changé de tournée (retrait, affectation) pendant la requête |
+| `POST /interventions/:id/cancel` | L'intervention perd sa tournée, son rang et son début prévu ; `demarreeLe` est gardé pour une intervention en cours, `annuleeLe` et `motifAnnulation` sont renseignés. Une intervention en cours puis annulée perd en base le lien avec son technicien : il ne reste que dans le journal, comme auteur de ses changements de statut |
+| `POST /interventions/:id/complete`, `PATCH /interventions/:id/report` | Un compte rendu vide ou fait d'espaces répond `400`. `report` remplace le texte précédent |
+| `POST /intervention-types`, `PATCH /intervention-types/:id` | L'unicité du libellé tient compte de la casse, comme la contrainte en base : « Fuite » et « fuite » sont deux types |
 
 ## 7. Points ouverts
 
 - [x] **Routes d'Arnaud** : routes des sections 5.5 à 5.8 validées par le binôme.
 - [x] **Détail des routes** : sections 6.1 à 6.8 rédigées.
-- [ ] **Compteurs du tableau de bord** : la requête de `GET /dashboard/activity` ne compte que les interventions rattachées à une tournée ; `aPlanifier` et `annulees` restent donc à 0 (une intervention à planifier n'a pas de tournée, une intervention annulée en est retirée). Compter ces deux statuts à part, ou les retirer de la réponse.
+- [ ] **Compteurs du tableau de bord** : la requête de `GET /dashboard/activity` ne compte que les interventions rattachées à une tournée ; `aPlanifier` et `annulees` restent donc à 0 (une intervention à planifier n'a pas de tournée, une intervention annulée en est retirée). Depuis #17, l'annulation retire aussi une intervention en cours de sa tournée : `annulees` ne peut plus être calculé par technicien à partir de PostgreSQL. Compter ces deux statuts à part, ou les retirer de la réponse.
 - [ ] **Délai de traitement (US27)** : la user story parle du délai entre la demande et la fin d'intervention, la requête mesure le temps passé sur place. Choisir l'indicateur, ou garder les deux.
 - [ ] **E-mail de réinitialisation** (US04) : ajouter Mailpit au `docker-compose.yml` pour capturer les e-mails en développement (card #7).
 - [ ] **Durée d'une intervention** : limites de 15 à 720 minutes à confirmer.
-- [ ] **Démarrage d'une intervention** : uniquement le jour de sa tournée ; à ajouter aux règles de gestion si la règle est retenue.
+- [x] **Démarrage d'une intervention** : uniquement le jour de sa tournée, à l'heure de La Réunion ; règle RG24 du cahier des charges (#17).
 - [x] **Swagger** : documentation interactive sur `/api/docs`, désactivée en production. Les corps de requête sont décrits à la main (`@ApiBody`) tant que la validation n'utilise pas de classes DTO.

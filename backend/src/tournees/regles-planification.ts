@@ -7,6 +7,7 @@ import {
   minutesDepuisMinuitMetier,
 } from '../commun/fuseau-metier.js';
 import { StatutIntervention } from '../generated/prisma/client.ts';
+import { statutApres } from '../interventions/cycle-de-vie.js';
 
 /*
  * Règles de gestion de la planification (cahier des charges, section 5.2), sans base de données :
@@ -106,22 +107,14 @@ export function verifierDisponibilite(creneau: Creneau, indisponibilites: Indisp
   }
 }
 
-/** RG02 : seule une intervention « à planifier » peut être affectée à une tournée. */
+/** RG02 : seule une intervention « à planifier » peut être affectée (cycle de vie, 5.1). */
 export function verifierAffectable(statut: StatutIntervention): void {
-  if (statut !== StatutIntervention.A_PLANIFIER) {
-    throw new BadRequestException(
-      `Seule une intervention à planifier peut être affectée (statut actuel : ${statut}).`,
-    );
-  }
+  statutApres(statut, 'affecter');
 }
 
 /** RG04 et RG15 : seule une intervention planifiée, pas encore démarrée, peut être retirée. */
 export function verifierRetirable(statut: StatutIntervention): void {
-  if (statut !== StatutIntervention.PLANIFIEE) {
-    throw new BadRequestException(
-      `Seule une intervention planifiée non démarrée peut être retirée (statut actuel : ${statut}).`,
-    );
-  }
+  statutApres(statut, 'retirer');
 }
 
 /**

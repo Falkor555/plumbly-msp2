@@ -183,7 +183,7 @@ stateDiagram-v2
 
     APlanifier --> Planifiee: affectée à une tournée (gestionnaire)
     Planifiee --> APlanifier: retirée de la tournée avant démarrage
-    Planifiee --> EnCours: démarre (technicien affecté)
+    Planifiee --> EnCours: démarre (technicien affecté, le jour de la tournée)
     EnCours --> Terminee: termine (technicien affecté)
     APlanifier --> Annulee: annulation + motif (gestionnaire)
     Planifiee --> Annulee: annulation + motif
@@ -203,6 +203,7 @@ stateDiagram-v2
 | RG05 | Une intervention peut être « annulée » par un gestionnaire tant qu'elle n'est pas « terminée » ; le motif est obligatoire. |
 | RG06 | Une intervention « terminée » ou « annulée » n'est plus modifiable. |
 | RG07 | Chaque changement de statut est historisé dans MongoDB : date, auteur, ancien et nouveau statut. |
+| RG24 | Une intervention ne peut être démarrée que le jour de sa tournée, à l'heure de La Réunion. |
 
 ### 5.2 Planification
 

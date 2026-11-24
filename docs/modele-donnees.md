@@ -351,7 +351,7 @@ Certaines règles portent sur plusieurs lignes ou plusieurs tables. Elles sont v
 
 - pas de chevauchement de créneaux entre deux interventions d'un même technicien ;
 - pas d'affectation pendant une indisponibilité du technicien ;
-- transitions de statut autorisées uniquement (à planifier → planifiée → en cours → terminée) ;
+- transitions de statut autorisées uniquement : à planifier → planifiée → en cours → terminée, retour de planifiée à « à planifier » (retrait de la tournée), et annulation depuis « à planifier », « planifiée » ou « en cours » ; « terminée » et « annulée » sont définitives (table unique dans `backend/src/interventions/cycle-de-vie.ts`) ;
 - créneaux entre 7 h et 19 h, du lundi au samedi ;
 - un client garde au moins une adresse non archivée.
 

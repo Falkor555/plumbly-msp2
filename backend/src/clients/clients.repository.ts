@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { type Adresse, Prisma, type TypeClient } from '../generated/prisma/client.ts';
-import { dansLOrdreDe, echapperMotif } from '../prisma/outils-de-recherche.js';
-import { PrismaService } from '../prisma/prisma.service.js';
 import {
   INTERVENTION_DETAILLEE,
   type InterventionDetaillee,
-} from '../tournees/tournees.repository.js';
+} from '../interventions/intervention-detaillee.js';
+import { dansLOrdreDe, echapperMotif, NOM_AFFICHE_CLIENT } from '../prisma/outils-de-recherche.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 import type {
   FiltresClients,
   FiltresHistorique,
@@ -61,12 +61,10 @@ export interface AdresseDuClient {
 }
 
 /*
- * Nom affiché, comme le calcule l'API (tournees.presentation.ts, nomAffiche) : la recherche et
+ * Nom affiché, comme le calcule l'API (interventions.presentation.ts, nomAffiche) : la recherche et
  * le tri par défaut portent sur lui, ils sont donc faits en SQL.
  */
-const NOM_AFFICHE = Prisma.sql`CASE WHEN c.type_client = 'PROFESSIONNEL'
-  THEN coalesce(c.raison_sociale, '')
-  ELSE concat_ws(' ', c.prenom_client, c.nom_client) END`;
+const NOM_AFFICHE = NOM_AFFICHE_CLIENT;
 
 // Fragments SQL fixes, choisis dans une liste fermée : aucune donnée reçue n'entre dans le tri.
 // L'identifiant départage les ex aequo, pour que la pagination ne saute ni ne répète aucun client.

@@ -112,6 +112,12 @@ describe('lireTexte', () => {
     expect(lecture(obligatoire, champs).erreurs).toEqual([message]);
   });
 
+  it('refuse un caractère NUL, que PostgreSQL rejetterait en erreur 500', () => {
+    expect(lecture(obligatoire, { nomClient: 'Hoarau\u0000' }).erreurs).toEqual([
+      'nomClient contient un caractère non autorisé',
+    ]);
+  });
+
   it('accepte null pour effacer un champ effaçable', () => {
     const effacable = lecteur({ obligatoire: false, maximum: 100, effacable: true });
 
@@ -250,6 +256,7 @@ describe('paramètres de liste', () => {
     expect(recherche('a'.repeat(101)).erreurs).toEqual([
       'recherche ne doit pas dépasser 100 caractères',
     ]);
+    expect(recherche('ab\u0000').erreurs).toEqual(['recherche contient un caractère non autorisé']);
   });
 
   it('lit un booléen true ou false et refuse le reste', () => {

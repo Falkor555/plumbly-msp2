@@ -182,6 +182,10 @@ export function lireTexte(
     erreurs.push(`${nom} doit être un texte`);
     return undefined;
   }
+  if (contientUnCaractereNul(valeur)) {
+    erreurs.push(`${nom} contient un caractère non autorisé`);
+    return undefined;
+  }
   const texte = valeur.trim();
   if (texte === '') {
     erreurs.push(`${nom} ne peut pas être vide`);
@@ -192,6 +196,14 @@ export function lireTexte(
     return undefined;
   }
   return texte;
+}
+
+/**
+ * PostgreSQL refuse le caractère NUL dans un texte (erreur 22021) : accepté ici, il produirait
+ * une erreur 500 au lieu d'un 400 lisible.
+ */
+function contientUnCaractereNul(texte: string): boolean {
+  return texte.includes('\u0000');
 }
 
 /** Valeur d'une énumération, par exemple typeClient. */
@@ -357,6 +369,10 @@ export function lireRecherche(requete: Champs, erreurs: string[]): string | unde
     return undefined;
   }
   const recherche = typeof valeur === 'string' ? valeur.trim() : '';
+  if (contientUnCaractereNul(recherche)) {
+    erreurs.push('recherche contient un caractère non autorisé');
+    return undefined;
+  }
   if (recherche.length < LONGUEUR_RECHERCHE_MINIMUM) {
     erreurs.push(`recherche doit contenir au moins ${LONGUEUR_RECHERCHE_MINIMUM} caractères`);
     return undefined;

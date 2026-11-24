@@ -9,6 +9,7 @@ import { depuisColonneDate, jourMetier } from '../commun/fuseau-metier.js';
 import { Horloge } from '../commun/horloge.js';
 import { StatutIntervention } from '../generated/prisma/client.ts';
 import { JournalDesActions } from '../journal/journal-des-actions.js';
+import type { TourneeVerrouillee } from './operations-verrouillees.js';
 import {
   creneauDe,
   nouveauxRangs,
@@ -22,11 +23,7 @@ import {
   verifierRetirable,
 } from './regles-planification.js';
 import { versPlanningApi, versTourneeApi } from './tournees.presentation.js';
-import {
-  type OperationsSurTournee,
-  type TourneeVerrouillee,
-  TourneesRepository,
-} from './tournees.repository.js';
+import { type OperationsSurTournee, TourneesRepository } from './tournees.repository.js';
 import type {
   Affectation,
   Auteur,
