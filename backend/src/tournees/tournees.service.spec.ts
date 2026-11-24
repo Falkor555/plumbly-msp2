@@ -169,8 +169,7 @@ describe('TourneesService', () => {
         interventionId: 30,
         ancienStatut: 'A_PLANIFIER',
         nouveauStatut: 'PLANIFIEE',
-        auteurId: GESTIONNAIRE.id,
-        date: MAINTENANT,
+        auteur: { id: GESTIONNAIRE.id, role: 'GESTIONNAIRE' },
       });
     });
 

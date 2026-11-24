@@ -259,7 +259,7 @@ describe('planification des tournées (e2e)', () => {
           interventionId: idIntervention,
           ancienStatut: 'A_PLANIFIER',
           nouveauStatut: 'PLANIFIEE',
-          auteurId: fixtures.gestionnaire.id,
+          auteur: fixtures.gestionnaire,
         }),
       );
     });

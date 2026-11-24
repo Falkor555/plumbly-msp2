@@ -25,13 +25,20 @@ export interface ApplicationDeTest {
   prisma: PrismaService;
 }
 
-export async function demarrerApplication(maintenant: Date): Promise<ApplicationDeTest> {
-  const module = await Test.createTestingModule({ imports: [AppModule] })
+/** journalReel : seul journal.e2e-spec.ts écrit dans le MongoDB éphémère ; les autres simulent. */
+export async function demarrerApplication(
+  maintenant: Date,
+  { journalReel = false }: { journalReel?: boolean } = {},
+): Promise<ApplicationDeTest> {
+  const constructeur = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(Horloge)
-    .useValue({ maintenant: () => maintenant })
-    .overrideProvider(JournalDesActions)
-    .useValue({ enregistrer: () => Promise.resolve() })
-    .compile();
+    .useValue({ maintenant: () => maintenant });
+  if (!journalReel) {
+    constructeur
+      .overrideProvider(JournalDesActions)
+      .useValue({ enregistrer: () => Promise.resolve() });
+  }
+  const module = await constructeur.compile();
   const app = module.createNestApplication<INestApplication<App>>();
   app.use(authentificationDeTest);
   app.setGlobalPrefix('api/v1');

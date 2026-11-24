@@ -1,40 +1,26 @@
-import { Injectable, Logger } from '@nestjs/common';
-import type { StatutIntervention } from '../generated/prisma/client.ts';
+import type { ActionJournalisee, DocumentJournal, EntiteConsultee } from './journal.types.js';
 
-/** Changement de statut d'une intervention (RG07), nommé STATUT_MODIFIE dans le contrat d'API. */
-export interface StatutModifie {
-  type: 'STATUT_MODIFIE';
-  interventionId: number;
-  ancienStatut: StatutIntervention;
-  nouveauStatut: StatutIntervention;
-  auteurId: number;
-  date: Date;
-}
-
-export type ActionJournalisee = StatutModifie;
+export type { ActionJournalisee } from './journal.types.js';
 
 /**
- * Point d'accroche du journal des actions MongoDB (card #27, Loïc).
+ * Journal des actions (RG07, US19), stocké dans MongoDB (ADR 0006).
  *
- * Les modules métier dépendent de cette classe abstraite, jamais de MongoDB : la card #27
- * fournit l'implémentation réelle dans JournalModule (useClass) sans toucher aux appelants.
+ * Mode d'emploi pour les modules métier (interventions #17, authentification #13) :
+ * - injecter JournalDesActions dans le service (le module est global) ; ne jamais importer mongodb ;
+ * - appeler `await this.journal.enregistrer({ type: 'STATUT_MODIFIE', auteur: { id, role }, … })`
+ *   APRÈS la validation de la transaction PostgreSQL, jamais dedans : une action annulée par un
+ *   rollback ne doit pas apparaître dans le journal ;
+ * - la date est ajoutée par le journal (Horloge) : ne pas la passer ;
+ * - enregistrer() ne lève jamais d'erreur : MongoDB indisponible, l'échec est tracé dans les logs
+ *   de l'API et l'action métier reste valide. Aucun try/catch n'est nécessaire chez l'appelant ;
+ * - pour CONNEXION_ECHOUEE, passer l'e-mail par masquerEmail() (masquer-email.ts).
  */
 export abstract class JournalDesActions {
   abstract enregistrer(action: ActionJournalisee): Promise<void>;
-}
 
-/**
- * Implémentation d'attente : tant que MongoDB n'est pas branché, l'action est seulement tracée
- * dans les logs de l'API, pour qu'aucun changement de statut ne passe inaperçu.
- */
-@Injectable()
-export class JournalDesActionsDansLesLogs extends JournalDesActions {
-  private readonly logger = new Logger('JournalDesActions');
-
-  enregistrer(action: ActionJournalisee): Promise<void> {
-    this.logger.log(
-      `${action.type} intervention=${action.interventionId} ${action.ancienStatut} -> ${action.nouveauStatut} auteur=${action.auteurId}`,
-    );
-    return Promise.resolve();
-  }
+  /**
+   * Entrées d'une entité, de la plus récente à la plus ancienne, au plus `limite`.
+   * Lève JournalIndisponible si MongoDB ne répond pas.
+   */
+  abstract historiqueDe(entite: EntiteConsultee, limite: number): Promise<DocumentJournal[]>;
 }

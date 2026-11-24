@@ -226,15 +226,15 @@ export class TourneesService {
 
   /**
    * RG07, écrit après la validation de la transaction : la planification est enregistrée même
-   * si le journal est indisponible, et l'échec est tracé pour être rattrapé.
+   * si le journal est indisponible, et l'échec est tracé pour être rattrapé. enregistrer() ne
+   * lève déjà jamais d'erreur ; ce try/catch reste une défense si l'implémentation changeait.
    */
   private async journaliser(changement: ChangementDeStatut, auteur: Auteur): Promise<void> {
     try {
       await this.journal.enregistrer({
         type: 'STATUT_MODIFIE',
         ...changement,
-        auteurId: auteur.id,
-        date: this.horloge.maintenant(),
+        auteur: { id: auteur.id, role: auteur.role },
       });
     } catch (erreur) {
       this.logger.error(
