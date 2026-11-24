@@ -13,7 +13,7 @@ import {
 import { Roles } from '../commun/autorisation/roles.decorator.js';
 import { RolesGuard } from '../commun/autorisation/roles.guard.js';
 import { lireIdentifiant, type PageApi } from '../commun/validation.js';
-import type { InterventionApi } from '../tournees/tournees.types.js';
+import type { InterventionApi } from '../interventions/interventions.types.js';
 import { ClientsService } from './clients.service.js';
 import type { AdresseApi, ClientApi } from './clients.types.js';
 import {

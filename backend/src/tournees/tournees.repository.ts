@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { debutDuJourMetier, versColonneDate, ajouterJours } from '../commun/fuseau-metier.js';
 import { Prisma, StatutIntervention } from '../generated/prisma/client.ts';
+import { INTERVENTION_DETAILLEE } from '../interventions/intervention-detaillee.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
   Creneau,
@@ -16,16 +17,6 @@ const TECHNICIEN_RESUME = {
   include: { utilisateur: NOM_UTILISATEUR },
 } as const satisfies Prisma.TechnicienDefaultArgs;
 
-// Exportée pour l'historique d'un client (#15) : même forme que celle attendue par versInterventionApi.
-export const INTERVENTION_DETAILLEE = {
-  include: {
-    typeIntervention: true,
-    adresse: { include: { client: true } },
-    createur: { select: { id: true, nom: true, prenom: true } },
-    tournee: { include: { technicien: TECHNICIEN_RESUME } },
-  },
-} as const satisfies Prisma.InterventionDefaultArgs;
-
 const TOURNEE_DETAILLEE = {
   include: {
     technicien: TECHNICIEN_RESUME,
@@ -33,7 +24,6 @@ const TOURNEE_DETAILLEE = {
   },
 } as const satisfies Prisma.TourneeDefaultArgs;
 
-export type InterventionDetaillee = Prisma.InterventionGetPayload<typeof INTERVENTION_DETAILLEE>;
 export type TourneeDetaillee = Prisma.TourneeGetPayload<typeof TOURNEE_DETAILLEE>;
 export type TechnicienAvecNom = Prisma.TechnicienGetPayload<typeof TECHNICIEN_RESUME>;
 

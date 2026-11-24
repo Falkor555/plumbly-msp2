@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { Horloge } from '../commun/horloge.js';
 import { type PageApi, paginer } from '../commun/validation.js';
-import { versInterventionApi } from '../tournees/tournees.presentation.js';
-import type { InterventionApi } from '../tournees/tournees.types.js';
+import { versInterventionApi } from '../interventions/interventions.presentation.js';
+import type { InterventionApi } from '../interventions/interventions.types.js';
 import { versAdresseApi, versClientApi } from './clients.presentation.js';
 import {
   type AdresseDuClient,

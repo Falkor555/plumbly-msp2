@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { type Adresse, Prisma, type TypeClient } from '../generated/prisma/client.ts';
-import { dansLOrdreDe, echapperMotif } from '../prisma/outils-de-recherche.js';
-import { PrismaService } from '../prisma/prisma.service.js';
 import {
   INTERVENTION_DETAILLEE,
   type InterventionDetaillee,
-} from '../tournees/tournees.repository.js';
+} from '../interventions/intervention-detaillee.js';
+import { dansLOrdreDe, echapperMotif } from '../prisma/outils-de-recherche.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 import type {
   FiltresClients,
   FiltresHistorique,
@@ -61,7 +61,7 @@ export interface AdresseDuClient {
 }
 
 /*
- * Nom affiché, comme le calcule l'API (tournees.presentation.ts, nomAffiche) : la recherche et
+ * Nom affiché, comme le calcule l'API (interventions.presentation.ts, nomAffiche) : la recherche et
  * le tri par défaut portent sur lui, ils sont donc faits en SQL.
  */
 const NOM_AFFICHE = Prisma.sql`CASE WHEN c.type_client = 'PROFESSIONNEL'
