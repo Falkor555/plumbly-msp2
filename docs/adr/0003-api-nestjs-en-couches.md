@@ -10,11 +10,11 @@ Le CCP 2 demande une application sécurisée **organisée en couches**. Plumbly 
 
 ## Décision
 
-Le back-end est une API REST développée avec **NestJS** en TypeScript. Chaque module métier (auth, users, clients, technicians, interventions, tours, dashboard) est découpé en trois couches :
+Le back-end est une API REST développée avec **NestJS** en TypeScript. Chaque module métier (auth, users, clients, technicians, interventions, tours, dashboard, audit-log) est découpé en trois couches :
 
 1. **Contrôleur** : routes HTTP, validation des DTO, guards d'authentification et de rôle.
 2. **Service** : règles de gestion ; ne connaît ni HTTP ni SQL.
-3. **Repository** : seul point d'accès aux données (Prisma ou SQL manuel).
+3. **Repository** : seul point d'accès aux données (Prisma, SQL manuel ou MongoDB).
 
 L'API est versionnée (`/api/v1`) et documentée avec Swagger.
 

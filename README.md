@@ -31,6 +31,7 @@ Plumbly centralise ces informations dans un outil unique :
 | Back-end | [NestJS](https://nestjs.com/) (Node.js, TypeScript) |
 | Base de données | [PostgreSQL](https://www.postgresql.org/) |
 | Accès aux données | [Prisma](https://www.prisma.io/) (ORM) + requêtes SQL écrites à la main |
+| Journal des actions | [MongoDB](https://www.mongodb.com/) (base NoSQL) |
 | Conteneurisation | [Docker](https://www.docker.com/) / Docker Compose |
 
 ### Accès aux données

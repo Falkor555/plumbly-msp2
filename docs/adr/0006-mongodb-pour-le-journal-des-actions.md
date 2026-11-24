@@ -1,6 +1,6 @@
 # 0006. MongoDB pour le journal des actions
 
-- **Statut** : Rejetée (pour cette version)
+- **Statut** : Acceptée
 - **Date** : 2026-11-23
 - **Décideurs** : Loïc BOTSY, Arnaud BIDEL
 
@@ -10,7 +10,7 @@ Le CCP 2 demande de développer des composants d'accès aux données **SQL et No
 
 ## Décision
 
-Le **journal des actions** est stocké dans **MongoDB**, dans une collection `journal_actions`. Chaque document contient : la date, l'utilisateur, le type d'action, l'entité concernée et les données avant / après. Le module NestJS `audit-log` y accède par son propre repository.
+Le **journal des actions** est stocké dans **MongoDB**, dans une collection `journal_actions`. Chaque document contient : la date, l'utilisateur, le type d'action, l'entité concernée et les données avant / après. Sont journalisés : les changements de statut et les annulations d'interventions, les connexions (réussies et échouées) et les créations ou désactivations de comptes. Aucun mot de passe, jeton ou donnée personnelle complète n'est enregistré. Le module NestJS `audit-log` y accède par son propre repository.
 
 ## Alternatives envisagées
 
@@ -24,8 +24,8 @@ Le **journal des actions** est stocké dans **MongoDB**, dans une collection `jo
 
 - **Positives** : couvre la partie NoSQL du CCP 2 avec un besoin réel ; le journal n'alourdit pas la base métier.
 - **Négatives** : pas de jointure entre le journal et PostgreSQL ; l'identifiant de l'entité est copié dans chaque document.
-- **À faire** : aucun pour l'instant.
+- **À faire** : développer le module `audit-log` dans la card #27 (service MongoDB dans Docker Compose, repository, route d'historique) ; collection décrite dans le [modèle de données](../modele-donnees.md#8-données-nosql--journal-des-actions).
 
-## Décision finale
+## Historique
 
-Le 23 novembre 2026, le binôme a décidé de ne pas développer de journal des actions dans cette version. US19 et RG07 sont reportées, et la card #27 est fermée. La compétence d'accès aux données du CCP 2 se valide avec SQL ou NoSQL : le binôme a retenu SQL (ADR 0005), Plumbly n'utilise donc pas de base NoSQL.
+- 2026-11-23 : écartée dans un premier temps (SQL uniquement), puis acceptée le même jour : le journal répond à un besoin de traçabilité (US19, RG07) et couvre l'accès aux données NoSQL.

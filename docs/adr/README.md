@@ -11,7 +11,7 @@ Ce dossier contient les ADR (*Architecture Decision Records*) de Plumbly. Un ADR
 | [0003](0003-api-nestjs-en-couches.md) | API REST NestJS organisée en couches | Acceptée | 2026-11-23 |
 | [0004](0004-front-react-vite-tailwind.md) | Front-end React, Vite et Tailwind CSS | Acceptée | 2026-11-23 |
 | [0005](0005-postgresql-prisma-et-sql-manuel.md) | PostgreSQL avec Prisma, et requêtes SQL écrites à la main | Acceptée | 2026-11-23 |
-| [0006](0006-mongodb-pour-le-journal-des-actions.md) | MongoDB pour le journal des actions | Rejetée | 2026-11-23 |
+| [0006](0006-mongodb-pour-le-journal-des-actions.md) | MongoDB pour le journal des actions | Acceptée | 2026-11-23 |
 | [0007](0007-authentification-jwt-et-argon2.md) | Authentification par JWT et hachage argon2 | Acceptée | 2026-11-23 |
 | [0008](0008-tests-unitaires-et-integration.md) | Tests unitaires et d'intégration avec Testcontainers | Acceptée | 2026-11-23 |
 | [0009](0009-docker-compose-environnement-de-dev.md) | Docker Compose pour l'environnement de développement | Acceptée | 2026-11-23 |
