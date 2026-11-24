@@ -8,18 +8,22 @@ import { Horloge } from '../commun/horloge.js';
 import { type PageApi, paginer } from '../commun/validation.js';
 import { versInterventionApi } from '../tournees/tournees.presentation.js';
 import type { InterventionApi } from '../tournees/tournees.types.js';
-import { versClientApi } from './clients.presentation.js';
+import { versAdresseApi, versClientApi } from './clients.presentation.js';
 import {
+  type AdresseDuClient,
   type ClientVerrouille,
   ClientsRepository,
   type OperationsSurClient,
 } from './clients.repository.js';
 import type {
+  AdresseApi,
   ClientApi,
   FiltresClients,
   FiltresHistorique,
+  ModificationAdresse,
   ModificationClient,
   NouveauClient,
+  NouvelleAdresse,
 } from './clients.types.js';
 import { verifierIdentite } from './regles-clients.js';
 
@@ -102,6 +106,72 @@ export class ClientsService {
       total,
       filtres,
     );
+  }
+
+  /** US07 : nouvelle adresse d'un client en service. */
+  ajouterAdresse(idClient: number, nouvelle: NouvelleAdresse): Promise<AdresseApi> {
+    return this.depot.modifierClient(async (operations) => {
+      await this.verrouillerClientModifiable(operations, idClient);
+      return versAdresseApi(await operations.ajouterAdresse(idClient, nouvelle));
+    });
+  }
+
+  /**
+   * US07 : correction d'une adresse (faute de frappe, code d'accès). Un déménagement est une
+   * nouvelle adresse, pour ne pas réécrire l'historique des interventions passées.
+   */
+  modifierAdresse(
+    idClient: number,
+    idAdresse: number,
+    modification: ModificationAdresse,
+  ): Promise<AdresseApi> {
+    return this.depot.modifierClient(async (operations) => {
+      await this.verrouillerClientModifiable(operations, idClient);
+      const adresse = await this.trouverAdresseDuClient(operations, idClient, idAdresse);
+      if (adresse.archive) {
+        throw new BadRequestException(
+          'Cette adresse est archivée : elle ne peut plus être modifiée.',
+        );
+      }
+      return versAdresseApi(await operations.modifierAdresse(idAdresse, modification));
+    });
+  }
+
+  /** US07 : le client garde toujours au moins une adresse en service (RG21). */
+  archiverAdresse(idClient: number, idAdresse: number): Promise<AdresseApi> {
+    return this.depot.modifierClient(async (operations) => {
+      await this.verrouillerClientModifiable(operations, idClient);
+      const adresse = await this.trouverAdresseDuClient(operations, idClient, idAdresse);
+      if (adresse.archive) {
+        throw new BadRequestException('Cette adresse est déjà archivée.');
+      }
+      if ((await operations.compterAdressesActives(idClient)) <= 1) {
+        throw new BadRequestException(
+          'C’est la dernière adresse du client : ajoutez-en une autre avant d’archiver celle-ci.',
+        );
+      }
+      const actives = await operations.compterInterventionsActivesDeLAdresse(idAdresse);
+      if (actives > 0) {
+        throw new ConflictException(
+          'Impossible d’archiver cette adresse tant qu’elle a des interventions à planifier, ' +
+            `planifiées ou en cours (${actives} actuellement) : terminez-les ou annulez-les d’abord.`,
+        );
+      }
+      return versAdresseApi(await operations.archiverAdresse(idAdresse, this.horloge.maintenant()));
+    });
+  }
+
+  /** Une adresse d'un autre client répond 404, comme une adresse inexistante. */
+  private async trouverAdresseDuClient(
+    operations: OperationsSurClient,
+    idClient: number,
+    idAdresse: number,
+  ): Promise<AdresseDuClient> {
+    const adresse = await operations.trouverAdresse(idAdresse);
+    if (adresse === null || adresse.idClient !== idClient) {
+      throw new NotFoundException('Adresse introuvable pour ce client.');
+    }
+    return adresse;
   }
 
   private async verrouillerClient(

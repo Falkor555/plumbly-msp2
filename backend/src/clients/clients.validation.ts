@@ -16,6 +16,7 @@ import { StatutIntervention, TypeClient } from '../generated/prisma/client.ts';
 import type {
   FiltresClients,
   FiltresHistorique,
+  ModificationAdresse,
   ModificationClient,
   NouveauClient,
   NouvelleAdresse,
@@ -77,6 +78,24 @@ export function lireModificationClient(corps: unknown): ModificationClient {
   const identite = lireIdentite(champs, erreurs, { creation: false });
   signalerErreurs(erreurs);
   return identite;
+}
+
+/** POST /clients/:id/addresses */
+export function lireNouvelleAdresse(corps: unknown): NouvelleAdresse {
+  const champs = lireObjet(corps, CHAMPS_ADRESSE);
+  const erreurs: string[] = [];
+  const adresse = lireChampsAdresse(champs, erreurs, { creation: true });
+  signalerErreurs(erreurs);
+  return adresse as NouvelleAdresse;
+}
+
+/** PATCH /clients/:id/addresses/:addressId : tous les champs sont facultatifs. */
+export function lireModificationAdresse(corps: unknown): ModificationAdresse {
+  const champs = lireObjet(corps, CHAMPS_ADRESSE);
+  const erreurs: string[] = [];
+  const adresse = lireChampsAdresse(champs, erreurs, { creation: false });
+  signalerErreurs(erreurs);
+  return adresse;
 }
 
 /** GET /clients : clients non archivés triés par nom affiché, par défaut. */
@@ -166,7 +185,7 @@ function lireAdresseImbriquee(valeur: unknown, erreurs: string[]): NouvelleAdres
   return inconnus.length + erreursDesChamps.length > 0 ? undefined : (adresse as NouvelleAdresse);
 }
 
-export function lireChampsAdresse(
+function lireChampsAdresse(
   champs: Champs,
   erreurs: string[],
   { creation }: { creation: boolean },

@@ -53,6 +53,14 @@ function creerService(client: ClientVerrouille | null = VERROUILLE) {
     compterInterventionsActivesDuClient: vi.fn().mockResolvedValue(0),
     modifierClient: vi.fn().mockResolvedValue(undefined),
     archiverClient: vi.fn().mockResolvedValue(undefined),
+    trouverAdresse: vi.fn().mockResolvedValue({ id: 15, idClient: 8, archive: false }),
+    compterAdressesActives: vi.fn().mockResolvedValue(2),
+    compterInterventionsActivesDeLAdresse: vi.fn().mockResolvedValue(0),
+    ajouterAdresse: vi.fn().mockResolvedValue(ADRESSE),
+    modifierAdresse: vi.fn().mockResolvedValue(ADRESSE),
+    archiverAdresse: vi
+      .fn()
+      .mockResolvedValue({ ...ADRESSE, archive: true, archiveLe: MAINTENANT }),
   };
   const depot = {
     rechercher: vi.fn().mockResolvedValue({ clients: [CLIENT], total: 41 }),
@@ -190,6 +198,89 @@ describe('ClientsService', () => {
       const { service } = creerService({ ...VERROUILLE, archive: true });
 
       await expect(service.archiver(8)).rejects.toThrow('Ce client est déjà archivé.');
+    });
+  });
+
+  describe('adresses (US07)', () => {
+    const NOUVELLE = {
+      rue: '3 chemin Bois de Nèfles',
+      complement: null,
+      codePostal: '97490',
+      ville: 'Sainte-Clotilde',
+      infosAcces: null,
+    };
+
+    it('ajoute une adresse à un client en service', async () => {
+      const { service, operations } = creerService();
+
+      const adresse = await service.ajouterAdresse(8, NOUVELLE);
+
+      expect(operations.ajouterAdresse).toHaveBeenCalledExactlyOnceWith(8, NOUVELLE);
+      expect(adresse).not.toHaveProperty('idClient');
+    });
+
+    it('refuse d’ajouter une adresse à un client archivé', async () => {
+      const { service, operations } = creerService({ ...VERROUILLE, archive: true });
+
+      await expect(service.ajouterAdresse(8, NOUVELLE)).rejects.toThrow(BadRequestException);
+      expect(operations.ajouterAdresse).not.toHaveBeenCalled();
+    });
+
+    it('répond 404 pour l’adresse d’un autre client, sans la modifier', async () => {
+      const { service, operations } = creerService();
+      vi.mocked(operations.trouverAdresse).mockResolvedValue({
+        id: 15,
+        idClient: 9,
+        archive: false,
+      });
+
+      await expect(service.modifierAdresse(8, 15, { ville: 'Le Port' })).rejects.toThrow(
+        'Adresse introuvable pour ce client.',
+      );
+      await expect(service.archiverAdresse(8, 15)).rejects.toThrow(NotFoundException);
+      expect(operations.modifierAdresse).not.toHaveBeenCalled();
+      expect(operations.archiverAdresse).not.toHaveBeenCalled();
+    });
+
+    it('refuse de modifier ou de réarchiver une adresse archivée', async () => {
+      const { service, operations } = creerService();
+      vi.mocked(operations.trouverAdresse).mockResolvedValue({
+        id: 15,
+        idClient: 8,
+        archive: true,
+      });
+
+      await expect(service.modifierAdresse(8, 15, { ville: 'Le Port' })).rejects.toThrow(
+        'Cette adresse est archivée : elle ne peut plus être modifiée.',
+      );
+      await expect(service.archiverAdresse(8, 15)).rejects.toThrow(
+        'Cette adresse est déjà archivée.',
+      );
+      expect(operations.modifierAdresse).not.toHaveBeenCalled();
+    });
+
+    it('refuse d’archiver la dernière adresse du client (RG21)', async () => {
+      const { service, operations } = creerService();
+      vi.mocked(operations.compterAdressesActives).mockResolvedValue(1);
+
+      await expect(service.archiverAdresse(8, 15)).rejects.toThrow(BadRequestException);
+      expect(operations.archiverAdresse).not.toHaveBeenCalled();
+    });
+
+    it('refuse 409 une adresse qui a des interventions actives', async () => {
+      const { service, operations } = creerService();
+      vi.mocked(operations.compterInterventionsActivesDeLAdresse).mockResolvedValue(1);
+
+      await expect(service.archiverAdresse(8, 15)).rejects.toThrow(ConflictException);
+    });
+
+    it('archive l’adresse à l’heure de l’horloge', async () => {
+      const { service, operations } = creerService();
+
+      const adresse = await service.archiverAdresse(8, 15);
+
+      expect(operations.archiverAdresse).toHaveBeenCalledExactlyOnceWith(15, MAINTENANT);
+      expect(adresse).toMatchObject({ archive: true, archiveLe: MAINTENANT });
     });
   });
 

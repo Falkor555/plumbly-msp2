@@ -364,6 +364,93 @@ describe('clients (e2e)', () => {
     });
   });
 
+  describe('adresses (US07)', () => {
+    const NOUVELLE = {
+      rue: '3 chemin Bois de Nèfles',
+      codePostal: '97490',
+      ville: 'Sainte-Clotilde',
+    };
+
+    it('ajoute une adresse, la corrige, puis archive l’ancienne', async () => {
+      const idClient = await creerClient({ nomClient: 'Dupont' });
+      const idAncienne = await premiereAdresse(idClient);
+
+      const ajout = await gestionnaire()
+        .post(`/clients/${idClient}/addresses`)
+        .send(NOUVELLE)
+        .expect(201);
+      expect(ajout.body).toMatchObject({ ...NOUVELLE, complement: null, archive: false });
+      const correction = await gestionnaire()
+        .patch(`/clients/${idClient}/addresses/${ajout.body.id}`)
+        .send({ infosAcces: 'Portail vert' })
+        .expect(200);
+      expect(correction.body).toMatchObject({ rue: NOUVELLE.rue, infosAcces: 'Portail vert' });
+      const archivage = await gestionnaire()
+        .post(`/clients/${idClient}/addresses/${idAncienne}/archive`)
+        .expect(200);
+
+      expect(archivage.body).toMatchObject({ id: idAncienne, archive: true });
+      const client = await gestionnaire().get(`/clients/${idClient}`).expect(200);
+      expect(client.body.adresses).toHaveLength(2);
+      const liste = await gestionnaire().get('/clients').expect(200);
+      expect(liste.body.data[0].adresses.map((adresse: { id: number }) => adresse.id)).toEqual([
+        ajout.body.id,
+      ]);
+    });
+
+    it('refuse d’archiver la dernière adresse du client (RG21)', async () => {
+      const idClient = await creerClient({ nomClient: 'Dupont' });
+
+      const reponse = await gestionnaire()
+        .post(`/clients/${idClient}/addresses/${await premiereAdresse(idClient)}/archive`)
+        .expect(400);
+
+      expect(reponse.body.message).toContain('dernière adresse du client');
+    });
+
+    it('répond 404 pour l’adresse d’un autre client, sans la toucher', async () => {
+      const idDupont = await creerClient({ nomClient: 'Dupont' });
+      const idTecher = await creerClient({ nomClient: 'Técher' });
+      const adresseDeTecher = await premiereAdresse(idTecher);
+      await gestionnaire().post(`/clients/${idDupont}/addresses`).send(NOUVELLE).expect(201);
+
+      await gestionnaire()
+        .patch(`/clients/${idDupont}/addresses/${adresseDeTecher}`)
+        .send({ ville: 'Le Port' })
+        .expect(404);
+      await gestionnaire()
+        .post(`/clients/${idDupont}/addresses/${adresseDeTecher}/archive`)
+        .expect(404);
+
+      const adresse = await application.prisma.adresse.findUniqueOrThrow({
+        where: { id: adresseDeTecher },
+      });
+      expect(adresse).toMatchObject({ ville: 'Saint-Denis', archive: false });
+    });
+
+    it('refuse 409 l’archivage d’une adresse qui a une intervention planifiée', async () => {
+      const idClient = await creerClient({ nomClient: 'Dupont' });
+      const idAdresse = await premiereAdresse(idClient);
+      await gestionnaire().post(`/clients/${idClient}/addresses`).send(NOUVELLE).expect(201);
+      await planifierUneIntervention(idAdresse);
+
+      await gestionnaire().post(`/clients/${idClient}/addresses/${idAdresse}/archive`).expect(409);
+    });
+
+    it('refuse d’ajouter une adresse à un client archivé, et une adresse invalide', async () => {
+      const idClient = await creerClient({ nomClient: 'Dupont' });
+
+      const invalide = await gestionnaire()
+        .post(`/clients/${idClient}/addresses`)
+        .send({ ...NOUVELLE, codePostal: '974' })
+        .expect(400);
+      expect(invalide.body.message).toEqual(['codePostal doit contenir 5 chiffres']);
+      await gestionnaire().post(`/clients/${idClient}/archive`).expect(200);
+      await gestionnaire().post(`/clients/${idClient}/addresses`).send(NOUVELLE).expect(400);
+      await gestionnaire().post('/clients/999/addresses').send(NOUVELLE).expect(404);
+    });
+  });
+
   describe('historique (US09)', () => {
     it('renvoie les interventions du client au format du contrat, filtrables par statut', async () => {
       const id = await creerClient({ nomClient: 'Dupont', prenomClient: 'Jean' });

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, type TypeClient } from '../generated/prisma/client.ts';
+import { type Adresse, Prisma, type TypeClient } from '../generated/prisma/client.ts';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   INTERVENTION_DETAILLEE,
@@ -9,7 +9,9 @@ import type {
   FiltresClients,
   FiltresHistorique,
   IdentiteClient,
+  ModificationAdresse,
   NouveauClient,
+  NouvelleAdresse,
   TriClients,
 } from './clients.types.js';
 import { STATUTS_ACTIFS } from './regles-clients.js';
@@ -43,6 +45,18 @@ export interface OperationsSurClient {
   compterInterventionsActivesDuClient(idClient: number): Promise<number>;
   modifierClient(idClient: number, modification: Partial<IdentiteClient>): Promise<void>;
   archiverClient(idClient: number, le: Date): Promise<void>;
+  trouverAdresse(idAdresse: number): Promise<AdresseDuClient | null>;
+  compterAdressesActives(idClient: number): Promise<number>;
+  compterInterventionsActivesDeLAdresse(idAdresse: number): Promise<number>;
+  ajouterAdresse(idClient: number, adresse: NouvelleAdresse): Promise<Adresse>;
+  modifierAdresse(idAdresse: number, modification: ModificationAdresse): Promise<Adresse>;
+  archiverAdresse(idAdresse: number, le: Date): Promise<Adresse>;
+}
+
+export interface AdresseDuClient {
+  id: number;
+  idClient: number;
+  archive: boolean;
 }
 
 /*
@@ -168,6 +182,36 @@ function creerOperations(tx: Prisma.TransactionClient): OperationsSurClient {
 
     async archiverClient(idClient, le) {
       await tx.client.update({ where: { id: idClient }, data: { archive: true, archiveLe: le } });
+    },
+
+    trouverAdresse(idAdresse) {
+      return tx.adresse.findUnique({
+        where: { id: idAdresse },
+        select: { id: true, idClient: true, archive: true },
+      });
+    },
+
+    compterAdressesActives(idClient) {
+      return tx.adresse.count({ where: { idClient, archive: false } });
+    },
+
+    compterInterventionsActivesDeLAdresse(idAdresse) {
+      return tx.intervention.count({ where: { idAdresse, statut: { in: STATUTS_ACTIFS } } });
+    },
+
+    ajouterAdresse(idClient, adresse) {
+      return tx.adresse.create({ data: { ...adresse, idClient } });
+    },
+
+    modifierAdresse(idAdresse, modification) {
+      return tx.adresse.update({ where: { id: idAdresse }, data: modification });
+    },
+
+    archiverAdresse(idAdresse, le) {
+      return tx.adresse.update({
+        where: { id: idAdresse },
+        data: { archive: true, archiveLe: le },
+      });
     },
   };
 }

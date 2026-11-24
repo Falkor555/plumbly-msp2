@@ -15,12 +15,14 @@ import { RolesGuard } from '../commun/autorisation/roles.guard.js';
 import { lireIdentifiant, type PageApi } from '../commun/validation.js';
 import type { InterventionApi } from '../tournees/tournees.types.js';
 import { ClientsService } from './clients.service.js';
-import type { ClientApi } from './clients.types.js';
+import type { AdresseApi, ClientApi } from './clients.types.js';
 import {
   lireFiltresClients,
   lireFiltresHistorique,
+  lireModificationAdresse,
   lireModificationClient,
   lireNouveauClient,
+  lireNouvelleAdresse,
 } from './clients.validation.js';
 
 /**
@@ -70,5 +72,35 @@ export class ClientsController {
     @Query() requete: Record<string, unknown>,
   ): Promise<PageApi<InterventionApi>> {
     return this.service.historique(lireIdentifiant(id), lireFiltresHistorique(requete));
+  }
+
+  /** US07 */
+  @Post(':id/addresses')
+  ajouterAdresse(@Param('id') id: string, @Body() corps: unknown): Promise<AdresseApi> {
+    return this.service.ajouterAdresse(lireIdentifiant(id), lireNouvelleAdresse(corps));
+  }
+
+  /** US07 */
+  @Patch(':id/addresses/:addressId')
+  modifierAdresse(
+    @Param('id') id: string,
+    @Param('addressId') idAdresse: string,
+    @Body() corps: unknown,
+  ): Promise<AdresseApi> {
+    return this.service.modifierAdresse(
+      lireIdentifiant(id),
+      lireIdentifiant(idAdresse),
+      lireModificationAdresse(corps),
+    );
+  }
+
+  /** US07 et RG21 : renvoie l'adresse archivée (200). */
+  @Post(':id/addresses/:addressId/archive')
+  @HttpCode(HttpStatus.OK)
+  archiverAdresse(
+    @Param('id') id: string,
+    @Param('addressId') idAdresse: string,
+  ): Promise<AdresseApi> {
+    return this.service.archiverAdresse(lireIdentifiant(id), lireIdentifiant(idAdresse));
   }
 }

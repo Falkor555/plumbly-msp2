@@ -2,8 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import {
   lireFiltresClients,
   lireFiltresHistorique,
+  lireModificationAdresse,
   lireModificationClient,
   lireNouveauClient,
+  lireNouvelleAdresse,
 } from './clients.validation.js';
 
 /** Messages d'une erreur 400, tels que l'API les renvoie. */
@@ -166,6 +168,40 @@ describe('validation des clients', () => {
     it('refuse de modifier l’adresse par cette route', () => {
       expect(messagesDe(() => lireModificationClient({ adresse: ADRESSE }))).toEqual([
         'Le champ adresse n’est pas autorisé',
+      ]);
+    });
+  });
+
+  describe('adresses', () => {
+    it('lit une nouvelle adresse et complète les champs facultatifs', () => {
+      expect(lireNouvelleAdresse(ADRESSE)).toEqual({
+        ...ADRESSE,
+        complement: null,
+        infosAcces: null,
+      });
+    });
+
+    it('refuse une adresse sans rue ni ville', () => {
+      expect(messagesDe(() => lireNouvelleAdresse({ codePostal: '97400' }))).toEqual([
+        'rue est obligatoire',
+        'ville est obligatoire',
+      ]);
+    });
+
+    it('modifie seulement les champs envoyés, et efface le complément avec null', () => {
+      expect(lireModificationAdresse({ infosAcces: 'Code 9999', complement: null })).toEqual({
+        infosAcces: 'Code 9999',
+        complement: null,
+      });
+    });
+
+    it('refuse d’effacer la rue ou la ville, et un champ inconnu', () => {
+      expect(messagesDe(() => lireModificationAdresse({ rue: null, ville: '' }))).toEqual([
+        'rue ne peut pas être null',
+        'ville ne peut pas être vide',
+      ]);
+      expect(messagesDe(() => lireModificationAdresse({ idClient: 9 }))).toEqual([
+        'Le champ idClient n’est pas autorisé',
       ]);
     });
   });
