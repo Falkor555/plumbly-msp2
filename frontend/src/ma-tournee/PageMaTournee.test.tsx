@@ -86,6 +86,22 @@ describe('ma tournée du jour (technicien)', () => {
     expect(liens[0]).toHaveAttribute('href', 'tel:0692123456');
   });
 
+  it("ouvre l'itinéraire vers l'adresse de chaque étape, encodée, dans un nouvel onglet", async () => {
+    serveurApi.use(http.get(urlApi('/tours/me/today'), () => HttpResponse.json(tourneeDuJour())));
+
+    render(<PageMaTournee />);
+
+    const etapes = within(await screen.findByRole('list')).getAllByRole('listitem');
+    const itineraire = within(etapes[1]).getByRole('link', { name: /Itinéraire/ });
+    expect(itineraire).toHaveTextContent('12 rue de Paris');
+    expect(itineraire).toHaveAttribute(
+      'href',
+      'https://www.google.com/maps/dir/?api=1&destination=12%20rue%20de%20Paris%2C%2097438%20Sainte-Marie',
+    );
+    expect(itineraire).toHaveAttribute('target', '_blank');
+    expect(itineraire).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
   it("indique qu'il n'y a pas de tournée quand l'API répond 204", async () => {
     serveurApi.use(
       http.get(urlApi('/tours/me/today'), () => new HttpResponse(null, { status: 204 })),

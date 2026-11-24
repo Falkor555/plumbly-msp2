@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { tourneesApi } from '../api/tournees.api';
 import type { Intervention, StatutIntervention, Tournee } from '../api/types';
 import { jourMetier, libelleJourLong } from '../commun/dates';
+import { lienItineraire, lienTelephone } from '../commun/liens';
 import { useChargement } from '../commun/useChargement';
 import { BadgesIntervention } from '../planning/BadgesIntervention';
 import { creneau, nombreDInterventions } from '../planning/presentation';
@@ -14,11 +15,6 @@ const CLASSES_ETAPE: Record<StatutIntervention, string> = {
   TERMINEE: 'bg-gray-50 text-gris-texte',
   ANNULEE: 'bg-gray-50 text-gris-texte',
 };
-
-/** Garde les chiffres et le « + » : un numéro saisi « 0692 12 34 56 » donne un lien tel: valide. */
-function lienTelephone(telephone: string): string {
-  return `tel:${telephone.replace(/[^+\d]/g, '')}`;
-}
 
 /** US24 : la tournée du jour du technicien connecté, pensée pour le téléphone. */
 export function PageMaTournee() {
@@ -99,13 +95,24 @@ function EtapeTournee({ intervention, numero }: { intervention: Intervention; nu
       </div>
       <div className="space-y-2 px-4 py-3 text-sm">
         <p className="font-semibold">{client.nomAffiche}</p>
-        <address className="not-italic">
-          {adresse.rue}
-          {adresse.complement && <span className="block">{adresse.complement}</span>}
-          <span className="block">
-            {adresse.codePostal} {adresse.ville}
+        <a
+          href={lienItineraire(adresse)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-start justify-between gap-3 rounded border border-bordure px-3 py-2 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle"
+        >
+          <address className="not-italic">
+            {adresse.rue}
+            {adresse.complement && <span className="block">{adresse.complement}</span>}
+            <span className="block">
+              {adresse.codePostal} {adresse.ville}
+            </span>
+          </address>
+          <span className="shrink-0 font-semibold text-sarcelle-profonde underline">
+            Itinéraire
+            <span className="sr-only"> (nouvel onglet)</span>
           </span>
-        </address>
+        </a>
         {adresse.infosAcces && (
           <p className="rounded bg-fond px-3 py-2 text-gris-texte">
             <span className="font-semibold text-anthracite">Accès : </span>

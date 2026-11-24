@@ -1,4 +1,4 @@
-import type { DateIso, TechnicienDuPlanning } from '../api/types';
+import type { DateIso, Intervention, TechnicienDuPlanning } from '../api/types';
 import { libelleJourCourt, libelleJourLong } from '../commun/dates';
 import { BoutonAffecter } from './BoutonAffecter';
 import { CarteIntervention } from './CarteIntervention';
@@ -18,6 +18,7 @@ interface Props {
   techniciens: TechnicienDuPlanning[];
   aujourdhui: DateIso;
   onAffecter: (caseAAffecter: CaseAAffecter) => void;
+  onOuvrirIntervention: (intervention: Intervention) => void;
   onOuvrirJour: (jour: DateIso) => void;
 }
 
@@ -27,6 +28,7 @@ export function PlanningSemaine({
   techniciens,
   aujourdhui,
   onAffecter,
+  onOuvrirIntervention,
   onOuvrirJour,
 }: Props) {
   return (
@@ -66,6 +68,7 @@ export function PlanningSemaine({
               technicien={technicien}
               jours={jours}
               onAffecter={onAffecter}
+              onOuvrirIntervention={onOuvrirIntervention}
             />
           ))}
         </tbody>
@@ -78,9 +81,10 @@ interface PropsLigne {
   technicien: TechnicienDuPlanning;
   jours: DateIso[];
   onAffecter: (caseAAffecter: CaseAAffecter) => void;
+  onOuvrirIntervention: (intervention: Intervention) => void;
 }
 
-function LigneTechnicien({ technicien, jours, onAffecter }: PropsLigne) {
+function LigneTechnicien({ technicien, jours, onAffecter, onOuvrirIntervention }: PropsLigne) {
   const couleur = couleurTechnicien(technicien.couleurPlanning);
   return (
     <tr className="border-b border-bordure align-top last:border-b-0">
@@ -110,6 +114,7 @@ function LigneTechnicien({ technicien, jours, onAffecter }: PropsLigne) {
                 key={intervention.id}
                 intervention={intervention}
                 couleur={couleur}
+                onOuvrir={onOuvrirIntervention}
               />
             ))}
             <BoutonAffecter

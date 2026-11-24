@@ -2,7 +2,10 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { creerJeuDeDemonstration } from '../simulation/donneesDemonstration';
+import {
+  creerJeuDeDemonstration,
+  type JeuDeDemonstration,
+} from '../simulation/donneesDemonstration';
 import { creerHandlersPlanning } from '../simulation/handlersPlanning';
 import { serveurApi, urlApi } from '../test/msw/serveur';
 import { PagePlanning } from './PagePlanning';
@@ -143,5 +146,108 @@ describe('planning du gestionnaire', () => {
     await utilisateur.click(within(alerte).getByRole('button', { name: 'Réessayer' }));
 
     expect(await screen.findByRole('rowheader', { name: /Jean Rivière/ })).toBeInTheDocument();
+  });
+});
+
+/** Le jeu de démonstration, avec des infos d'accès sur l'intervention de Mme Hoarau (id 1). */
+function jeuAvecInfosAcces(infosAcces: string): JeuDeDemonstration {
+  const jeu = creerJeuDeDemonstration(LUNDI);
+  return {
+    ...jeu,
+    techniciens: jeu.techniciens.map((technicien) => ({
+      ...technicien,
+      tournees: technicien.tournees.map((tournee) => ({
+        ...tournee,
+        interventions: tournee.interventions.map((intervention) =>
+          intervention.id === 1
+            ? { ...intervention, adresse: { ...intervention.adresse, infosAcces } }
+            : intervention,
+        ),
+      })),
+    })),
+  };
+}
+
+describe("détail d'une intervention du planning", () => {
+  it("ouvre le détail au clic en vue semaine, sans nouvel appel à l'API", async () => {
+    serveurApi.use(
+      ...creerHandlersPlanning(jeuAvecInfosAcces('Portail vert, sonner deux fois'), {
+        urlApi,
+        aujourdhui: () => LUNDI,
+      }),
+    );
+    const utilisateur = userEvent.setup();
+    render(<PagePlanning aujourdhui={LUNDI} />);
+    await screen.findByRole('rowheader', { name: /Jean Rivière/ });
+    const requetesAvantOuverture = requetesPlanning.length;
+    const carte = screen.getByRole('article', { name: /08:00–09:00, Mme Hoarau/ });
+
+    await utilisateur.click(within(carte).getByRole('button'));
+
+    const detail = screen.getByRole('dialog', { name: 'Recherche de fuite' });
+    expect(detail).toHaveTextContent('08:00–09:00');
+    expect(within(detail).getByText('Planifiée')).toBeInTheDocument();
+    expect(detail).toHaveTextContent('Mme Hoarau');
+    expect(within(detail).getByRole('link', { name: '0692 12 34 56' })).toHaveAttribute(
+      'href',
+      'tel:0692123456',
+    );
+    expect(detail).toHaveTextContent('1 rue des Flamboyants');
+    expect(detail).toHaveTextContent('97400 Saint-Denis');
+    expect(detail).toHaveTextContent('Portail vert, sonner deux fois');
+    expect(detail).toHaveTextContent('Recherche de fuite chez Mme Hoarau');
+    expect(requetesPlanning).toHaveLength(requetesAvantOuverture);
+  });
+
+  it("n'affiche pas la rubrique Accès quand l'adresse n'a pas d'infos d'accès", async () => {
+    const utilisateur = userEvent.setup();
+    render(<PagePlanning aujourdhui={LUNDI} />);
+    await screen.findByRole('rowheader', { name: /Jean Rivière/ });
+
+    await utilisateur.click(
+      within(screen.getByRole('article', { name: /08:00–09:00, Mme Hoarau/ })).getByRole('button'),
+    );
+
+    const detail = screen.getByRole('dialog', { name: 'Recherche de fuite' });
+    expect(within(detail).queryByText('Accès')).not.toBeInTheDocument();
+  });
+
+  it('se ferme avec Échap et rend le focus à la carte cliquée', async () => {
+    const utilisateur = userEvent.setup();
+    render(<PagePlanning aujourdhui={LUNDI} />);
+    await screen.findByRole('rowheader', { name: /Jean Rivière/ });
+    const boutonCarte = within(
+      screen.getByRole('article', { name: /08:00–09:00, Mme Hoarau/ }),
+    ).getByRole('button');
+    await utilisateur.click(boutonCarte);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await utilisateur.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(boutonCarte).toHaveFocus();
+  });
+
+  it('ouvre le détail avec Entrée en vue jour et se ferme par le bouton Fermer', async () => {
+    const utilisateur = userEvent.setup();
+    render(<PagePlanning aujourdhui={LUNDI} />);
+    await screen.findByRole('rowheader', { name: /Jean Rivière/ });
+    await utilisateur.click(screen.getByRole('button', { name: 'jour' }));
+    const tourneeJean = await screen.findByRole('list', { name: 'Tournée de Jean Rivière' });
+    const blocChauffeEau = within(tourneeJean).getByRole('button', { name: /10:00–11:30/ });
+    blocChauffeEau.focus();
+
+    await utilisateur.keyboard('{Enter}');
+
+    const detail = screen.getByRole('dialog', { name: 'Chauffe-eau' });
+    expect(detail).toHaveTextContent('Boulangerie Grondin');
+    expect(within(detail).getByText('En cours')).toBeInTheDocument();
+    expect(within(detail).getByText('Urgente')).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: 'Fermer' })).toHaveFocus();
+
+    await utilisateur.click(within(detail).getByRole('button', { name: 'Fermer' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(blocChauffeEau).toHaveFocus();
   });
 });

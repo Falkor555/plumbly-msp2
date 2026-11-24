@@ -59,10 +59,11 @@ interface Props {
   jour: DateIso;
   techniciens: TechnicienDuPlanning[];
   onAffecter: (caseAAffecter: CaseAAffecter) => void;
+  onOuvrirIntervention: (intervention: Intervention) => void;
 }
 
 /** US23 : la journée de chaque technicien sur une frise horaire, pour repérer les créneaux libres. */
-export function PlanningJour({ jour, techniciens, onAffecter }: Props) {
+export function PlanningJour({ jour, techniciens, onAffecter, onOuvrirIntervention }: Props) {
   return (
     <section
       aria-label={`Planning du ${libelleJourLong(jour)}`}
@@ -95,6 +96,7 @@ export function PlanningJour({ jour, techniciens, onAffecter }: Props) {
               jour={jour}
               technicien={technicien}
               onAffecter={onAffecter}
+              onOuvrirIntervention={onOuvrirIntervention}
             />
           ))}
         </div>
@@ -108,9 +110,10 @@ interface PropsLigne {
   jour: DateIso;
   technicien: TechnicienDuPlanning;
   onAffecter: (caseAAffecter: CaseAAffecter) => void;
+  onOuvrirIntervention: (intervention: Intervention) => void;
 }
 
-function LigneJournee({ jour, technicien, onAffecter }: PropsLigne) {
+function LigneJournee({ jour, technicien, onAffecter, onOuvrirIntervention }: PropsLigne) {
   const couleur = couleurTechnicien(technicien.couleurPlanning);
   const tournee = tourneeDuJour(technicien, jour);
   const indisponibilites = indisponibilitesDuJour(technicien, jour);
@@ -159,6 +162,7 @@ function LigneJournee({ jour, technicien, onAffecter }: PropsLigne) {
                   debut={intervention.debutPrevu}
                   fin={intervention.finPrevue}
                   couleur={couleur}
+                  onOuvrir={onOuvrirIntervention}
                 />
               ),
           )}
@@ -184,30 +188,38 @@ interface PropsBloc {
   debut: string;
   fin: string;
   couleur: string;
+  onOuvrir: (intervention: Intervention) => void;
 }
 
-function BlocIntervention({ intervention, debut, fin, couleur }: PropsBloc) {
+function BlocIntervention({ intervention, debut, fin, couleur, onOuvrir }: PropsBloc) {
   const position = placement(minutesDansLaJournee(debut), minutesDansLaJournee(fin));
   const { client, adresse, type } = intervention;
   return (
     <li
-      className={`absolute inset-y-2 overflow-hidden rounded border border-bordure border-l-[3px] px-1.5 py-1 text-xs shadow-[0_1px_2px_rgb(31_41_55/0.06)] ${CLASSES_BLOC_STATUT[intervention.statut]}`}
+      className={`absolute inset-y-2 rounded border border-bordure border-l-[3px] text-xs shadow-[0_1px_2px_rgb(31_41_55/0.06)] ${CLASSES_BLOC_STATUT[intervention.statut]}`}
       style={{ ...position, borderLeftColor: couleur }}
       title={`${creneau(intervention)} · ${client.nomAffiche} · ${type.libelle} · ${adresse.ville}`}
     >
-      <p className="font-semibold tabular-nums">
-        <span className="sr-only">Étape {intervention.ordreTournee} : </span>
-        {creneau(intervention)}
-      </p>
-      <p className="truncate font-medium">{type.libelle}</p>
-      <p className="truncate text-gris-texte">
-        {client.nomAffiche}
-        <span className="sr-only">, {adresse.ville}</span>
-      </p>
-      {/* Faute de place sous xl, le badge n'est pas affiché mais reste lu par les lecteurs d'écran. */}
-      <div className="sr-only mt-0.5 xl:not-sr-only">
-        <BadgesIntervention intervention={intervention} />
-      </div>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        onClick={() => onOuvrir(intervention)}
+        className="block size-full overflow-hidden rounded-r px-1.5 py-1 text-left hover:bg-black/3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle"
+      >
+        <span className="block font-semibold tabular-nums">
+          <span className="sr-only">Étape {intervention.ordreTournee} : </span>
+          {creneau(intervention)}
+        </span>
+        <span className="block truncate font-medium">{type.libelle}</span>
+        <span className="block truncate text-gris-texte">
+          {client.nomAffiche}
+          <span className="sr-only">, {adresse.ville}</span>
+        </span>
+        {/* Faute de place sous xl, le badge n'est pas affiché mais reste lu par les lecteurs d'écran. */}
+        <span className="sr-only mt-0.5 xl:not-sr-only xl:block">
+          <BadgesIntervention intervention={intervention} />
+        </span>
+      </button>
     </li>
   );
 }
