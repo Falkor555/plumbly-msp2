@@ -16,8 +16,8 @@ Ce document définit le contrat de l'API REST de Plumbly : les routes, les donn�
 | Noms des ressources | Anglais, au pluriel (cahier des charges, 8.3) | `/interventions`, `/tours` |
 | Noms des champs | Français, en camelCase, identiques au dictionnaire de données | `debutPrevu`, `dureeEstimeeMin` |
 | Identifiants | Entiers | `"id": 42` |
-| Dates et heures | ISO 8601 en UTC ; affichées à l'heure de Paris par le front | `"2026-11-24T08:00:00.000Z"` |
-| Dates seules | ISO 8601 | `"2026-11-24"` |
+| Dates et heures | ISO 8601 **avec fuseau obligatoire** (`Z` ou `+04:00`) ; renvoyées en UTC ; affichées à l'heure de La Réunion (UTC+4, sans heure d'été) par le front | `"2026-11-24T08:00:00.000Z"` |
+| Dates seules | ISO 8601 ; un jour s'entend à l'heure de La Réunion | `"2026-11-24"` |
 | Énumérations | Majuscules, séparées par `_` | `"A_PLANIFIER"`, `"GESTIONNAIRE"` |
 | Champs inconnus | Refusés (`whitelist` et `forbidNonWhitelisted`) | `400` |
 
@@ -475,7 +475,7 @@ L'objet **Intervention** renvoyé par l'API contient des résumés des élément
   "majLe": "2026-11-24T09:30:00.000Z",
   "type": { "id": 1, "libelle": "Fuite" },
   "adresse": { "id": 15, "rue": "12 rue des Lilas", "complement": "Bât. B", "codePostal": "69003", "ville": "Lyon", "infosAcces": "Code 4521, 3e étage" },
-  "client": { "id": 8, "nomAffiche": "Jean Dupont", "telephone": "0612345678" },
+  "client": { "id": 8, "typeClient": "PARTICULIER", "nomAffiche": "Jean Dupont", "telephone": "0692123456" },
   "tournee": { "id": 5, "dateTournee": "2026-11-25", "technicien": { "id": 2, "nom": "Benali", "prenom": "Karim" } },
   "createur": { "id": 3, "nom": "Martin", "prenom": "Sophie" }
 }
@@ -681,24 +681,503 @@ Réponse `200` : l'objet Type d'intervention mis à jour.
 | `404` | Type inexistant |
 | `409` | Libellé déjà utilisé |
 
-### 6.5 à 6.8 — Routes d'Arnaud (à détailler)
+### 6.5 Clients et adresses
 
-Les routes des clients, des techniciens, des tournées et du tableau de bord (sections 5.5 à 5.8) sont détaillées par Arnaud au même format que les sections 6.1 à 6.4 : données envoyées et validation, réponse, erreurs, effets.
+Routes réservées à ADMIN et GEST. Toutes répondent `401` sans connexion et `403` pour un technicien ; ces deux cas ne sont pas répétés dans les tableaux.
 
-Les règles suivantes concernent à la fois ses routes et celles des interventions. Elles sont fixées ici pour que les deux modules restent cohérents.
+L'objet **Client** :
 
-| Route d'Arnaud | Règle commune |
+```json
+{
+  "id": 8,
+  "typeClient": "PARTICULIER",
+  "nomClient": "Dupont",
+  "prenomClient": "Jean",
+  "raisonSociale": null,
+  "nomAffiche": "Jean Dupont",
+  "telephone": "0692123456",
+  "emailClient": "jean.dupont@exemple.re",
+  "archive": false,
+  "archiveLe": null,
+  "creeLe": "2026-11-20T06:00:00.000Z",
+  "majLe": "2026-11-20T06:00:00.000Z",
+  "adresses": [
+    { "id": 15, "rue": "12 rue des Lilas", "complement": "Bât. B", "codePostal": "97400", "ville": "Saint-Denis", "infosAcces": "Code 4521, 3e étage", "archive": false, "archiveLe": null }
+  ]
+}
+```
+
+`nomAffiche` est calculé par l'API : prénom et nom pour un particulier, raison sociale pour un professionnel.
+
+**Règles de validation communes** :
+
+| Champ | Règle |
 | --- | --- |
-| `POST /tours/:id/interventions` | Corps : `interventionId`, `debutPrevu`, `ordreTournee` facultatif (sinon en dernier). L'intervention doit être `A_PLANIFIER`. Vérifie le chevauchement (RG09 : refus si début B < fin A et fin B > début A), l'indisponibilité (RG10) et les horaires (RG11). Erreur `409` en cas de conflit, avec l'intervention en conflit dans le message. Passe l'intervention à `PLANIFIEE` et écrit `STATUT_MODIFIE` dans le journal. |
-| `DELETE /tours/:id/interventions/:interventionId` | Uniquement si l'intervention est `PLANIFIEE` (RG04, RG15). La remet à `A_PLANIFIER`, vide `debutPrevu` et `ordreTournee`, recalcule l'ordre des suivantes dans la même transaction et écrit `STATUT_MODIFIE`. |
-| `PUT /tours/:id/order` | Corps : la liste complète des identifiants d'interventions dans le nouvel ordre. Exécuté dans une transaction (RG14) ; refusé (`400`) si une intervention `EN_COURS` ou `TERMINEE` change de place (RG15, RG16). |
-| `GET /tours/me/today` et `GET /tours/:id` | Renvoient les interventions sous la forme de l'objet **Intervention** de la section 6.3, triées par `ordreTournee`. |
-| `POST /tours/:id/urgent-insertions` | Paramètre `simulation=true` : renvoie le décalage proposé sans rien enregistrer ; sans ce paramètre, applique le décalage validé par le gestionnaire (US25). |
+| `typeClient` | `PARTICULIER` ou `PROFESSIONNEL` |
+| `nomClient` | Obligatoire pour un particulier, 1 à 100 caractères |
+| `prenomClient` | Facultatif, 1 à 100 caractères |
+| `raisonSociale` | Obligatoire pour un professionnel, 1 à 150 caractères |
+| `telephone` | Obligatoire ; 10 chiffres commençant par 0 ; les espaces et les points sont acceptés puis retirés (`06 92 12 34 56` devient `0692123456`) |
+| `emailClient` | Facultatif, format e-mail, 255 caractères maximum |
+| `rue` | Obligatoire, 1 à 255 caractères |
+| `complement` | Facultatif, 255 caractères maximum |
+| `codePostal` | Obligatoire, 5 chiffres |
+| `ville` | Obligatoire, 1 à 100 caractères |
+| `infosAcces` | Facultatif, 500 caractères maximum (code, étage, interphone) |
+
+#### `GET /clients` — rechercher et lister (US08)
+
+| Paramètre | Validation |
+| --- | --- |
+| `page`, `limit` | Voir section 4 |
+| `recherche` | 2 caractères minimum ; sur le nom, le prénom, la raison sociale, le téléphone et la ville ; insensible à la casse et aux accents |
+| `typeClient` | `PARTICULIER` ou `PROFESSIONNEL` |
+| `archives` | `true` pour inclure les clients archivés ; par défaut `false` |
+| `tri` | Par défaut : `nomAffiche` croissant |
+
+Réponse `200` : liste paginée d'objets Client, avec leurs adresses non archivées.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Paramètre invalide ; recherche de moins de 2 caractères |
+
+#### `POST /clients` — créer un client (US06)
+
+| Champ envoyé | Type | Validation |
+| --- | --- | --- |
+| `typeClient`, `nomClient`, `prenomClient`, `raisonSociale`, `telephone`, `emailClient` | voir règles communes | |
+| `adresse` | objet | Obligatoire : `rue`, `complement`, `codePostal`, `ville`, `infosAcces` |
+
+Le client et sa première adresse sont créés dans une même transaction : un client n'existe jamais sans adresse (RG21).
+
+Réponse `201` : l'objet Client.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Champ manquant ou invalide ; nom absent pour un particulier ; raison sociale absente pour un professionnel ; adresse absente ou invalide |
+
+#### `GET /clients/:id` — consulter un client (US06)
+
+Réponse `200` : l'objet Client avec **toutes** ses adresses, archivées comprises. Un client archivé reste consultable, pour l'historique.
+
+| Erreur | Cas |
+| --- | --- |
+| `404` | Client inexistant |
+
+#### `PATCH /clients/:id` — modifier un client (US10)
+
+Mêmes champs que la création, sauf `adresse`, tous facultatifs. Si `typeClient` change, la règle nom / raison sociale est vérifiée sur le résultat.
+
+Réponse `200` : l'objet Client mis à jour.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Champ invalide ; client archivé |
+| `404` | Client inexistant |
+
+#### `POST /clients/:id/archive` — archiver un client (US10)
+
+Aucun corps. Réponse `200` : l'objet Client avec `archive` à `true`.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Client déjà archivé |
+| `404` | Client inexistant |
+| `409` | Le client a des interventions à planifier, planifiées ou en cours : elles doivent être terminées ou annulées d'abord |
+
+Effets : `archiveLe` renseigné ; le client disparaît des listes et des recherches mais reste visible dans l'historique (RG22).
+
+#### `GET /clients/:id/interventions` — historique d'un client (US09)
+
+| Paramètre | Validation |
+| --- | --- |
+| `page`, `limit` | Voir section 4 |
+| `statut` | Un ou plusieurs statuts séparés par des virgules |
+
+Réponse `200` : liste paginée d'objets Intervention (section 6.3), de la plus récente à la plus ancienne, toutes adresses du client confondues.
+
+| Erreur | Cas |
+| --- | --- |
+| `404` | Client inexistant |
+
+#### `POST /clients/:id/addresses` — ajouter une adresse (US07)
+
+| Champ envoyé | Type | Validation |
+| --- | --- | --- |
+| `rue`, `complement`, `codePostal`, `ville`, `infosAcces` | voir règles communes | |
+
+Réponse `201` : l'objet Adresse.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Champ manquant ou invalide ; client archivé |
+| `404` | Client inexistant |
+
+#### `PATCH /clients/:id/addresses/:addressId` — modifier une adresse (US07)
+
+Mêmes champs, tous facultatifs. La modification sert à corriger une adresse (faute de frappe, nouveau code d'accès) ; un déménagement se traite en ajoutant une nouvelle adresse, pour ne pas modifier l'historique des interventions passées.
+
+Réponse `200` : l'objet Adresse mis à jour.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Champ invalide ; adresse archivée |
+| `404` | Client inexistant ; adresse qui n'appartient pas à ce client |
+
+#### `POST /clients/:id/addresses/:addressId/archive` — archiver une adresse (US07)
+
+Aucun corps. Réponse `200` : l'objet Adresse avec `archive` à `true`.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Dernière adresse non archivée du client (RG21) ; adresse déjà archivée |
+| `404` | Client inexistant ; adresse qui n'appartient pas à ce client |
+| `409` | L'adresse a des interventions à planifier, planifiées ou en cours |
+
+### 6.6 Techniciens et indisponibilités
+
+Routes réservées à ADMIN et GEST. Toutes répondent `401` sans connexion et `403` pour un technicien ; ces deux cas ne sont pas répétés dans les tableaux.
+
+L'objet **Technicien** :
+
+```json
+{
+  "id": 2,
+  "utilisateurId": 7,
+  "nom": "Benali",
+  "prenom": "Karim",
+  "email": "karim.benali@plomberie-durand.fr",
+  "compteActif": true,
+  "telephone": "0692123456",
+  "couleurPlanning": "#1E88E5",
+  "archive": false,
+  "archiveLe": null
+}
+```
+
+Le nom, le prénom, l'e-mail et l'état du compte viennent du compte utilisateur lié : ils sont affichés ici mais se modifient par `PATCH /users/:id` (ADMIN). La fiche technicien ne contient que les données propres au technicien.
+
+L'objet **Indisponibilité** : `{ "id": 4, "debut": "2026-11-27T04:00:00.000Z", "fin": "2026-11-28T15:00:00.000Z", "motif": "Congés" }`.
+
+#### `GET /technicians` — lister les techniciens (US11)
+
+| Paramètre | Validation |
+| --- | --- |
+| `page`, `limit` | Voir section 4 |
+| `recherche` | Sur le nom et le prénom |
+| `archives` | `true` pour inclure les techniciens archivés ; par défaut `false` |
+| `tri` | Par défaut : nom croissant |
+
+Réponse `200` : liste paginée d'objets Technicien.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Paramètre invalide |
+
+#### `POST /technicians` — créer une fiche technicien (US11)
+
+| Champ envoyé | Type | Validation |
+| --- | --- | --- |
+| `utilisateurId` | entier | Obligatoire ; compte existant, actif, de rôle `TECHNICIEN` |
+| `telephone` | texte | Obligatoire ; 10 chiffres commençant par 0, espaces et points retirés |
+| `couleurPlanning` | texte | Facultatif, format `#RRGGBB` ; par défaut, une couleur de la palette non encore utilisée |
+
+Réponse `201` : l'objet Technicien.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Champ manquant ou invalide ; compte inexistant, désactivé ou qui n'a pas le rôle `TECHNICIEN` |
+| `409` | Le compte a déjà une fiche technicien (D02) |
+
+#### `GET /technicians/:id` — consulter un technicien (US11)
+
+Réponse `200` : l'objet Technicien. Un technicien archivé reste consultable.
+
+| Erreur | Cas |
+| --- | --- |
+| `404` | Technicien inexistant |
+
+#### `PATCH /technicians/:id` — modifier un technicien (US11)
+
+| Champ envoyé | Type | Validation |
+| --- | --- | --- |
+| `telephone` | texte | Facultatif ; même règle qu'à la création |
+| `couleurPlanning` | texte | Facultatif, format `#RRGGBB` |
+
+Réponse `200` : l'objet Technicien mis à jour.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Champ invalide ou non modifiable ici (`nom`, `email`…) ; technicien archivé |
+| `404` | Technicien inexistant |
+
+#### `POST /technicians/:id/archive` — archiver un technicien (US11)
+
+Aucun corps. Réponse `200` : l'objet Technicien avec `archive` à `true`.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Technicien déjà archivé |
+| `404` | Technicien inexistant |
+| `409` | Le technicien a des interventions planifiées ou en cours, aujourd'hui ou plus tard : elles doivent être retirées de ses tournées d'abord |
+
+Effets : `archiveLe` renseigné ; aucune nouvelle tournée ne peut lui être créée (RG08) ; il disparaît du planning mais reste visible dans l'historique (RG22). Son compte n'est pas désactivé : c'est une action distincte de l'administrateur (`POST /users/:id/deactivate`).
+
+#### `GET /technicians/:id/unavailabilities` — lister les indisponibilités (US12)
+
+| Paramètre | Validation |
+| --- | --- |
+| `du`, `au` | Dates `AAAA-MM-JJ`, facultatives ; par défaut, les indisponibilités en cours et à venir |
+
+Réponse `200` : liste d'objets Indisponibilité, triée par date de début (non paginée).
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Date invalide |
+| `404` | Technicien inexistant |
+
+#### `POST /technicians/:id/unavailabilities` — ajouter une indisponibilité (US12)
+
+| Champ envoyé | Type | Validation |
+| --- | --- | --- |
+| `debut` | date-heure | Obligatoire, ISO 8601 avec fuseau |
+| `fin` | date-heure | Obligatoire, ISO 8601 avec fuseau, après `debut` |
+| `motif` | texte | Facultatif, 255 caractères maximum |
+
+Réponse `201` : l'objet Indisponibilité.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Champ manquant ou invalide ; fin antérieure ou égale au début ; technicien archivé |
+| `404` | Technicien inexistant |
+| `409` | Période qui recouvre une intervention planifiée ou en cours du technicien, citée dans le message (RG10) ; période qui recouvre une autre indisponibilité |
+
+Une indisponibilité ne peut pas être posée sur une intervention déjà planifiée : le gestionnaire doit d'abord la retirer de la tournée ou la déplacer. C'est la même règle que l'affectation (`POST /tours/:id/interventions`), appliquée dans l'autre sens.
+
+#### `DELETE /technicians/:id/unavailabilities/:unavailabilityId` — supprimer une indisponibilité (US12)
+
+Réponse `204`.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Indisponibilité déjà terminée : elle est conservée dans l'historique |
+| `404` | Technicien inexistant ; indisponibilité qui n'appartient pas à ce technicien |
+
+### 6.7 Tournées et planning
+
+Ces routes sont développées (card #19). Toutes répondent `401` sans connexion et `403` pour un rôle non autorisé ; ces deux cas ne sont pas répétés dans les tableaux.
+
+L'objet **Tournée** :
+
+```json
+{
+  "id": 5,
+  "dateTournee": "2026-11-25",
+  "technicien": { "id": 2, "nom": "Benali", "prenom": "Karim", "telephone": "0692123456", "couleurPlanning": "#1E88E5" },
+  "interventions": [ "… objets Intervention (section 6.3), triés par ordreTournee …" ]
+}
+```
+
+#### `GET /tours` — planning sur une période (US23)
+
+| Paramètre | Validation |
+| --- | --- |
+| `du`, `au` | Dates `AAAA-MM-JJ`, à fournir ensemble ; 31 jours maximum ; par défaut, la semaine en cours (lundi à samedi) |
+| `technicienId` | Entier ; facultatif |
+
+Réponse `200` : le planning de **tous les techniciens actifs**, y compris ceux sans tournée, pour faire apparaître les créneaux libres.
+
+```json
+{
+  "du": "2026-11-23",
+  "au": "2026-11-28",
+  "techniciens": [
+    {
+      "id": 2, "nom": "Benali", "prenom": "Karim", "telephone": "0692123456", "couleurPlanning": "#1E88E5",
+      "indisponibilites": [ { "id": 4, "debut": "2026-11-27T04:00:00.000Z", "fin": "2026-11-28T15:00:00.000Z", "motif": "Congés" } ],
+      "tournees": [ { "id": 5, "dateTournee": "2026-11-25", "interventions": [] } ]
+    }
+  ]
+}
+```
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Une seule des deux dates ; date invalide ; période de plus de 31 jours ; paramètre inconnu |
+
+#### `POST /tours` — créer une tournée (US20)
+
+| Champ envoyé | Type | Validation |
+| --- | --- | --- |
+| `technicienId` | entier | Obligatoire |
+| `dateTournee` | date | Obligatoire, `AAAA-MM-JJ` |
+
+Réponse `201` : l'objet Tournée, sans intervention.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Champ manquant ou invalide ; technicien inexistant, archivé ou dont le compte est désactivé (RG08) ; date passée (RG12) ; dimanche (RG11) |
+| `409` | Le technicien a déjà une tournée ce jour-là (RG08) |
+
+#### `GET /tours/:id` — consulter une tournée (US23)
+
+Réponse `200` : l'objet Tournée.
+
+| Erreur | Cas |
+| --- | --- |
+| `404` | Tournée inexistante |
+
+#### `GET /tours/me/today` — ma tournée du jour (US24)
+
+Droits : TECH uniquement. Le technicien est identifié par son jeton, jamais par un paramètre.
+
+Réponse `200` : l'objet Tournée du jour. Réponse `204` (sans contenu) s'il n'a pas de tournée aujourd'hui : ce n'est pas une erreur.
+
+| Erreur | Cas |
+| --- | --- |
+| `404` | Aucune fiche technicien n'est liée au compte |
+
+#### `POST /tours/:id/interventions` — affecter une intervention (US21)
+
+| Champ envoyé | Type | Validation |
+| --- | --- | --- |
+| `interventionId` | entier | Obligatoire |
+| `debutPrevu` | date-heure | Obligatoire, ISO 8601 avec fuseau |
+| `ordreTournee` | entier | Facultatif, de 1 au nombre d'interventions + 1 ; par défaut, en dernier |
+
+Réponse `200` : l'objet Tournée à jour. Le code est `200` et non `201` : aucune ressource n'est créée, l'intervention existante est planifiée.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Champ invalide ; intervention inexistante ; intervention qui n'est pas « à planifier » (RG02) ; tournée passée ; créneau hors de 7 h – 19 h (RG11) ; rang hors limites ; insertion avant une intervention « en cours » ou « terminée » (RG15, RG16) |
+| `404` | Tournée inexistante |
+| `409` | Chevauchement avec une autre intervention du technicien, citée dans le message (RG09) ; technicien indisponible sur le créneau (RG10) |
+
+Effets, dans une transaction qui verrouille la tournée et l'intervention : l'intervention passe à `PLANIFIEE` avec son début prévu et son rang ; les interventions suivantes sont décalées d'un rang ; journal `STATUT_MODIFIE`. Le verrou empêche deux gestionnaires de créer un chevauchement en affectant au même moment.
+
+#### `DELETE /tours/:id/interventions/:interventionId` — retirer une intervention (US21)
+
+Réponse `200` : l'objet Tournée à jour.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Intervention qui n'est pas « planifiée » (RG04, RG15) |
+| `404` | Tournée inexistante ; intervention qui n'est pas dans cette tournée |
+
+Effets, dans une transaction : l'intervention revient à `A_PLANIFIER`, sans début prévu ni rang ; les interventions suivantes remontent d'un rang ; journal `STATUT_MODIFIE`.
+
+#### `PUT /tours/:id/order` — réordonner une tournée (US22)
+
+| Champ envoyé | Type | Validation |
+| --- | --- | --- |
+| `interventionIds` | liste d'entiers | Obligatoire ; exactement les interventions de la tournée, chacune une seule fois, dans le nouvel ordre ; 100 au maximum |
+
+Réponse `200` : l'objet Tournée à jour.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Liste vide, invalide ou avec doublon (TI14) ; liste qui ne correspond pas aux interventions de la tournée ; intervention « en cours » ou « terminée » qui change de place (RG15, RG16) |
+| `404` | Tournée inexistante |
+
+Effets : nouveaux rangs enregistrés dans une seule transaction (RG14).
+
+#### `POST /tours/:id/urgent-insertions` — insérer une urgence (US25, à développer)
+
+| Champ envoyé | Type | Validation |
+| --- | --- | --- |
+| `interventionId` | entier | Obligatoire ; intervention « à planifier » |
+| `ordreTournee` | entier | Obligatoire ; rang d'insertion |
+| `debutPrevu` | date-heure | Obligatoire, ISO 8601 avec fuseau |
+
+Avec `?simulation=true` : réponse `200` avec la tournée telle qu'elle serait après insertion, les interventions décalées étant signalées ; rien n'est enregistré. Sans ce paramètre : le décalage validé par le gestionnaire est appliqué, avec les mêmes contrôles et effets que l'affectation.
+
+### 6.8 Tableau de bord
+
+Toutes les routes répondent `401` sans connexion et `403` pour un rôle non autorisé ; ces deux cas ne sont pas répétés dans les tableaux. Les deux premières routes exposent les requêtes SQL écrites à la main (card #21) : les noms des champs sont ceux des colonnes de ces requêtes.
+
+#### `GET /dashboard/activity` — interventions par technicien et par statut (US26)
+
+Droits : ADMIN, GEST.
+
+| Paramètre | Validation |
+| --- | --- |
+| `du`, `au` | Dates `AAAA-MM-JJ` (jours à La Réunion), `au` postérieur ou égal à `du` ; par défaut, le mois en cours |
+
+La période porte sur la **date de la tournée**. Tous les techniciens non archivés apparaissent, y compris ceux sans tournée sur la période (compteurs à zéro).
+
+Réponse `200` :
+
+```json
+{
+  "du": "2026-11-01",
+  "au": "2026-11-30",
+  "techniciens": [
+    { "idTechnicien": 2, "nom": "Benali", "prenom": "Karim", "total": 48, "aPlanifier": 0, "planifiees": 6, "enCours": 1, "terminees": 39, "annulees": 2 }
+  ]
+}
+```
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Date invalide ; `au` antérieur à `du` |
+
+#### `GET /dashboard/processing-time` — temps moyen de traitement (US27)
+
+Droits : ADMIN.
+
+| Paramètre | Validation |
+| --- | --- |
+| `du`, `au` | Dates `AAAA-MM-JJ` (jours à La Réunion) ; par défaut, le mois en cours |
+
+Ne compte que les interventions **terminées** sur la période (date de fin). La durée mesurée est le temps passé sur place, du démarrage à la fin, comparé à la durée estimée.
+
+Réponse `200` :
+
+```json
+{
+  "du": "2026-11-01",
+  "au": "2026-11-30",
+  "parType": [
+    { "typeIntervention": "Fuite", "nombreInterventions": 21, "dureeMoyenneMin": 52, "dureeEstimeeMoyenneMin": 60 }
+  ],
+  "ensemble": { "nombreInterventions": 39, "dureeMoyenneMin": 71, "dureeEstimeeMoyenneMin": 75 }
+}
+```
+
+La ligne `ensemble` est calculée sur toutes les interventions (`GROUP BY ROLLUP`), et non comme une moyenne des moyennes par type. `dureeMoyenneMin` vaut `null` s'il n'y a aucune intervention terminée.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Date invalide ; `au` antérieur à `du` |
+
+#### `GET /dashboard/alerts` — interventions à traiter en priorité (US28)
+
+Droits : ADMIN, GEST. Aucun paramètre.
+
+Réponse `200` : trois listes d'objets Intervention (section 6.3), chacune limitée à 50 éléments.
+
+| Liste | Contenu | Tri | Règle |
+| --- | --- | --- | --- |
+| `urgencesNonPlanifiees` | Interventions `URGENTE` à planifier depuis plus de 4 h | Plus ancienne d'abord | RG19 |
+| `enAttente` | Interventions à planifier depuis plus de 48 h | Plus ancienne d'abord | US28 |
+| `enRetard` | Interventions planifiées non démarrées 15 minutes après leur début prévu | Début prévu croissant | RG20 |
+
+```json
+{
+  "urgencesNonPlanifiees": [ "… objets Intervention …" ],
+  "enAttente": [],
+  "enRetard": []
+}
+```
+
+Une intervention urgente en attente depuis plus de 48 h apparaît dans les deux premières listes.
 
 ## 7. Points ouverts
 
 - [x] **Routes d'Arnaud** : routes des sections 5.5 à 5.8 validées par le binôme.
-- [ ] **Détail des routes d'Arnaud** : sections 6.5 à 6.8 à rédiger.
+- [x] **Détail des routes** : sections 6.1 à 6.8 rédigées.
+- [ ] **Compteurs du tableau de bord** : la requête de `GET /dashboard/activity` ne compte que les interventions rattachées à une tournée ; `aPlanifier` et `annulees` restent donc à 0 (une intervention à planifier n'a pas de tournée, une intervention annulée en est retirée). Compter ces deux statuts à part, ou les retirer de la réponse.
+- [ ] **Délai de traitement (US27)** : la user story parle du délai entre la demande et la fin d'intervention, la requête mesure le temps passé sur place. Choisir l'indicateur, ou garder les deux.
 - [ ] **E-mail de réinitialisation** (US04) : ajouter Mailpit au `docker-compose.yml` pour capturer les e-mails en développement (card #7).
 - [ ] **Durée d'une intervention** : limites de 15 à 720 minutes à confirmer.
 - [ ] **Démarrage d'une intervention** : uniquement le jour de sa tournée ; à ajouter aux règles de gestion si la règle est retenue.

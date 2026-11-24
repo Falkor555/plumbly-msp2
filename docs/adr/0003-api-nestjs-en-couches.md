@@ -22,7 +22,7 @@ L'API est versionnée (`/api/v1`) et documentée avec Swagger.
 
 | Option | Avantages | Inconvénients |
 | --- | --- | --- |
-| NestJS en couches | Architecture imposée par le framework, injection de dépendances, guards, intégration native de Jest et Swagger | Courbe d'apprentissage (décorateurs, modules) |
+| NestJS en couches | Architecture imposée par le framework, injection de dépendances, guards, module de test `@nestjs/testing` (avec Vitest, ADR 0011), intégration de Swagger | Courbe d'apprentissage (décorateurs, modules) |
 | Express seul | Simple, très répandu | Aucune structure imposée : l'organisation en couches repose entièrement sur l'équipe |
 | GraphQL | Requêtes flexibles côté front | Plus complexe à sécuriser et à tester ; inutile pour des écrans CRUD simples |
 

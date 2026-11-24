@@ -211,7 +211,7 @@ stateDiagram-v2
 | RG08 | Un technicien actif et non archivé a au plus une tournée par jour. |
 | RG09 | Deux interventions planifiées pour un même technicien ne doivent pas se chevaucher : pour toute intervention existante A, une nouvelle intervention B est refusée si B.debut < A.fin et B.fin > A.debut. |
 | RG10 | On ne peut pas planifier un technicien sur une période d'indisponibilité. |
-| RG11 | Les créneaux sont compris entre 7 h 00 et 19 h 00, du lundi au samedi, sur le fuseau horaire Europe/Paris. La gestion des jours fériés est une évolution. |
+| RG11 | Les créneaux sont compris entre 7 h 00 et 19 h 00, du lundi au samedi, à l'heure de La Réunion (fuseau `Indian/Reunion`, UTC+4, sans heure d'été). La gestion des jours fériés est une évolution. |
 | RG12 | Une tournée ne peut pas être créée pour une date passée. |
 | RG13 | L'ordre des interventions dans une tournée est un entier unique par tournée, à partir de 1. |
 | RG14 | Le réordonnancement des interventions est réalisé dans une transaction afin de ne jamais laisser deux interventions avec le même ordre. |
