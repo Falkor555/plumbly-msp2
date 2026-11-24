@@ -147,8 +147,9 @@ export class TechniciensService {
 
   /**
    * US12 et RG10 : la période ne recouvre ni une intervention planifiée ou en cours, ni une
-   * autre indisponibilité. La ligne du technicien est verrouillée d'abord : deux ajouts
-   * simultanés passent l'un après l'autre et ne peuvent pas se recouvrir.
+   * autre indisponibilité. La ligne du technicien est verrouillée d'abord, comme dans
+   * l'affectation d'une intervention (tournees.service.ts) : deux ajouts, ou un ajout et une
+   * affectation, passent l'un après l'autre et ne peuvent pas se recouvrir.
    */
   ajouterIndisponibilite(
     idTechnicien: number,

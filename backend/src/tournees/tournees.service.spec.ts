@@ -28,6 +28,7 @@ const TOURNEE_VIDE = {
 
 function creerOperations(): OperationsSurTournee {
   return {
+    verrouillerTechnicienDeLaTournee: vi.fn().mockResolvedValue(4),
     verrouillerTournee: vi.fn().mockResolvedValue({
       id: ID_TOURNEE,
       dateTournee: new Date('2026-12-08T00:00:00Z'),
@@ -224,6 +225,27 @@ describe('TourneesService', () => {
       const affectation = service.affecterIntervention(99, AFFECTATION_A_9H, GESTIONNAIRE);
 
       await expect(affectation).rejects.toThrow(NotFoundException);
+    });
+
+    it('verrouille le technicien avant la tournée, dans l’ordre de l’ajout d’une indisponibilité', async () => {
+      const { service, operations } = creerService();
+
+      await service.affecterIntervention(ID_TOURNEE, AFFECTATION_A_9H, GESTIONNAIRE);
+
+      const technicien = vi.mocked(operations.verrouillerTechnicienDeLaTournee).mock
+        .invocationCallOrder[0];
+      const tournee = vi.mocked(operations.verrouillerTournee).mock.invocationCallOrder[0];
+      expect(technicien).toBeLessThan(tournee);
+    });
+
+    it('répond 404 sans verrouiller la tournée quand elle n’existe pas', async () => {
+      const { service, operations } = creerService();
+      vi.mocked(operations.verrouillerTechnicienDeLaTournee).mockResolvedValue(null);
+
+      await expect(
+        service.affecterIntervention(99, AFFECTATION_A_9H, GESTIONNAIRE),
+      ).rejects.toThrow('Tournée introuvable.');
+      expect(operations.verrouillerTournee).not.toHaveBeenCalled();
     });
 
     it('refuse une intervention inexistante', async () => {

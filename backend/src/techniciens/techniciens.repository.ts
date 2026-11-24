@@ -184,8 +184,9 @@ export class TechniciensRepository {
   }
 
   /**
-   * Exécute une modification dans une transaction, sur la ligne du technicien verrouillée :
-   * deux modifications simultanées du même technicien passent l'une après l'autre.
+   * Exécute une modification dans une transaction, sur la ligne du technicien verrouillée.
+   * L'affectation d'une intervention verrouille la même ligne en premier (tournees.repository.ts) :
+   * un archivage ou une indisponibilité et une affectation simultanés passent l'un après l'autre.
    */
   modifierTechnicien<T>(travail: (operations: OperationsSurTechnicien) => Promise<T>): Promise<T> {
     return this.prisma.$transaction((tx) => travail(creerOperations(tx)));

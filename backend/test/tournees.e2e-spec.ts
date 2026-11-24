@@ -383,6 +383,32 @@ describe('planification des tournées (e2e)', () => {
       expect(await prisma.intervention.count({ where: { idTournee } })).toBe(1);
     });
 
+    it('RG10 : une affectation et une indisponibilité simultanées ne passent pas toutes les deux', async () => {
+      // Plusieurs essais : sans verrou commun sur le technicien, l'entrelacement qui laisse
+      // passer les deux requêtes ne se produit pas à chaque fois.
+      for (let essai = 0; essai < 10; essai += 1) {
+        await prisma.$executeRaw`TRUNCATE TABLE intervention, tournee, indisponibilite RESTART IDENTITY`;
+        const idTournee = await creerTournee(fixtures.kevin.idTechnicien);
+        const interventionId = await creerIntervention();
+
+        const [affectation, indisponibilite] = await Promise.all([
+          en(fixtures.gestionnaire)
+            .post(`/tours/${idTournee}/interventions`)
+            .send({ interventionId, debutPrevu: mardiA('09:00') }),
+          en(fixtures.gestionnaire)
+            .post(`/technicians/${fixtures.kevin.idTechnicien}/unavailabilities`)
+            .send({ debut: mardiA('08:00'), fin: mardiA('12:00'), motif: 'Formation' }),
+        ]);
+
+        expect([affectation.status, indisponibilite.status].sort()).toEqual(
+          affectation.status === 200 ? [200, 409] : [201, 409],
+        );
+        const planifiees = await prisma.intervention.count({ where: { idTournee } });
+        const indisponibilites = await prisma.indisponibilite.count();
+        expect(planifiees + indisponibilites).toBe(1);
+      }
+    });
+
     it('répond 404 pour une tournée inexistante', async () => {
       const idIntervention = await creerIntervention();
 
