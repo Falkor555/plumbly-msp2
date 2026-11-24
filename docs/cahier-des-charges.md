@@ -32,7 +32,7 @@ Aujourd'hui, cette organisation repose souvent sur un agenda papier, un tableur 
 
 | Membre | Rôle principal |
 | --- | --- |
-| Loïc BOTSY | Cahier des charges, user stories, UML, maquettes et données de ses écrans, tests d'intégration ; authentification et interventions (front et back) |
+| Loïc BOTSY | Cahier des charges, user stories, UML, maquettes et données de ses écrans, tests d'intégration ; authentification, interventions et journal des actions (front et back) |
 | Arnaud BIDEL | Modélisation des données, charte et maquettes, Docker, environnement de test ; clients, techniciens et tournées (front et back) |
 
 Projet réalisé dans le cadre de la formation CDA9 (titre professionnel Concepteur Développeur d'Applications), pour la validation du CCP 2, dans le respect des compétences du CCP 1.
@@ -84,10 +84,10 @@ Le MVP livré en deux semaines couvre l'authentification, la gestion des clients
 - Vue planning jour / semaine par technicien
 - Vue « ma tournée du jour » sur mobile pour le technicien
 - Tableau de bord : indicateurs d'activité calculés en SQL
+- Journal des actions dans MongoDB, incluant l'historique des changements de statut
 
 ### 3.2 Évolutions envisagées
 
-- Journal des actions et historique des changements de statut
 - Carte des interventions et optimisation automatique de l'ordre de tournée (API de géolocalisation)
 - Notifications par e-mail ou SMS au client (rappel, arrivée du technicien)
 - Rapport d'intervention avec photos et signature du client
@@ -144,7 +144,7 @@ Les besoins sont exprimés en user stories, priorisées selon la méthode MoSCoW
 | US16 | En tant que gestionnaire, je veux modifier ou annuler une intervention afin de suivre les changements du client. | M | Motif obligatoire en cas d'annulation |
 | US17 | En tant que technicien, je veux passer une intervention à « en cours » puis « terminée » afin d'informer le gestionnaire. | M | Seules les transitions autorisées sont possibles (voir 5.1) |
 | US18 | En tant que technicien, je veux ajouter un compte rendu à une intervention terminée afin de tracer ce qui a été fait. | S | Texte libre, 2 000 caractères maximum |
-| US19 | En tant que gestionnaire, je veux voir l'historique des changements de statut afin de savoir qui a fait quoi et quand. | W | Reportée : pas de journal des actions dans cette version |
+| US19 | En tant que gestionnaire, je veux voir l'historique des changements de statut afin de savoir qui a fait quoi et quand. | S | Date, auteur, ancien et nouveau statut, lus dans le journal des actions |
 
 ### 4.5 Tournées et planning
 
@@ -202,7 +202,7 @@ stateDiagram-v2
 | RG04 | Une intervention « planifiée » retirée de sa tournée avant son démarrage revient au statut « à planifier ». |
 | RG05 | Une intervention peut être « annulée » par un gestionnaire tant qu'elle n'est pas « terminée » ; le motif est obligatoire. |
 | RG06 | Une intervention « terminée » ou « annulée » n'est plus modifiable. |
-| RG07 | Reportée : l'historique des changements de statut n'est pas prévu dans cette version. |
+| RG07 | Chaque changement de statut est historisé dans MongoDB : date, auteur, ancien et nouveau statut. |
 
 ### 5.2 Planification
 
@@ -339,7 +339,7 @@ Les maquettes sont réalisées dans Figma par Arnaud, et par Loïc pour les écr
 
 ## 8. Architecture technique
 
-Plumbly est une application web en trois tiers : un front-end React (SPA), une API REST NestJS organisée en couches et une base PostgreSQL, le tout conteneurisé avec Docker. Chaque choix est justifié dans un ADR (Architecture Decision Record), dans [docs/adr](adr/README.md).
+Plumbly est une application web en trois tiers : un front-end React (SPA), une API REST NestJS organisée en couches, une base PostgreSQL pour les données métier et une base MongoDB pour le journal des actions, le tout conteneurisé avec Docker. Chaque choix est justifié dans un ADR (Architecture Decision Record), dans [docs/adr](adr/README.md).
 
 ```mermaid
 flowchart TB
@@ -355,12 +355,14 @@ flowchart TB
             C --> S --> R
         end
         PG[("PostgreSQL<br/><small>données métier relationnelles</small>")]
+        MG[("MongoDB<br/><small>journal des actions</small>")]
     end
 
     G --> F
     T --> F
     F -- "HTTPS, REST JSON /api/v1, jeton JWT" --> C
     R -- "Prisma et SQL manuel" --> PG
+    R -- "driver MongoDB" --> MG
 ```
 
 Le front-end ne contient aucune logique d'autorisation sensible : les droits sont contrôlés côté API. Seule la couche repository accède aux bases ; les services ne manipulent ni Prisma ni SQL directement.
@@ -377,6 +379,7 @@ Le front-end ne contient aucune logique d'autorisation sensible : les droits son
 | ORM | Prisma | Schéma déclaratif, migrations versionnées, client typé |
 | SQL manuel | `$queryRaw` / `$executeRaw` de Prisma | Requêtes de reporting, jointures et agrégations maîtrisées |
 | Base relationnelle | PostgreSQL | Fiable, transactions, contraintes d'intégrité, open source |
+| Base NoSQL | MongoDB | Journal des actions : documents de structure variable, ajoutés sans jamais être modifiés (ADR 0006) |
 | Authentification | Passport + JWT, argon2 | Standard NestJS, hachage robuste |
 | Documentation API | Swagger (OpenAPI) | Générée depuis les décorateurs NestJS |
 | Conteneurs | Docker, Docker Compose | Environnement identique sur les postes du binôme, lancé en une commande |
@@ -399,27 +402,32 @@ Cette séparation permet de tester chaque couche isolément et de changer la sou
 - Format d'erreur unique : `{ statusCode, message, error }`.
 - Pagination : `?page=1&limit=20`, filtres en paramètres de requête.
 
-### 8.4 Choix d'une base SQL
+### 8.4 Données SQL et NoSQL
 
 - **PostgreSQL** stocke les données métier structurées et liées : utilisateurs, clients, adresses, techniciens, interventions, tournées.
-- **Pas de base NoSQL** : la compétence « Développer des composants d'accès aux données SQL ou NoSQL » se valide avec l'une ou l'autre. Le binôme a choisi **SQL**, adapté à des données fortement liées et soumises à des contraintes d'intégrité (voir [ADR 0005](adr/0005-postgresql-prisma-et-sql-manuel.md)).
+- **MongoDB** stocke le journal des actions (qui a fait quoi, quand, avec quelles données avant et après). Ces documents sont nombreux, s'ajoutent sans jamais être modifiés et ont une structure variable selon l'action.
+
+Chaque base est utilisée pour ce qu'elle fait le mieux (voir [ADR 0005](adr/0005-postgresql-prisma-et-sql-manuel.md) et [ADR 0006](adr/0006-mongodb-pour-le-journal-des-actions.md)). Ce choix couvre la compétence « Développer des composants d'accès aux données SQL et NoSQL » du CCP 2.
 
 ## 9. Modèle de données
 
-Le modèle comporte 8 entités relationnelles. Arnaud le détaillera dans le MCD et le MLD (méthode Merise), puis dans `schema.prisma`.
+Le modèle relationnel comporte 10 tables PostgreSQL, complétées par une collection MongoDB pour le journal des actions. Le détail (règles de gestion des données, dictionnaire, MCD, MLD, contraintes et index) est dans [modele-donnees.md](modele-donnees.md) ; cette section en donne la synthèse.
 
 ### 9.1 Entités principales
 
 | Entité | Attributs principaux | Relations |
 | --- | --- | --- |
-| Utilisateur | id, e-mail (unique), mot de passe haché, nom, prénom, rôle, actif, dernière connexion, créé le | 0 ou 1 technicien |
-| Technicien | id, téléphone, couleur planning, compétences, archivé, archivé le | 1 utilisateur ; 0 à n indisponibilités ; 0 à n tournées |
+| Utilisateur | id, e-mail (unique), mot de passe haché, nom, prénom, rôle, actif, mot de passe à changer, dernière connexion, créé le | 0 ou 1 technicien ; 0 à n jetons |
+| Jeton de rafraîchissement | id, empreinte du jeton, expire le, révoqué le | 1 utilisateur |
+| Jeton de réinitialisation | id, empreinte du jeton, expire le, utilisé le | 1 utilisateur |
+| Technicien | id, téléphone, couleur planning, archivé, archivé le | 1 utilisateur ; 0 à n indisponibilités ; 0 à n tournées |
 | Indisponibilité | id, début, fin, motif | 1 technicien |
-| Client | id, type (particulier / professionnel), nom, prénom, raison sociale, téléphone, e-mail, archivé, archivé le | 1 à n adresses ; 0 à n interventions |
-| Adresse | id, rue, complément, code postal, ville, informations d'accès (code, étage) | 1 client ; 0 à n interventions |
-| Intervention | id, type, description, urgence, statut, durée estimée (minutes), date-heure de début, date-heure de fin prévue, ordre dans la tournée, compte rendu, motif d'annulation, créée le, terminée le | 1 client ; 1 adresse ; 0 ou 1 tournée ; 1 créateur |
-| Tournée | id, date, statut, créé par | 1 technicien ; 0 à n interventions ; unique par (technicien, date) |
+| Client | id, type (particulier / professionnel), nom, prénom, raison sociale, téléphone, e-mail, archivé, archivé le | 1 à n adresses |
+| Adresse | id, rue, complément, code postal, ville, informations d'accès (code, étage), archivée, archivée le | 1 client ; 0 à n interventions |
+| Intervention | id, description, urgence, statut, durée estimée (minutes), début prévu, fin prévue (colonne calculée), ordre dans la tournée, compte rendu, motif d'annulation, démarrée le, terminée le, annulée le, créée le | 1 adresse (et donc 1 client) ; 1 type ; 0 ou 1 tournée ; 1 créateur |
+| Tournée | id, date, créée le | 1 technicien ; 1 créateur ; 0 à n interventions ; unique par (technicien, date) |
 | Type d'intervention | id, libellé, durée par défaut modifiable | 0 à n interventions |
+| Journal des actions (MongoDB) | date, action, auteur, entité concernée, valeurs avant / après | Référence les identifiants PostgreSQL, sans jointure |
 
 ### 9.2 Contraintes d'intégrité
 
@@ -491,7 +499,7 @@ L'application tourne en local avec Docker Compose sur le poste de chaque membre 
 
 | Élément | Contenu | Lancement |
 | --- | --- | --- |
-| Services Docker | Front-end, API et PostgreSQL | `docker compose up` |
+| Services Docker | Front-end, API, PostgreSQL et MongoDB | `docker compose up` |
 | Données | Migrations Prisma et jeu de données fictif (seed) | `npx prisma migrate dev`, `npx prisma db seed` |
 | Tests | Bases éphémères créées par Testcontainers | `npm run test`, `npm run test:e2e` |
 | Qualité | ESLint, Prettier, vérification des types TypeScript | `npm run lint`, `npm run build` |
@@ -512,7 +520,7 @@ L'application tourne en local avec Docker Compose sur le poste de chaque membre 
 
 ## 12. Gestion de projet
 
-Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une semaine de conception, une semaine de développement du MVP. Les 24 tâches sont suivies dans le [GitHub Project du dépôt](https://github.com/users/Falkor555/projects/6).
+Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une semaine de conception, une semaine de développement du MVP. Les 25 tâches sont suivies dans le [GitHub Project du dépôt](https://github.com/users/Falkor555/projects/6).
 
 ### 12.1 Organisation
 
@@ -529,7 +537,7 @@ Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une s
 | Semaine 1, J1–J2 | Besoins définis | Cahier des charges, personas, user stories, MCD / MLD, UML |
 | Semaine 1, J2–J4 | Maquettes validées | Zoning, wireframes, maquettes haute fidélité |
 | Semaine 1, J3–J5 | Socle technique prêt | Docker, NestJS + Prisma, React + Vite + Tailwind, outils de test, tests d'intégration écrits |
-| Semaine 2, J6–J9 | MVP développé | Authentification, clients, techniciens, interventions, tournées, planning, requêtes SQL |
+| Semaine 2, J6–J9 | MVP développé | Authentification, clients, techniciens, interventions, tournées, planning, requêtes SQL, journal des actions |
 | Semaine 2, J10 | MVP terminé | Corrections, finalisation, README, préparation de la démo et du dossier |
 
 ### 12.3 Répartition
@@ -545,7 +553,7 @@ La répartition suit les cards du GitHub Project. En semaine 2, chaque membre d�
 | Maquettage | Maquettes des écrans connexion et interventions (#26) | Zoning et wireframes (#5), maquettes et charte graphique (#6) |
 | Socle technique | React, Vite et Tailwind (#9) | Monorepo et docker-compose (#7), NestJS et Prisma (#8), environnement de test (#11) |
 | Tests (semaine 1) | Tests d'intégration de l'API (#12) | — |
-| Back-end (semaine 2) | Authentification et rôles (#13), CRUD interventions et statuts (#17) | CRUD clients et techniciens (#15), planification des tournées (#19) |
+| Back-end (semaine 2) | Authentification et rôles (#13), CRUD interventions et statuts (#17), journal des actions MongoDB (#27) | CRUD clients et techniciens (#15), planification des tournées (#19) |
 | Front-end (semaine 2) | Connexion et routes protégées (#14), écrans des interventions (#18) | Écrans clients et techniciens (#16), vue planning (#20) |
 | En commun | Requêtes SQL manuelles (#21), tests unitaires (#22), corrections et finalisation (#23), README, démo et dossier (#24) | Idem |
 
@@ -555,7 +563,7 @@ La répartition suit les cards du GitHub Project. En semaine 2, chaque membre d�
 | Semaine 1, J3–J4 | Maquettes de ses écrans (#26), init front (#9) | Maquettes et charte (#6), Docker (#7), NestJS et Prisma (#8) |
 | Semaine 1, J4–J5 | Tests d'intégration de l'API (#12) | Environnement de test (#11) |
 | Semaine 2, J6–J7 | Authentification : API (#13) et écrans (#14) | Clients et techniciens : API (#15) et écrans (#16) |
-| Semaine 2, J8–J9 | Interventions : API (#17) et écrans (#18) | Tournées et planning : API (#19) et écrans (#20) |
+| Semaine 2, J8–J9 | Interventions : API (#17) et écrans (#18), journal MongoDB (#27) | Tournées et planning : API (#19) et écrans (#20) |
 | Semaine 2, J9 | Requêtes SQL de son domaine (#21) | Requêtes SQL de son domaine (#21) |
 | Semaine 2, J10 | Corrections, README, démo (#23, #24) | Corrections, README, démo (#23, #24) |
 
@@ -603,7 +611,7 @@ Plumbly est présenté pour la validation du CCP 2, et doit aussi respecter les 
 | Analyser les besoins et maquetter une application | Cahier des charges, personas, user stories priorisées, règles de gestion, zoning, wireframes, maquettes Figma | 1 à 5, 7 | #1, #2, #5, #6, #26 |
 | Définir l'architecture logicielle d'une application | Architecture trois tiers, API REST organisée en couches (contrôleur, service, repository), diagrammes UML, choix techniques justifiés | 8 | #3, #8 |
 | Concevoir et mettre en place une base de données relationnelle | Dictionnaire de données, MCD / MLD Merise, schéma Prisma, migrations, contraintes d'intégrité, index, jeu d'essai | 9 | #4, #8 |
-| Développer des composants d'accès aux données SQL ou NoSQL (SQL retenu) | Repositories Prisma, requêtes SQL écrites à la main (jointures, agrégations, transaction), requêtes paramétrées | 8.4, 9.3 | #13, #15, #17, #19, #21 |
+| Développer des composants d'accès aux données SQL et NoSQL | Repositories Prisma, requêtes SQL écrites à la main (jointures, agrégations, transaction), requêtes paramétrées, journal des actions dans MongoDB | 8.4, 9.3 | #13, #15, #17, #19, #21, #27 |
 
 La sécurité est présente à chaque niveau : validation des saisies et routes protégées dans l'interface, contrôle d'accès par rôle dans les composants métier, mots de passe hachés et contraintes d'intégrité en base, requêtes paramétrées contre l'injection SQL.
 
@@ -620,7 +628,7 @@ Le CCP 3 (plan de tests et recette, déploiement, CI/CD) n'est pas présenté : 
 | 2 | Analyser les besoins et maquetter | Cahier des charges, personas et user stories (#1, #2) ; wireframes et maquettes des écrans connexion et interventions (#26) |
 | 2 | Définir l'architecture | Diagrammes UML (#3) ; modules authentification et interventions en couches (#13, #17) |
 | 2 | Concevoir la base de données | MCD / MLD des utilisateurs et des interventions (#4) ; tables correspondantes dans le schéma Prisma (#13, #17) |
-| 2 | Accès aux données (SQL) | Repositories des utilisateurs et des interventions, requêtes SQL de reporting et transaction (#17, #21) |
+| 2 | Accès aux données SQL et NoSQL | Repositories des utilisateurs et des interventions, requêtes SQL de reporting et transaction (#17, #21), journal des actions dans MongoDB (#27) |
 
 ## 14. Décisions retenues et glossaire
 

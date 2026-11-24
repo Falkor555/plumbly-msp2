@@ -28,6 +28,7 @@ Ces règles découlent des [user stories](user-stories.md) et des règles de ges
 | D11 | Un technicien peut avoir plusieurs indisponibilités ; une indisponibilité concerne un seul technicien. | Association 0,N / 1,1 |
 | D12 | Clients, adresses et techniciens liés à des interventions ne sont jamais supprimés : ils sont archivés. | Attributs `archive` et `archive_le` |
 | D13 | Chaque action sensible (changement de statut, annulation, connexion, gestion de compte) est enregistrée dans un journal qui n'est jamais modifié. | Collection MongoDB `journal_actions` (section 8) |
+| D14 | Une tournée est créée par un seul utilisateur (gestionnaire ou administrateur). | Association 1,1 / 0,N |
 
 ## 2. Dictionnaire de données
 
@@ -75,7 +76,9 @@ Types indiqués au niveau logique. Les identifiants sont des entiers auto-incré
 | libelle | Libellé du type | Texte (100) | Obligatoire, unique | Type d'intervention |
 | duree_defaut_min | Durée par défaut en minutes | Entier | Obligatoire, > 0 | Type d'intervention |
 
-La fin prévue d'une intervention n'est pas stockée : elle se calcule (`debut_prevu + duree_estimee_min`). Stocker les deux risquerait de les rendre incohérents.
+| fin_prevue | Date et heure de fin prévues | Date-heure | **Colonne calculée** par PostgreSQL : `debut_prevu + duree_estimee_min` minutes ; jamais saisie | Intervention |
+
+La fin prévue est une donnée dérivée : elle n'apparaît pas dans le MCD, mais elle est ajoutée au niveau logique comme **colonne générée** (`GENERATED ALWAYS AS … STORED`). PostgreSQL la recalcule à chaque modification : elle ne peut jamais contredire le début et la durée, et elle peut être indexée pour détecter les chevauchements de créneaux (RG09).
 
 ### 2.3 Clients, techniciens et tournées (Arnaud, à valider)
 
@@ -120,6 +123,7 @@ La fin prévue d'une intervention n'est pas stockée : elle se calcule (`debut_p
 | CRÉER | Intervention | 1,1 | Utilisateur | 0,N | D08 |
 | COMPOSER | Intervention | 0,1 | Tournée | 0,N | D09 |
 | EFFECTUER | Tournée | 1,1 | Technicien | 0,N | D10 |
+| PLANIFIER | Tournée | 1,1 | Utilisateur | 0,N | D14 |
 | ÊTRE INDISPONIBLE | Indisponibilité | 1,1 | Technicien | 0,N | D11 |
 
 Lecture : « une intervention se déroule à **une et une seule** adresse (1,1) ; une adresse accueille **zéro ou plusieurs** interventions (0,N) ».
@@ -153,6 +157,7 @@ flowchart TB
     CATEGORISER([CATÉGORISER])
     DEROULER([SE DÉROULER])
     POSSEDER([POSSÉDER])
+    PLANIFIER([PLANIFIER])
 
     %% ---------- Liens et cardinalités ----------
     UTILISATEUR ---|"0,N"| OUVRIR ---|"1,1"| JETON_R
@@ -165,6 +170,7 @@ flowchart TB
     TYPE ---|"0,N"| CATEGORISER ---|"1,1"| INTERVENTION
     ADRESSE ---|"0,N"| DEROULER ---|"1,1"| INTERVENTION
     CLIENT ---|"1,N"| POSSEDER ---|"1,1"| ADRESSE
+    UTILISATEUR ---|"0,N"| PLANIFIER ---|"1,1"| TOURNEE
 ```
 
 Lecture d'un lien : la cardinalité est écrite du côté de l'entité qu'elle concerne. Par exemple, `ADRESSE —0,N— SE DÉROULER —1,1— INTERVENTION` se lit « une adresse accueille zéro ou plusieurs interventions ; une intervention se déroule à une et une seule adresse ».
@@ -194,10 +200,10 @@ Notation : nom de table en italique, clé primaire en **gras**, clé étrangère
 - *client* (**id_client**, type_client, nom_client, prenom_client, raison_sociale, telephone, email_client, archive, archive_le, cree_le, maj_le)
 - *adresse* (**id_adresse**, rue, complement, code_postal, ville, infos_acces, archive, archive_le, #id_client)
 - *type_intervention* (**id_type_intervention**, libelle, duree_defaut_min)
-- *tournee* (**id_tournee**, date_tournee, cree_le, #id_technicien)
-- *intervention* (**id_intervention**, description, urgence, statut, duree_estimee_min, debut_prevu, ordre_tournee, compte_rendu, motif_annulation, demarree_le, terminee_le, annulee_le, cree_le, maj_le, #id_adresse, #id_type_intervention, #id_createur, #id_tournee)
+- *tournee* (**id_tournee**, date_tournee, cree_le, #id_technicien, #id_createur)
+- *intervention* (**id_intervention**, description, urgence, statut, duree_estimee_min, debut_prevu, fin_prevue, ordre_tournee, compte_rendu, motif_annulation, demarree_le, terminee_le, annulee_le, cree_le, maj_le, #id_adresse, #id_type_intervention, #id_createur, #id_tournee)
 
-`#id_createur` référence `utilisateur(id_utilisateur)`. `#id_tournee` peut être vide (intervention non planifiée).
+Dans `intervention` et `tournee`, `#id_createur` référence `utilisateur(id_utilisateur)`. Dans `intervention`, `fin_prevue` est une colonne calculée. `#id_tournee` peut être vide (intervention non planifiée).
 
 ### 4.3 Diagramme
 
@@ -207,6 +213,7 @@ erDiagram
     UTILISATEUR ||--o{ JETON_RAFRAICHISSEMENT : "ouvre"
     UTILISATEUR ||--o{ JETON_REINITIALISATION : "demande"
     UTILISATEUR ||--o{ INTERVENTION : "crée"
+    UTILISATEUR ||--o{ TOURNEE : "planifie"
     TECHNICIEN ||--o{ INDISPONIBILITE : "a"
     TECHNICIEN ||--o{ TOURNEE : "effectue"
     TOURNEE |o--o{ INTERVENTION : "contient"
@@ -292,6 +299,7 @@ erDiagram
         date date_tournee
         timestamp cree_le
         int id_technicien FK
+        int id_createur FK
     }
     INTERVENTION {
         int id_intervention PK
@@ -300,6 +308,7 @@ erDiagram
         enum statut
         int duree_estimee_min
         timestamp debut_prevu
+        timestamp fin_prevue "calculée"
         int ordre_tournee
         varchar compte_rendu
         varchar motif_annulation
@@ -334,7 +343,7 @@ erDiagram
 | toutes | Clés étrangères en `ON DELETE RESTRICT` | FOREIGN KEY | D12 : on archive au lieu de supprimer |
 | jetons | Clé étrangère en `ON DELETE CASCADE` | FOREIGN KEY | Les jetons disparaissent avec le compte |
 
-Prisma ne gère pas directement les contraintes `CHECK` ni les contraintes `DEFERRABLE` : elles seront ajoutées en SQL dans la migration générée par Prisma (card #8).
+Prisma ne gère pas directement les contraintes `CHECK`, les contraintes `DEFERRABLE` ni les colonnes générées : elles seront ajoutées en SQL dans la migration générée par Prisma (card #8).
 
 ### 5.2 Règles vérifiées par l'application
 
@@ -364,7 +373,9 @@ Certaines règles portent sur plusieurs lignes ou plusieurs tables. Elles sont v
 | --- | --- |
 | Intervention liée à l'**adresse**, pas directement au client | Le client se retrouve par l'adresse. Un lien direct créerait une redondance et un risque d'incohérence (intervention chez le client A à une adresse du client B) : respect de la 3ᵉ forme normale. |
 | **Technicien** séparé de l'utilisateur | Seuls les techniciens ont un téléphone professionnel, une couleur de planning, des indisponibilités et des tournées. Les autres rôles n'ont pas ces champs vides. |
-| **Fin prévue calculée**, non stockée | Évite deux valeurs contradictoires (début + durée et fin). |
+| **Fin prévue en colonne générée** | Compromis entre la proposition d'Arnaud (fin stockée) et la mienne (fin calculée) : la valeur est stockée, donc indexable et simple à utiliser dans la règle de chevauchement (RG09), mais c'est PostgreSQL qui la calcule, donc elle ne peut pas contredire le début et la durée. |
+| **Pas de statut de tournée** | Le statut d'une tournée se déduit de celui de ses interventions (aucune démarrée, en cours, toutes terminées). Le stocker créerait une donnée redondante à tenir à jour, avec un risque d'incohérence. Il sera calculé à l'affichage. |
+| **Créateur de la tournée** conservé | Repris de la proposition d'Arnaud, par cohérence avec le créateur de l'intervention ; il permet d'afficher qui a organisé la journée. |
 | **Jetons stockés hachés** | Un vol de la base ne permet pas de réutiliser les jetons, comme pour les mots de passe (ADR 0007). |
 | **Archivage** plutôt que suppression | Les interventions passées gardent leur client, leur adresse et leur technicien (D12). |
 | **Type d'intervention** en table, pas en énumération | Les types et leurs durées par défaut peuvent évoluer sans migration. |
@@ -376,7 +387,8 @@ Certaines règles portent sur plusieurs lignes ou plusieurs tables. Elles sont v
 
 - [ ] **Partie d'Arnaud** : client, adresse, technicien, indisponibilité et tournée (sections 2.3 et 3).
 - [x] **Journal des actions** : réintroduit dans MongoDB (ADR 0006 acceptée), comme dans la branche `docs/correction-cahier-des-charges` d'Arnaud.
-- [ ] **Statut de tournée** : la branche d'Arnaud ajoute un statut et un auteur à la tournée. Quelles valeurs, et à quelle user story cela répond-il ?
+- [x] **Statut de tournée** : non stocké, déduit des interventions ; le créateur de la tournée est conservé (section 6).
+- [x] **Fin prévue** : colonne générée par PostgreSQL (section 2.2).
 - [ ] **Rendu du MCD** : vérifier l'affichage du schéma Mermaid sur GitHub et ajuster la disposition si besoin.
 
 ## 8. Données NoSQL : journal des actions

@@ -62,7 +62,7 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 
 **En tant qu'**utilisateur, **je veux** me déconnecter **afin de** sécuriser ma session.
 
-- **Étant donné** que je suis connecté, **quand** je clique sur « Se déconnecter », **alors** mes jetons sont invalidés et je reviens à la page de connexion.
+- **Étant donné** que je suis connecté, **quand** je clique sur « Se déconnecter », **alors** mon jeton de rafraîchissement est révoqué côté serveur et je reviens à la page de connexion.
 - **Étant donné** que je suis déconnecté, **quand** j'utilise le bouton « Précédent » du navigateur, **alors** je n'accède à aucune page protégée.
 
 ### US03 — Gérer les comptes utilisateurs · Must
@@ -70,7 +70,7 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 **En tant qu'**administrateur, **je veux** créer, modifier et désactiver des comptes **afin de** contrôler l'accès à l'application.
 
 - **Étant donné** un formulaire rempli (nom, prénom, e-mail, rôle), **quand** je le valide, **alors** le compte est créé avec un mot de passe provisoire à changer à la première connexion.
-- **Étant donné** un e-mail déjà utilisé, **quand** je crée le compte, **alors** un message indique que l'e-mail existe déjà (RG19).
+- **Étant donné** un e-mail déjà utilisé, **quand** je crée le compte, **alors** un message indique que l'e-mail existe déjà (RG23).
 - **Étant donné** un compte actif, **quand** je le désactive, **alors** l'utilisateur ne peut plus se connecter mais ses données restent dans l'historique.
 - **Étant donné** que je suis gestionnaire ou technicien, **quand** j'essaie d'accéder à la gestion des comptes, **alors** l'accès est refusé.
 
@@ -106,7 +106,7 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 **En tant que** gestionnaire, **je veux** ajouter plusieurs adresses d'intervention à un client **afin de** gérer ses différents logements.
 
 - **Étant donné** la fiche d'un client, **quand** j'ajoute une adresse (rue, code postal, ville, informations d'accès), **alors** elle apparaît dans sa liste d'adresses.
-- **Étant donné** un client avec une seule adresse, **quand** j'essaie de la supprimer, **alors** la suppression est refusée (RG17).
+- **Étant donné** un client avec une seule adresse, **quand** j'essaie de la supprimer, **alors** la suppression est refusée (RG21).
 
 ### US08 — Rechercher un client · Must
 
@@ -127,7 +127,7 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 **En tant que** gestionnaire, **je veux** modifier ou archiver un client **afin de** garder une base à jour.
 
 - **Étant donné** la fiche d'un client, **quand** je modifie ses coordonnées, **alors** les changements sont enregistrés.
-- **Étant donné** un client lié à des interventions, **quand** je l'archive après confirmation, **alors** il disparaît des listes et des recherches mais reste visible dans l'historique (RG18).
+- **Étant donné** un client lié à des interventions, **quand** je l'archive après confirmation, **alors** il disparaît des listes et des recherches mais reste visible dans l'historique (RG22).
 
 ---
 
@@ -164,7 +164,7 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 
 - **Étant donné** un client et une de ses adresses, un type, une description, un niveau d'urgence et une durée estimée, **quand** je valide, **alors** l'intervention est créée au statut « à planifier » (RG01).
 - **Étant donné** un type d'intervention choisi, **quand** le formulaire s'affiche, **alors** la durée estimée est préremplie avec la durée par défaut du type.
-- **Étant donné** une urgence « urgente », **quand** l'intervention est créée, **alors** elle apparaît en tête de la liste « à planifier » (RG15).
+- **Étant donné** une urgence « urgente », **quand** l'intervention est créée, **alors** elle apparaît en tête de la liste « à planifier » (RG18).
 
 ### US15 — Filtrer les interventions · Must
 
@@ -213,7 +213,7 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 
 **En tant que** gestionnaire, **je veux** créer la tournée d'un technicien pour une date **afin d'**organiser sa journée.
 
-- **Étant donné** un technicien et une date future, **quand** je crée la tournée, **alors** elle apparaît vide dans le planning.
+- **Étant donné** un technicien actif et non archivé et une date future, **quand** je crée la tournée, **alors** elle apparaît vide dans le planning.
 - **Étant donné** un technicien qui a déjà une tournée ce jour-là, **quand** je crée une tournée, **alors** c'est refusé (RG08).
 - **Étant donné** une date passée, **quand** je crée une tournée, **alors** c'est refusé (RG12).
 
@@ -230,7 +230,8 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 
 **En tant que** gestionnaire, **je veux** réordonner les interventions d'une tournée **afin d'**optimiser les trajets.
 
-- **Étant donné** une tournée de plusieurs interventions, **quand** je change leur ordre, **alors** le nouvel ordre est enregistré (RG13) et visible immédiatement par le technicien.
+- **Étant donné** une tournée de plusieurs interventions, **quand** je change leur ordre, **alors** le nouvel ordre est enregistré dans une transaction (RG13, RG14) et visible immédiatement par le technicien.
+- **Étant donné** une intervention « en cours » ou « terminée », **quand** j'essaie de la déplacer, **alors** c'est refusé (RG15, RG16).
 
 ### US23 — Voir le planning jour / semaine · Must
 
@@ -253,7 +254,7 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 
 **En tant que** gestionnaire, **je veux** insérer une urgence dans une tournée déjà planifiée **afin de** réagir rapidement.
 
-- **Étant donné** une intervention urgente et une tournée en cours, **quand** je l'insère à une position, **alors** les interventions suivantes sont décalées et signalées comme modifiées.
+- **Étant donné** une intervention urgente et une tournée en cours, **quand** je l'insère à une position, **alors** le décalage des interventions suivantes m'est proposé, et n'est enregistré qu'après ma validation.
 - **Étant donné** que le décalage dépasse 19 h 00, **quand** je valide, **alors** un avertissement indique les interventions concernées.
 
 ---
@@ -278,13 +279,16 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 **En tant que** gestionnaire, **je veux** voir les interventions non planifiées depuis plus de 48 h **afin de** les traiter en priorité.
 
 - **Étant donné** des interventions « à planifier » créées il y a plus de 48 h, **quand** j'ouvre le tableau de bord, **alors** elles apparaissent dans une liste triée de la plus ancienne à la plus récente.
-- **Étant donné** une intervention urgente non planifiée depuis plus de 4 h, **quand** j'ouvre le tableau de bord, **alors** elle est signalée en tête (RG16).
+- **Étant donné** une intervention urgente non planifiée depuis plus de 4 h, **quand** j'ouvre le tableau de bord, **alors** elle est signalée en tête (RG19).
+- **Étant donné** une intervention planifiée non démarrée 15 minutes après son heure de début, **quand** j'ouvre le tableau de bord, **alors** elle apparaît comme en retard (RG20).
 
 ### US29 — Export CSV · Could
 
 **En tant qu'**administrateur, **je veux** exporter la liste des interventions en CSV **afin de** l'exploiter dans un tableur.
 
 - **Étant donné** une liste filtrée, **quand** je clique sur « Exporter », **alors** un fichier CSV contenant uniquement les lignes filtrées est téléchargé.
+
+> Évolution hors MVP (cahier des charges, 3.2).
 
 ---
 
