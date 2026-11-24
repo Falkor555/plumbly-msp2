@@ -43,7 +43,8 @@ export interface InterventionACreer {
 export interface OperationsDeCreation {
   /**
    * Adresse et client, null si l'adresse n'existe pas. Le client est verrouillé en partage
-   * (FOR SHARE) : son archivage, ou celui de l'adresse, attend la fin de la création.
+   * (FOR SHARE), puis l'adresse est lue : un archivage du client ou de l'adresse passe
+   * entièrement avant (et la lecture le voit) ou entièrement après (et compte l'intervention).
    */
   verrouillerAdresse(idAdresse: number): Promise<AdresseUtilisable | null>;
   /** Durée par défaut du type, null s'il n'existe pas. */
@@ -223,14 +224,25 @@ function creerOperationsDeCreation(tx: Prisma.TransactionClient): OperationsDeCr
   return {
     async verrouillerAdresse(idAdresse) {
       // Prisma ne sait pas écrire FOR SHARE : requête paramétrée écrite à la main. Le verrou
-      // partagé laisse passer les autres créations, mais pas l'archivage, qui verrouille le
-      // client en exclusif (clients.repository.ts) puis compte ses interventions actives.
-      const lignes = await tx.$queryRaw<AdresseUtilisable[]>`
-        SELECT a.archive AS "adresseArchivee", c.archive AS "clientArchive"
-        FROM adresse a JOIN client c ON c.id_client = a.id_client
+      // partagé laisse passer les autres créations, mais pas l'archivage du client ou de
+      // l'adresse, qui verrouille le client en exclusif (clients.repository.ts) puis compte
+      // ses interventions actives.
+      const verrou = await tx.$queryRaw<unknown[]>`
+        SELECT 1 FROM adresse a JOIN client c ON c.id_client = a.id_client
         WHERE a.id_adresse = ${idAdresse}
         FOR SHARE OF c`;
-      return lignes[0] ?? null;
+      if (verrou.length === 0) {
+        return null;
+      }
+      // Lue par une seconde requête, après le verrou : en READ COMMITTED, une requête voit les
+      // données de son début. Lue dans la même requête que le verrou, l'adresse archivée
+      // pendant l'attente paraîtrait encore en service, car l'archivage d'une adresse ne
+      // modifie pas la ligne du client et PostgreSQL ne la relit donc pas.
+      const [adresse] = await tx.$queryRaw<AdresseUtilisable[]>`
+        SELECT a.archive AS "adresseArchivee", c.archive AS "clientArchive"
+        FROM adresse a JOIN client c ON c.id_client = a.id_client
+        WHERE a.id_adresse = ${idAdresse}`;
+      return adresse;
     },
 
     async trouverDureeParDefaut(idTypeIntervention) {
