@@ -1,17 +1,34 @@
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { afterEach, describe, expect, it } from 'vitest';
 import App from './App';
+import { serveurApi, urlApi } from './test/msw/serveur';
 
-describe('App', () => {
-  it('incrémente le compteur à chaque clic sur le bouton', async () => {
-    const utilisateur = userEvent.setup();
+afterEach(() => window.history.replaceState(null, '', '/'));
+
+describe('App (aiguillage provisoire en attendant le routeur de #9)', () => {
+  it('affiche le planning du gestionnaire par défaut', async () => {
+    serveurApi.use(
+      http.get(urlApi('/tours'), () => HttpResponse.json({ du: '', au: '', techniciens: [] })),
+    );
+
     render(<App />);
-    const bouton = screen.getByRole('button', { name: /count is/i });
 
-    await utilisateur.click(bouton);
-    await utilisateur.click(bouton);
+    expect(screen.getByRole('heading', { level: 1, name: 'Planning' })).toBeInTheDocument();
+    expect(await screen.findByText('Aucun technicien actif.')).toBeInTheDocument();
+  });
 
-    expect(bouton).toHaveTextContent('Count is 2');
+  it('affiche la tournée du technicien sur /ma-tournee', async () => {
+    serveurApi.use(
+      http.get(urlApi('/tours/me/today'), () => new HttpResponse(null, { status: 204 })),
+    );
+    window.history.replaceState(null, '', '/ma-tournee');
+
+    render(<App />);
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Ma tournée du jour' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Vous n'avez pas de tournée aujourd'hui.")).toBeInTheDocument();
   });
 });
