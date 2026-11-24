@@ -16,7 +16,8 @@ const TECHNICIEN_RESUME = {
   include: { utilisateur: NOM_UTILISATEUR },
 } as const satisfies Prisma.TechnicienDefaultArgs;
 
-const INTERVENTION_DETAILLEE = {
+// Exportée pour l'historique d'un client (#15) : même forme que celle attendue par versInterventionApi.
+export const INTERVENTION_DETAILLEE = {
   include: {
     typeIntervention: true,
     adresse: { include: { client: true } },

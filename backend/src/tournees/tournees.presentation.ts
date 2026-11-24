@@ -123,7 +123,7 @@ export function estEnRetard(
 }
 
 /** Nom et prénom pour un particulier, raison sociale pour un professionnel (contrat, 6.3). */
-function nomAffiche(client: InterventionDetaillee['adresse']['client']): string {
+export function nomAffiche(client: InterventionDetaillee['adresse']['client']): string {
   if (client.typeClient === TypeClient.PROFESSIONNEL) {
     return client.raisonSociale ?? '';
   }
