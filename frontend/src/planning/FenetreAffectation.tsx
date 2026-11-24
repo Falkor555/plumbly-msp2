@@ -97,9 +97,9 @@ export function FenetreAffectation({ caseAAffecter, onFermer }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={idTitre}
-        className="w-full max-w-lg rounded border border-bordure bg-white shadow-[0_4px_6px_-1px_rgb(31_41_55/0.08),0_2px_4px_-2px_rgb(31_41_55/0.06)]"
+        className="w-full max-w-lg rounded-xl border border-bordure bg-white shadow-[0_4px_6px_-1px_rgb(31_41_55/0.08),0_2px_4px_-2px_rgb(31_41_55/0.06)]"
       >
-        <header className="border-b border-bordure px-5 py-4">
+        <header className="border-b border-bordure px-6 py-4">
           <h2 id={idTitre} className="text-lg font-semibold">
             Affecter une intervention
           </h2>
@@ -109,7 +109,7 @@ export function FenetreAffectation({ caseAAffecter, onFermer }: Props) {
           </p>
         </header>
 
-        <form onSubmit={affecter} className="space-y-4 px-5 py-4">
+        <form onSubmit={affecter} className="space-y-4 px-6 py-4">
           {etat.statut === 'chargement' && (
             <p className="text-sm text-gris-texte">Chargement des interventions à planifier…</p>
           )}
@@ -178,7 +178,7 @@ export function FenetreAffectation({ caseAAffecter, onFermer }: Props) {
             <button
               type="button"
               onClick={() => onFermer(tourneeCreeeIci)}
-              className="h-9 rounded border border-gray-300 bg-white px-4 text-sm font-semibold hover:bg-gray-100"
+              className="h-9 rounded border border-gray-300 bg-white px-4 text-sm font-semibold hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle"
             >
               Annuler
             </button>

@@ -67,6 +67,7 @@ describe('ma tournée du jour (technicien)', () => {
 
     const etapes = within(await screen.findByRole('list')).getAllByRole('listitem');
     expect(etapes).toHaveLength(2);
+    expect(screen.getByText("2 interventions, dans l'ordre de passage")).toBeInTheDocument();
     expect(etapes[0]).toHaveTextContent('Étape 1 : 08:00–09:00');
     expect(etapes[0]).toHaveTextContent('Mme Hoarau');
     expect(etapes[1]).toHaveTextContent('Étape 2 : 10:00–11:30');

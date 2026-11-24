@@ -81,7 +81,9 @@ export function PagePlanning({ aujourdhui = jourMetier(new Date()) }: Props) {
         </div>
       )}
       {etat.statut === 'pret' && techniciens.length === 0 && (
-        <p className="text-sm text-gris-texte">Aucun technicien actif.</p>
+        <p className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
+          Aucun technicien actif.
+        </p>
       )}
       {etat.statut === 'pret' &&
         techniciens.length > 0 &&

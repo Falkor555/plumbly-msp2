@@ -1,4 +1,10 @@
-import type { DateIso, Indisponibilite, Intervention, TechnicienDuPlanning } from '../api/types';
+import type {
+  DateIso,
+  Indisponibilite,
+  Intervention,
+  StatutIntervention,
+  TechnicienDuPlanning,
+} from '../api/types';
 import {
   HEURE_FERMETURE,
   HEURE_OUVERTURE,
@@ -11,7 +17,14 @@ import { BadgesIntervention } from './BadgesIntervention';
 import { CelluleIndisponibilite } from './CelluleIndisponibilite';
 import type { CaseAAffecter } from './modele';
 import { indisponibilitesDuJour, tourneeDuJour } from './modele';
-import { couleurTechnicien, creneau, nomComplet } from './presentation';
+import {
+  CLASSES_BLOC_STATUT,
+  couleurTechnicien,
+  creneau,
+  LIBELLES_STATUT,
+  nombreDInterventions,
+  nomComplet,
+} from './presentation';
 
 const DEBUT_JOURNEE_MIN = HEURE_OUVERTURE * 60;
 const DUREE_JOURNEE_MIN = (HEURE_FERMETURE - HEURE_OUVERTURE) * 60;
@@ -37,6 +50,11 @@ function placementIndisponibilite(jour: DateIso, { debut, fin }: Indisponibilite
   return placement(debutMin, finMin);
 }
 
+/** Libellé d'heure de la frise, au même format que les créneaux : « 08:00 ». */
+function libelleHeure(heure: number): string {
+  return `${String(heure).padStart(2, '0')}:00`;
+}
+
 interface Props {
   jour: DateIso;
   techniciens: TechnicienDuPlanning[];
@@ -48,35 +66,40 @@ export function PlanningJour({ jour, techniciens, onAffecter }: Props) {
   return (
     <section
       aria-label={`Planning du ${libelleJourLong(jour)}`}
-      className="overflow-x-auto rounded border border-bordure bg-white"
+      className="overflow-hidden rounded-lg border border-bordure bg-white"
     >
-      <div className="min-w-[960px]">
-        <div className="grid grid-cols-[12rem_1fr_7rem] border-b border-bordure bg-fond text-xs font-semibold uppercase tracking-wide text-gris-texte">
-          <span className="px-3 py-2">Technicien</span>
-          <div className="relative h-8" aria-hidden="true">
-            {HEURES.map((heure) => (
-              <span
-                key={heure}
-                className={`absolute top-2 whitespace-nowrap tabular-nums ${
-                  heure === HEURE_FERMETURE ? '-translate-x-full' : '-translate-x-1/2'
-                }`}
-                style={{ left: placement(heure * 60, heure * 60).left }}
-              >
-                {heure} h
-              </span>
-            ))}
+      <div className="overflow-x-auto">
+        <div className="min-w-[960px]">
+          <div className="grid grid-cols-[12rem_1fr_7rem] border-b border-bordure bg-fond text-xs font-semibold uppercase tracking-wide text-gris-texte">
+            <span className="sticky left-0 z-20 border-r border-bordure bg-fond px-3 py-3">
+              Technicien
+            </span>
+            <div className="relative h-10" aria-hidden="true">
+              {HEURES.map((heure) => (
+                <span
+                  key={heure}
+                  className={`absolute top-3 whitespace-nowrap tabular-nums ${
+                    heure === HEURE_FERMETURE ? '-translate-x-full' : '-translate-x-1/2'
+                  }`}
+                  style={{ left: placement(heure * 60, heure * 60).left }}
+                >
+                  {libelleHeure(heure)}
+                </span>
+              ))}
+            </div>
+            <span className="sr-only">Actions</span>
           </div>
-          <span className="sr-only">Actions</span>
+          {techniciens.map((technicien) => (
+            <LigneJournee
+              key={technicien.id}
+              jour={jour}
+              technicien={technicien}
+              onAffecter={onAffecter}
+            />
+          ))}
         </div>
-        {techniciens.map((technicien) => (
-          <LigneJournee
-            key={technicien.id}
-            jour={jour}
-            technicien={technicien}
-            onAffecter={onAffecter}
-          />
-        ))}
       </div>
+      <LegendeStatuts />
     </section>
   );
 }
@@ -96,7 +119,7 @@ function LigneJournee({ jour, technicien, onAffecter }: PropsLigne) {
 
   return (
     <div className="grid grid-cols-[12rem_1fr_7rem] items-stretch border-b border-bordure last:border-b-0">
-      <h3 className="flex items-center gap-2 px-3 py-3 font-sans text-sm font-semibold">
+      <h3 className="sticky left-0 z-20 flex items-center gap-2 border-r border-bordure bg-white px-3 py-3 font-sans text-sm font-semibold">
         <span
           aria-hidden="true"
           className="size-2.5 shrink-0 rounded-full"
@@ -107,19 +130,19 @@ function LigneJournee({ jour, technicien, onAffecter }: PropsLigne) {
           {interventions.length} interv.
         </span>
       </h3>
-      <div className="relative min-h-20 border-l border-bordure">
+      <div className="relative min-h-24">
         {HEURES.map((heure) => (
           <span
             key={heure}
             aria-hidden="true"
-            className="absolute inset-y-0 border-l border-dashed border-bordure"
+            className="absolute inset-y-0 border-l border-gray-100"
             style={{ left: placement(heure * 60, heure * 60).left }}
           />
         ))}
         {indisponibilites.map((indisponibilite) => (
           <div
             key={indisponibilite.id}
-            className="absolute inset-y-1 overflow-hidden"
+            className="absolute inset-y-2 overflow-hidden"
             style={placementIndisponibilite(jour, indisponibilite)}
           >
             <CelluleIndisponibilite indisponibilite={indisponibilite} />
@@ -142,7 +165,7 @@ function LigneJournee({ jour, technicien, onAffecter }: PropsLigne) {
         </ol>
         {sansCreneau.length > 0 && (
           <p className="absolute bottom-1 left-1 text-xs text-chantier">
-            {sansCreneau.length} intervention(s) sans horaire
+            {nombreDInterventions(sansCreneau.length)} sans horaire
           </p>
         )}
       </div>
@@ -165,21 +188,47 @@ interface PropsBloc {
 
 function BlocIntervention({ intervention, debut, fin, couleur }: PropsBloc) {
   const position = placement(minutesDansLaJournee(debut), minutesDansLaJournee(fin));
+  const { client, adresse, type } = intervention;
   return (
     <li
-      className="absolute inset-y-1 overflow-hidden rounded border border-bordure border-l-[3px] bg-white px-1.5 py-1 text-xs shadow-[0_1px_2px_rgb(31_41_55/0.06)]"
+      className={`absolute inset-y-2 overflow-hidden rounded border border-bordure border-l-[3px] px-1.5 py-1 text-xs shadow-[0_1px_2px_rgb(31_41_55/0.06)] ${CLASSES_BLOC_STATUT[intervention.statut]}`}
       style={{ ...position, borderLeftColor: couleur }}
-      title={`${creneau(intervention)} · ${intervention.client.nomAffiche} · ${intervention.type.libelle}`}
+      title={`${creneau(intervention)} · ${client.nomAffiche} · ${type.libelle} · ${adresse.ville}`}
     >
       <p className="font-semibold tabular-nums">
         <span className="sr-only">Étape {intervention.ordreTournee} : </span>
         {creneau(intervention)}
       </p>
-      <p className="truncate">{intervention.client.nomAffiche}</p>
-      <p className="truncate text-gris-texte">{intervention.adresse.ville}</p>
-      <div className="mt-0.5 hidden xl:block">
+      <p className="truncate font-medium">{type.libelle}</p>
+      <p className="truncate text-gris-texte">
+        {client.nomAffiche}
+        <span className="sr-only">, {adresse.ville}</span>
+      </p>
+      {/* Faute de place sous xl, le badge n'est pas affiché mais reste lu par les lecteurs d'écran. */}
+      <div className="sr-only mt-0.5 xl:not-sr-only">
         <BadgesIntervention intervention={intervention} />
       </div>
     </li>
+  );
+}
+
+const STATUTS_LEGENDE: StatutIntervention[] = ['PLANIFIEE', 'EN_COURS', 'TERMINEE'];
+
+function LegendeStatuts() {
+  return (
+    <ul
+      aria-label="Légende des statuts"
+      className="flex flex-wrap items-center gap-4 border-t border-bordure bg-fond px-3 py-2 text-xs text-gris-texte"
+    >
+      {STATUTS_LEGENDE.map((statut) => (
+        <li key={statut} className="flex items-center gap-1.5">
+          <span
+            aria-hidden="true"
+            className={`size-3 rounded-sm border border-bordure ${CLASSES_BLOC_STATUT[statut]}`}
+          />
+          {LIBELLES_STATUT[statut]}
+        </li>
+      ))}
+    </ul>
   );
 }
