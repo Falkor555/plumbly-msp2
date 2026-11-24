@@ -1,6 +1,6 @@
-import { dansLOrdreDe, echapperMotif } from './clients.repository.js';
+import { dansLOrdreDe, echapperMotif } from './outils-de-recherche.js';
 
-describe('outils de la recherche de clients', () => {
+describe('outils de recherche', () => {
   it('rétablit l’ordre de la requête SQL dans les lignes chargées par Prisma', () => {
     const lignes = [{ id: 3 }, { id: 1 }, { id: 2 }];
 

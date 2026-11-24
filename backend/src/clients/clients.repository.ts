@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { type Adresse, Prisma, type TypeClient } from '../generated/prisma/client.ts';
+import { dansLOrdreDe, echapperMotif } from '../prisma/outils-de-recherche.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   INTERVENTION_DETAILLEE,
@@ -246,18 +247,4 @@ function conditionsDeRecherche(filtres: FiltresClients): Prisma.Sql {
     )`);
   }
   return conditions.length === 0 ? Prisma.sql`TRUE` : Prisma.join(conditions, ' AND ');
-}
-
-/** « 100% » cherche le texte « 100% » : les jokers de LIKE saisis sont neutralisés. */
-export function echapperMotif(texte: string): string {
-  return texte.replace(/[\\%_]/g, (caractere) => `\\${caractere}`);
-}
-
-/** findMany({ id: { in } }) ne garantit pas l'ordre : on rétablit celui de la requête SQL. */
-export function dansLOrdreDe<T extends { id: number }>(ids: number[], lignes: T[]): T[] {
-  const parId = new Map(lignes.map((ligne) => [ligne.id, ligne]));
-  return ids.flatMap((id) => {
-    const ligne = parId.get(id);
-    return ligne === undefined ? [] : [ligne];
-  });
 }
