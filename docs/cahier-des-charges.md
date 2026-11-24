@@ -401,6 +401,7 @@ Cette séparation permet de tester chaque couche isolément et de changer la sou
 - Verbes HTTP standard et codes de retour cohérents (200, 201, 204, 400, 401, 403, 404, 409 pour un conflit de planning).
 - Format d'erreur unique : `{ statusCode, message, error }`.
 - Pagination : `?page=1&limit=20`, filtres en paramètres de requête.
+- Contrat détaillé (routes, DTO, codes de retour, droits par rôle) dans `docs/api.md`, défini avant le développement (card #32) et publié avec Swagger sur `/api/docs`.
 
 ### 8.4 Données SQL et NoSQL
 
@@ -520,7 +521,7 @@ L'application tourne en local avec Docker Compose sur le poste de chaque membre 
 
 ## 12. Gestion de projet
 
-Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une semaine de conception, une semaine de développement du MVP. Les 25 tâches sont suivies dans le [GitHub Project du dépôt](https://github.com/users/Falkor555/projects/6).
+Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une semaine de conception, une semaine de développement du MVP. Les 26 tâches sont suivies dans le [GitHub Project du dépôt](https://github.com/users/Falkor555/projects/6).
 
 ### 12.1 Organisation
 
@@ -537,6 +538,7 @@ Le projet suit une méthode agile inspirée de Kanban, sur deux semaines : une s
 | Semaine 1, J1–J2 | Besoins définis | Cahier des charges, personas, user stories, MCD / MLD, UML |
 | Semaine 1, J2–J4 | Maquettes validées | Zoning, wireframes, maquettes haute fidélité |
 | Semaine 1, J3–J5 | Socle technique prêt | Docker, NestJS + Prisma, React + Vite + Tailwind, outils de test, tests d'intégration écrits |
+| Semaine 1, J5 | Contrat d'API validé | Routes, DTO, codes de retour et droits par rôle dans `docs/api.md` ; Swagger configuré |
 | Semaine 2, J6–J9 | MVP développé | Authentification, clients, techniciens, interventions, tournées, planning, requêtes SQL, journal des actions |
 | Semaine 2, J10 | MVP terminé | Corrections, finalisation, README, préparation de la démo et du dossier |
 
@@ -552,6 +554,7 @@ La répartition suit les cards du GitHub Project. En semaine 2, chaque membre d�
 | Conception | Diagrammes UML (#3) ; MCD / MLD : utilisateurs, interventions (#4) | MCD / MLD : clients, techniciens, tournées (#4) |
 | Maquettage | Maquettes des écrans connexion et interventions (#26) | Zoning et wireframes (#5), maquettes et charte graphique (#6) |
 | Socle technique | React, Vite et Tailwind (#9) | Monorepo et docker-compose (#7), NestJS et Prisma (#8), environnement de test (#11) |
+| Contrat d'API (semaine 1) | Routes de l'authentification, des utilisateurs et des interventions (#32) | Routes des clients, des techniciens, des tournées et du tableau de bord (#32) |
 | Tests (semaine 1) | Tests d'intégration de l'API (#12) | — |
 | Back-end (semaine 2) | Authentification et rôles (#13), CRUD interventions et statuts (#17), journal des actions MongoDB (#27) | CRUD clients et techniciens (#15), planification des tournées (#19) |
 | Front-end (semaine 2) | Connexion et routes protégées (#14), écrans des interventions (#18) | Écrans clients et techniciens (#16), vue planning (#20) |
@@ -562,6 +565,7 @@ La répartition suit les cards du GitHub Project. En semaine 2, chaque membre d�
 | Semaine 1, J1–J2 | Cahier des charges (#1), user stories (#2), UML (#3), MCD / MLD (#4) | MCD / MLD (#4), zoning et wireframes (#5) |
 | Semaine 1, J3–J4 | Maquettes de ses écrans (#26), init front (#9) | Maquettes et charte (#6), Docker (#7), NestJS et Prisma (#8) |
 | Semaine 1, J4–J5 | Tests d'intégration de l'API (#12) | Environnement de test (#11) |
+| Semaine 1, J5 | Contrat d'API : ses routes (#32) | Contrat d'API : ses routes, configuration de Swagger (#32) |
 | Semaine 2, J6–J7 | Authentification : API (#13) et écrans (#14) | Clients et techniciens : API (#15) et écrans (#16) |
 | Semaine 2, J8–J9 | Interventions : API (#17) et écrans (#18), journal MongoDB (#27) | Tournées et planning : API (#19) et écrans (#20) |
 | Semaine 2, J9 | Requêtes SQL de son domaine (#21) | Requêtes SQL de son domaine (#21) |
@@ -588,7 +592,7 @@ Points d'attention :
 | --- | --- | --- |
 | Délai de deux semaines très court | MVP incomplet | Prioriser les Must, reporter les Should et Could |
 | Planification plus complexe que prévu | Retard sur le cœur du produit | Commencer par une affectation simple sans calcul d'itinéraire |
-| Dépendance entre front et back | Blocage du front | Contrat d'API défini tôt (Swagger), API simulée avec MSW |
+| Dépendance entre front et back | Blocage du front | Contrat d'API défini en semaine 1 (#32, Swagger), API simulée avec MSW |
 | Absence d'un membre | Retard | Relecture croisée pour que chacun connaisse tout le code |
 
 ## 13. Correspondance avec les CCP 1 et 2 du titre CDA
@@ -609,7 +613,7 @@ Plumbly est présenté pour la validation du CCP 2, et doit aussi respecter les 
 | Compétence | Où elle est démontrée dans Plumbly | Sections | Cards |
 | --- | --- | --- | --- |
 | Analyser les besoins et maquetter une application | Cahier des charges, personas, user stories priorisées, règles de gestion, zoning, wireframes, maquettes Figma | 1 à 5, 7 | #1, #2, #5, #6, #26 |
-| Définir l'architecture logicielle d'une application | Architecture trois tiers, API REST organisée en couches (contrôleur, service, repository), diagrammes UML, choix techniques justifiés | 8 | #3, #8 |
+| Définir l'architecture logicielle d'une application | Architecture trois tiers, API REST organisée en couches (contrôleur, service, repository), contrat d'API documenté avec Swagger, diagrammes UML, choix techniques justifiés | 8 | #3, #8, #32 |
 | Concevoir et mettre en place une base de données relationnelle | Dictionnaire de données, MCD / MLD Merise, schéma Prisma, migrations, contraintes d'intégrité, index, jeu d'essai | 9 | #4, #8 |
 | Développer des composants d'accès aux données SQL et NoSQL | Repositories Prisma, requêtes SQL écrites à la main (jointures, agrégations, transaction), requêtes paramétrées, journal des actions dans MongoDB | 8.4, 9.3 | #13, #15, #17, #19, #21, #27 |
 
@@ -626,7 +630,7 @@ Le CCP 3 (plan de tests et recette, déploiement, CI/CD) n'est pas présenté : 
 | 1 | Composants métier | Services d'authentification et des interventions : rôles, cycle de vie des statuts (#13, #17), avec leurs tests unitaires (#22) |
 | 1 | Gestion de projet | Création et suivi du GitHub Project, issues, branches, pull requests, planning |
 | 2 | Analyser les besoins et maquetter | Cahier des charges, personas et user stories (#1, #2) ; wireframes et maquettes des écrans connexion et interventions (#26) |
-| 2 | Définir l'architecture | Diagrammes UML (#3) ; modules authentification et interventions en couches (#13, #17) |
+| 2 | Définir l'architecture | Diagrammes UML (#3) ; contrat d'API de ses routes (#32) ; modules authentification et interventions en couches (#13, #17) |
 | 2 | Concevoir la base de données | MCD / MLD des utilisateurs et des interventions (#4) ; tables correspondantes dans le schéma Prisma (#13, #17) |
 | 2 | Accès aux données SQL et NoSQL | Repositories des utilisateurs et des interventions, requêtes SQL de reporting et transaction (#17, #21), journal des actions dans MongoDB (#27) |
 
