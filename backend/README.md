@@ -9,7 +9,7 @@ API REST de Plumbly, organisée en couches (ADR 0003). Toutes les routes sont pr
 | `npm run start:dev` | Lance l'API avec rechargement à chaud (port 3000) |
 | `npm run build` | Compile dans `dist/` |
 | `npm run test` | Tests unitaires (Vitest, fichiers `src/**/*.spec.ts`) |
-| `npm run test:e2e` | Tests d'intégration (Supertest + PostgreSQL éphémère via Testcontainers ; Docker doit tourner) |
+| `npm run test:e2e` | Tests d'intégration (Supertest + PostgreSQL et MongoDB éphémères via Testcontainers ; Docker doit tourner) |
 | `npm run test:cov` | Tests unitaires avec couverture |
 
 Le lint et le formatage se lancent à la racine du dépôt (`npm run lint`, `npm run format`).
@@ -36,6 +36,8 @@ Points d'attention :
 
 Dans Docker, l'API reçoit `DATABASE_URL` et `MONGODB_URI` depuis `docker-compose.yml`. Pour la lancer hors Docker, voir la fin de `.env.example`.
 
+**`MONGODB_URI` est obligatoire, même hors Docker** : sans elle, l'API refuse de démarrer. Copier la ligne `MONGODB_URI=…` de la fin de `.env.example` dans `backend/.env`. Si MongoDB est seulement éteint, l'API démarre avec un avertissement : les actions métier fonctionnent, le journal n'est pas écrit et l'historique des statuts répond `503`.
+
 ## Tests d'intégration
 
-Les fichiers `test/**/*.e2e-spec.ts` partagent une base PostgreSQL démarrée une seule fois par `test/support/base-de-test.global-setup.ts`. Son adresse arrive dans `process.env.DATABASE_URL`, comme en production. Les fichiers s'exécutent l'un après l'autre pour ne pas mélanger leurs données.
+Les fichiers `test/**/*.e2e-spec.ts` partagent une base PostgreSQL et une base MongoDB démarrées une seule fois par `test/support/base-de-test.global-setup.ts`. Leurs adresses arrivent dans `process.env.DATABASE_URL` et `process.env.MONGODB_URI`, comme en production. Seul `test/journal.e2e-spec.ts` écrit dans MongoDB ; les autres fichiers simulent le journal. Les fichiers s'exécutent l'un après l'autre pour ne pas mélanger leurs données.

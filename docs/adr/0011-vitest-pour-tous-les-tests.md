@@ -26,4 +26,4 @@ L'ADR 0008 prévoyait Jest pour le back-end, parce que NestJS l'installait par d
 
 - **Positives** : `describe`, `it` et `expect` s'écrivent de la même façon des deux côtés ; aucune configuration à ajouter au projet généré.
 - **Négatives** : les exemples NestJS trouvés en ligne utilisent souvent `jest.fn()`, à traduire en `vi.fn()`.
-- **À faire** : base MongoDB éphémère à ajouter au même endroit que PostgreSQL avec le journal des actions ; migrations Prisma à appliquer dans le `globalSetup` des tests d'intégration (card #8).
+- **À faire** : ~~base MongoDB éphémère à ajouter au même endroit que PostgreSQL avec le journal des actions~~ (fait dans la card #27 : `mongo:8` démarré par le même `globalSetup`) ; migrations Prisma à appliquer dans le `globalSetup` des tests d'intégration (card #8).

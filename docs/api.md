@@ -1184,6 +1184,16 @@ Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'i
 | `POST /technicians/:id/archive` | Une intervention `EN_COURS` bloque l'archivage (`409`) **quelle que soit sa date**, même d'un jour passé ; une intervention `PLANIFIEE` ne le bloque que si sa tournée a lieu aujourd'hui ou plus tard |
 | `DELETE /technicians/:id/unavailabilities/:unavailabilityId` | `400` seulement si l'indisponibilité est terminée (sa fin est passée) ; une indisponibilité en cours peut encore être supprimée |
 
+### 6.10 Écarts de la mise en œuvre de l'historique des statuts (#27)
+
+| Route | Écart |
+| --- | --- |
+| `GET /interventions/:id/history` | `503` si le journal MongoDB est injoignable, au lieu d'une liste vide qui ferait croire à une intervention sans historique |
+| `GET /interventions/:id/history` | 100 entrées au plus, les plus récentes (liste non paginée) |
+| `GET /interventions/:id/history` | `contexte` est présent quand l'entrée en a un, par exemple `{ "motif": "…" }` pour `INTERVENTION_ANNULEE` |
+| `GET /interventions/:id/history` | `nom` et `prenom` de l'auteur valent `null` si son compte n'existe plus dans PostgreSQL |
+| `GET /interventions/:id/history` | Route portée par le module `journal` (`backend/src/journal/historique.controller.ts`) en attendant le module interventions (#17) |
+
 ## 7. Points ouverts
 
 - [x] **Routes d'Arnaud** : routes des sections 5.5 à 5.8 validées par le binôme.

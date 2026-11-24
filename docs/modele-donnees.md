@@ -403,7 +403,7 @@ Le journal des actions est stocké dans MongoDB, dans la collection `journal_act
 | `date` | Date | Oui | Date et heure de l'action |
 | `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE` |
 | `auteur` | Objet | Non | Utilisateur qui a agi : `{ id, role }` ; absent pour une connexion échouée |
-| `entite` | Objet | Oui | Élément concerné : `{ type, id }`, par exemple `{ "type": "intervention", "id": 42 }` |
+| `entite` | Objet | Oui | Élément concerné : `{ type, id }`, par exemple `{ "type": "intervention", "id": 42 }` ; `id` vaut `null` pour une connexion échouée sur un e-mail qui ne correspond à aucun compte (`{ "type": "utilisateur", "id": null }`) |
 | `avant` | Objet | Non | Valeurs modifiées avant l'action |
 | `apres` | Objet | Non | Valeurs modifiées après l'action |
 | `contexte` | Objet | Non | Informations propres à l'action (motif d'annulation, adresse IP tronquée…) |
@@ -435,3 +435,6 @@ Exemple de document pour un changement de statut :
 | `{ "entite.type": 1, "entite.id": 1, "date": -1 }` | Historique d'une intervention, du plus récent au plus ancien (US19) |
 | `{ "auteur.id": 1, "date": -1 }` | Actions d'un utilisateur |
 | `{ "action": 1, "date": -1 }` | Suivi des connexions échouées |
+| `{ "date": 1 }`, TTL de 6 mois, partiel sur `action` ∈ { `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE` } | Suppression automatique des journaux de connexion après 6 mois (fourchette de 6 mois à 1 an recommandée par la CNIL) ; l'historique des statuts et des comptes est conservé (US19) |
+
+Les index sont créés par l'API à son démarrage (`createIndexes`, rejouable), ou à la première écriture si MongoDB était éteint au démarrage. La durée est la constante `DUREE_CONSERVATION_CONNEXIONS_EN_SECONDES` de `backend/src/journal/journal.repository.ts`.
