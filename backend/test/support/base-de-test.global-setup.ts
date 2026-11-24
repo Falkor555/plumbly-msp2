@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { TestProject } from 'vitest/node';
 
@@ -24,8 +26,19 @@ export async function setup(projet: TestProject): Promise<void> {
     .withEnvironment({ TZ: FUSEAU_HORAIRE, PGTZ: FUSEAU_HORAIRE })
     .start();
 
-  // Les migrations Prisma (card #8) s'appliqueront ici, une fois pour toute la campagne.
-  projet.provide('urlBaseDeTest', conteneur.getConnectionUri());
+  const url = conteneur.getConnectionUri();
+  appliquerMigrations(url);
+  projet.provide('urlBaseDeTest', url);
+}
+
+/** Applique les migrations Prisma une fois pour toute la campagne : la base de test a le schéma de l'application. */
+function appliquerMigrations(url: string): void {
+  // CLI Prisma lancée avec le Node courant plutôt que par npx : même commande sous Windows et sous Linux.
+  const cliPrisma = createRequire(import.meta.url).resolve('prisma/build/index.js');
+  execFileSync(process.execPath, [cliPrisma, 'migrate', 'deploy'], {
+    env: { ...process.env, DATABASE_URL: url },
+    stdio: 'inherit',
+  });
 }
 
 export async function teardown(): Promise<void> {

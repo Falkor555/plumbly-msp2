@@ -1,0 +1,249 @@
+// Schéma de données de Plumbly, traduit du MLD de docs/modele-donnees.md (section 4).
+//
+// Conventions :
+// - tables et colonnes en snake_case comme dans le MLD (@@map / @map) ;
+//   modèles et champs en camelCase côté TypeScript ;
+// - toutes les dates-heures sont des timestamptz : PostgreSQL les stocke en UTC,
+//   quel que soit le fuseau de la session (le conteneur tourne en Indian/Reunion) ;
+// - clés étrangères en ON DELETE RESTRICT : on archive au lieu de supprimer (D12),
+//   sauf les jetons, supprimés avec leur compte.
+//
+// Ce que Prisma ne sait pas décrire est ajouté en SQL écrit à la main dans la migration
+// 20261124000000_schema_initial : contraintes CHECK, contrainte UNIQUE différée
+// (tournée, ordre) et colonne générée intervention.fin_prevue (section 5.1 du modèle).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Énumérations ----------
+
+enum Role {
+  ADMIN
+  GESTIONNAIRE
+  TECHNICIEN
+
+  @@map("role_utilisateur")
+}
+
+enum TypeClient {
+  PARTICULIER
+  PROFESSIONNEL
+
+  @@map("type_client")
+}
+
+enum Urgence {
+  NORMALE
+  PRIORITAIRE
+  URGENTE
+
+  @@map("urgence")
+}
+
+enum StatutIntervention {
+  A_PLANIFIER
+  PLANIFIEE
+  EN_COURS
+  TERMINEE
+  ANNULEE
+
+  @@map("statut_intervention")
+}
+
+// ---------- Comptes (Loïc) ----------
+
+model Utilisateur {
+  id                Int       @id @default(autoincrement()) @map("id_utilisateur")
+  email             String    @unique @db.VarChar(255)
+  motDePasseHash    String    @map("mot_de_passe_hash") @db.VarChar(255)
+  nom               String    @db.VarChar(100)
+  prenom            String    @db.VarChar(100)
+  role              Role
+  actif             Boolean   @default(true)
+  mdpAChanger       Boolean   @default(true) @map("mdp_a_changer")
+  derniereConnexion DateTime? @map("derniere_connexion") @db.Timestamptz(3)
+  creeLe            DateTime  @default(now()) @map("cree_le") @db.Timestamptz(3)
+  majLe             DateTime  @updatedAt @map("maj_le") @db.Timestamptz(3)
+
+  technicien             Technicien?
+  jetonsRafraichissement JetonRafraichissement[]
+  jetonsReinitialisation JetonReinitialisation[]
+  interventionsCreees    Intervention[]
+  tourneesCreees         Tournee[]
+
+  @@map("utilisateur")
+}
+
+model JetonRafraichissement {
+  id            Int       @id @default(autoincrement()) @map("id_jeton_rafraichissement")
+  hashJeton     String    @unique @map("hash_jeton") @db.VarChar(255)
+  expireLe      DateTime  @map("expire_le") @db.Timestamptz(3)
+  revoqueLe     DateTime? @map("revoque_le") @db.Timestamptz(3)
+  creeLe        DateTime  @default(now()) @map("cree_le") @db.Timestamptz(3)
+  idUtilisateur Int       @map("id_utilisateur")
+
+  utilisateur Utilisateur @relation(fields: [idUtilisateur], references: [id], onDelete: Cascade)
+
+  @@index([idUtilisateur])
+  @@map("jeton_rafraichissement")
+}
+
+model JetonReinitialisation {
+  id            Int       @id @default(autoincrement()) @map("id_jeton_reinitialisation")
+  hashJeton     String    @unique @map("hash_jeton") @db.VarChar(255)
+  expireLe      DateTime  @map("expire_le") @db.Timestamptz(3)
+  utiliseLe     DateTime? @map("utilise_le") @db.Timestamptz(3)
+  creeLe        DateTime  @default(now()) @map("cree_le") @db.Timestamptz(3)
+  idUtilisateur Int       @map("id_utilisateur")
+
+  utilisateur Utilisateur @relation(fields: [idUtilisateur], references: [id], onDelete: Cascade)
+
+  @@index([idUtilisateur])
+  @@map("jeton_reinitialisation")
+}
+
+// ---------- Clients, techniciens et tournées (Arnaud) ----------
+
+model Client {
+  id            Int        @id @default(autoincrement()) @map("id_client")
+  typeClient    TypeClient @map("type_client")
+  nomClient     String?    @map("nom_client") @db.VarChar(100)
+  prenomClient  String?    @map("prenom_client") @db.VarChar(100)
+  raisonSociale String?    @map("raison_sociale") @db.VarChar(150)
+  telephone     String     @db.VarChar(20)
+  emailClient   String?    @map("email_client") @db.VarChar(255)
+  archive       Boolean    @default(false)
+  archiveLe     DateTime?  @map("archive_le") @db.Timestamptz(3)
+  creeLe        DateTime   @default(now()) @map("cree_le") @db.Timestamptz(3)
+  majLe         DateTime   @updatedAt @map("maj_le") @db.Timestamptz(3)
+
+  adresses Adresse[]
+
+  @@index([nomClient])
+  @@index([raisonSociale])
+  @@index([telephone])
+  @@map("client")
+}
+
+model Adresse {
+  id          Int       @id @default(autoincrement()) @map("id_adresse")
+  rue         String    @db.VarChar(255)
+  complement  String?   @db.VarChar(255)
+  codePostal  String    @map("code_postal") @db.Char(5)
+  ville       String    @db.VarChar(100)
+  infosAcces  String?   @map("infos_acces") @db.VarChar(500)
+  archive     Boolean   @default(false)
+  archiveLe   DateTime? @map("archive_le") @db.Timestamptz(3)
+  idClient    Int       @map("id_client")
+
+  client        Client         @relation(fields: [idClient], references: [id], onDelete: Restrict)
+  interventions Intervention[]
+
+  @@index([idClient])
+  @@index([ville])
+  @@map("adresse")
+}
+
+model Technicien {
+  id              Int       @id @default(autoincrement()) @map("id_technicien")
+  telephone       String    @db.VarChar(20)
+  couleurPlanning String    @map("couleur_planning") @db.VarChar(7)
+  archive         Boolean   @default(false)
+  archiveLe       DateTime? @map("archive_le") @db.Timestamptz(3)
+  idUtilisateur   Int       @unique @map("id_utilisateur")
+
+  utilisateur       Utilisateur       @relation(fields: [idUtilisateur], references: [id], onDelete: Restrict)
+  indisponibilites  Indisponibilite[]
+  tournees          Tournee[]
+
+  @@map("technicien")
+}
+
+model Indisponibilite {
+  id           Int      @id @default(autoincrement()) @map("id_indisponibilite")
+  debut        DateTime @db.Timestamptz(3)
+  fin          DateTime @db.Timestamptz(3)
+  motif        String?  @db.VarChar(255)
+  idTechnicien Int      @map("id_technicien")
+
+  technicien Technicien @relation(fields: [idTechnicien], references: [id], onDelete: Restrict)
+
+  @@index([idTechnicien, debut, fin])
+  @@map("indisponibilite")
+}
+
+model Tournee {
+  id           Int      @id @default(autoincrement()) @map("id_tournee")
+  dateTournee  DateTime @map("date_tournee") @db.Date
+  creeLe       DateTime @default(now()) @map("cree_le") @db.Timestamptz(3)
+  idTechnicien Int      @map("id_technicien")
+  idCreateur   Int      @map("id_createur")
+
+  technicien    Technicien     @relation(fields: [idTechnicien], references: [id], onDelete: Restrict)
+  createur      Utilisateur    @relation(fields: [idCreateur], references: [id], onDelete: Restrict)
+  interventions Intervention[]
+
+  // D10 / RG08 : une tournée par technicien et par jour.
+  @@unique([idTechnicien, dateTournee])
+  @@index([dateTournee])
+  @@index([idCreateur])
+  @@map("tournee")
+}
+
+// ---------- Interventions (Loïc) ----------
+
+model TypeIntervention {
+  id             Int    @id @default(autoincrement()) @map("id_type_intervention")
+  libelle        String @unique @db.VarChar(100)
+  dureeDefautMin Int    @map("duree_defaut_min")
+
+  interventions Intervention[]
+
+  @@map("type_intervention")
+}
+
+model Intervention {
+  id                 Int                @id @default(autoincrement()) @map("id_intervention")
+  description        String             @db.VarChar(1000)
+  urgence            Urgence
+  statut             StatutIntervention @default(A_PLANIFIER)
+  dureeEstimeeMin    Int                @map("duree_estimee_min")
+  debutPrevu         DateTime?          @map("debut_prevu") @db.Timestamptz(3)
+  // Colonne générée par PostgreSQL (debut_prevu + duree_estimee_min) : lecture seule.
+  // Le DEFAULT déclaré ici n'existe que pour Prisma ; la migration crée une colonne GENERATED ALWAYS.
+  finPrevue          DateTime?          @default(dbgenerated()) @map("fin_prevue") @db.Timestamptz(3)
+  ordreTournee       Int?               @map("ordre_tournee")
+  compteRendu        String?            @map("compte_rendu") @db.VarChar(2000)
+  motifAnnulation    String?            @map("motif_annulation") @db.VarChar(500)
+  demarreeLe         DateTime?          @map("demarree_le") @db.Timestamptz(3)
+  termineeLe         DateTime?          @map("terminee_le") @db.Timestamptz(3)
+  annuleeLe          DateTime?          @map("annulee_le") @db.Timestamptz(3)
+  creeLe             DateTime           @default(now()) @map("cree_le") @db.Timestamptz(3)
+  majLe              DateTime           @updatedAt @map("maj_le") @db.Timestamptz(3)
+  idAdresse          Int                @map("id_adresse")
+  idTypeIntervention Int                @map("id_type_intervention")
+  idCreateur         Int                @map("id_createur")
+  idTournee          Int?               @map("id_tournee")
+
+  adresse          Adresse          @relation(fields: [idAdresse], references: [id], onDelete: Restrict)
+  typeIntervention TypeIntervention @relation(fields: [idTypeIntervention], references: [id], onDelete: Restrict)
+  createur         Utilisateur      @relation(fields: [idCreateur], references: [id], onDelete: Restrict)
+  tournee          Tournee?         @relation(fields: [idTournee], references: [id], onDelete: Restrict)
+
+  // RG13 : rang unique dans une tournée. La migration le crée en contrainte DEFERRABLE INITIALLY DEFERRED
+  // (non exprimable ici) ; le déclarer garde Prisma aligné sur la base et évite qu'il propose de le supprimer.
+  @@unique([idTournee, ordreTournee], map: "intervention_tournee_ordre_key")
+  @@index([statut, urgence])
+  @@index([idAdresse])
+  @@index([idTypeIntervention])
+  @@index([idCreateur])
+  @@map("intervention")
+}

@@ -1,7 +1,14 @@
+import { existsSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 
 const PORT_PAR_DEFAUT = 3000;
+
+// Lancement hors Docker (npm run start:dev) : DATABASE_URL vient de backend/.env.
+// Dans Docker, docker-compose.yml fournit les variables et elles ne sont pas écrasées par ce fichier.
+if (existsSync('.env')) {
+  process.loadEnvFile('.env');
+}
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
