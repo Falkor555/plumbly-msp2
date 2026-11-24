@@ -1,11 +1,20 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { UtilisateurConnecte } from '../commun/autorisation/utilisateur-connecte.js';
 import type { Horloge } from '../commun/horloge.js';
+import type { StatutIntervention } from '../generated/prisma/client.ts';
+import type { JournalDesActions } from '../journal/journal-des-actions.js';
 import type { InterventionDetaillee } from './intervention-detaillee.js';
 import type {
   AdresseUtilisable,
   InterventionsRepository,
+  InterventionVerrouillee,
   OperationsDeCreation,
+  OperationsSurIntervention,
 } from './interventions.repository.js';
 import { InterventionsService } from './interventions.service.js';
 
@@ -95,19 +104,80 @@ function interventionDetaillee(
   };
 }
 
+/** Ligne verrouillée : par défaut, 2ᵉ de la tournée 5 de Kévin, aujourd'hui à 10 h, 60 minutes. */
+function verrouillee(
+  statut: StatutIntervention,
+  autres: Partial<InterventionVerrouillee> = {},
+): InterventionVerrouillee {
+  const dansUneTournee = statut === 'PLANIFIEE' || statut === 'EN_COURS' || statut === 'TERMINEE';
+  return {
+    id: 42,
+    statut,
+    idTournee: dansUneTournee ? 5 : null,
+    ordreTournee: dansUneTournee ? 2 : null,
+    debutPrevu: dansUneTournee ? new Date('2026-12-07T10:00:00+04:00') : null,
+    dureeEstimeeMin: 60,
+    ...autres,
+  };
+}
+
+const TOURNEE_DU_JOUR = { id: 5, dateTournee: new Date('2026-12-07T00:00:00Z'), idTechnicien: 2 };
+
 function creerService({
   adresse = { adresseArchivee: false, clientArchive: false },
   dureeParDefaut = 45,
   intervention = interventionDetaillee(),
+  etat = verrouillee('PLANIFIEE'),
+  idTourneeLue = etat?.idTournee,
+  dateTournee = '2026-12-07',
 }: {
   adresse?: AdresseUtilisable | null;
   dureeParDefaut?: number | null;
   intervention?: InterventionDetaillee | null;
+  /** Ligne lue sous verrou ; null si l'intervention n'existe pas. */
+  etat?: InterventionVerrouillee | null;
+  /** Tournée lue avant les verrous ; undefined si l'intervention n'existe pas. */
+  idTourneeLue?: number | null;
+  dateTournee?: string;
 } = {}) {
+  // Suit l'ordre des appels : verrous, écritures, validation de la transaction, journal.
+  const evenements: string[] = [];
+  const noter =
+    <T>(nom: string, valeur: T) =>
+    (): Promise<T> => {
+      evenements.push(nom);
+      return Promise.resolve(valeur);
+    };
   const creation: OperationsDeCreation = {
     verrouillerAdresse: vi.fn().mockResolvedValue(adresse),
     trouverDureeParDefaut: vi.fn().mockResolvedValue(dureeParDefaut),
     creer: vi.fn().mockResolvedValue(42),
+  };
+  const operations: OperationsSurIntervention = {
+    verrouillerAdresse: creation.verrouillerAdresse,
+    trouverDureeParDefaut: creation.trouverDureeParDefaut,
+    lireIdTournee: vi.fn().mockResolvedValue(etat === null ? undefined : idTourneeLue),
+    verrouillerTechnicienDeLaTournee: vi.fn(noter('verrou technicien', 2)),
+    verrouillerTournee: vi.fn(
+      noter('verrou tournée', {
+        ...TOURNEE_DU_JOUR,
+        dateTournee: new Date(`${dateTournee}T00:00:00Z`),
+      }),
+    ),
+    verrouillerIntervention: vi.fn(noter('verrou intervention', etat)),
+    lireAffectation: vi.fn().mockResolvedValue({
+      dateTournee: new Date(`${dateTournee}T00:00:00Z`),
+      idTechnicien: 2,
+      idCompteDuTechnicien: KEVIN.id,
+    }),
+    listerInterventionsDuTechnicien: vi.fn().mockResolvedValue([]),
+    listerIndisponibilites: vi.fn().mockResolvedValue([]),
+    decalerRangs: vi.fn(noter('décalage des rangs', undefined)),
+    modifier: vi.fn(noter('modification', undefined)),
+    annuler: vi.fn(noter('annulation', undefined)),
+    demarrer: vi.fn(noter('démarrage', undefined)),
+    terminer: vi.fn(noter('fin', undefined)),
+    enregistrerCompteRendu: vi.fn(noter('compte rendu', undefined)),
   };
   const depot = {
     rechercher: vi.fn().mockResolvedValue({ interventions: [], total: 0 }),
@@ -115,10 +185,22 @@ function creerService({
     creerIntervention: vi.fn((travail: (operations: OperationsDeCreation) => Promise<number>) =>
       travail(creation),
     ),
+    modifierIntervention: vi.fn(
+      async <T>(travail: (operations: OperationsSurIntervention) => Promise<T>) => {
+        const resultat = await travail(operations);
+        evenements.push('transaction validée');
+        return resultat;
+      },
+    ),
   };
+  const journal = { enregistrer: vi.fn(noter('journal', undefined)), historiqueDe: vi.fn() };
   const horloge = { maintenant: () => MAINTENANT } as Horloge;
-  const service = new InterventionsService(depot as unknown as InterventionsRepository, horloge);
-  return { service, depot, creation };
+  const service = new InterventionsService(
+    depot as unknown as InterventionsRepository,
+    horloge,
+    journal as unknown as JournalDesActions,
+  );
+  return { service, depot, creation, operations, journal, evenements };
 }
 
 describe('InterventionsService : lecture et création', () => {
@@ -164,7 +246,7 @@ describe('InterventionsService : lecture et création', () => {
       [
         'd’un client archivé',
         { adresseArchivee: false, clientArchive: true },
-        'Ce client est archivé : on ne peut plus lui créer d’intervention.',
+        'Ce client est archivé : on ne peut plus lui rattacher d’intervention.',
       ],
     ])('refuse en 400 une adresse %s, sans rien créer', async (_cas, adresse, message) => {
       const { service, creation } = creerService({ adresse });
@@ -243,5 +325,361 @@ describe('InterventionsService : lecture et création', () => {
 
     expect(page.meta).toEqual({ page: 2, limit: 20, total: 41, totalPages: 3 });
     expect(page.data).toHaveLength(1);
+  });
+});
+
+describe('InterventionsService : modification (US16)', () => {
+  it.each<StatutIntervention>(['EN_COURS', 'TERMINEE', 'ANNULEE'])(
+    'refuse en 400 de modifier une intervention %s, sans rien écrire',
+    async (statut) => {
+      const { service, operations } = creerService({ etat: verrouillee(statut) });
+
+      await expect(service.modifier(42, { description: 'Autre' })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(operations.modifier).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuse en 400 de changer l’adresse d’une intervention planifiée', async () => {
+    const { service, operations } = creerService({ etat: verrouillee('PLANIFIEE') });
+
+    await expect(service.modifier(42, { adresseId: 16 })).rejects.toThrow(
+      'L’adresse d’une intervention planifiée ne peut pas changer : retirez-la d’abord de sa tournée.',
+    );
+    expect(operations.modifier).not.toHaveBeenCalled();
+  });
+
+  it('change l’adresse d’une intervention à planifier après avoir vérifié la nouvelle', async () => {
+    const { service, operations } = creerService({ etat: verrouillee('A_PLANIFIER') });
+
+    await service.modifier(42, { adresseId: 16, typeInterventionId: 2, urgence: 'URGENTE' });
+
+    expect(operations.verrouillerAdresse).toHaveBeenCalledWith(16);
+    expect(operations.modifier).toHaveBeenCalledWith(42, {
+      idAdresse: 16,
+      idTypeIntervention: 2,
+      urgence: 'URGENTE',
+    });
+  });
+
+  it('refuse en 400 une nouvelle adresse archivée', async () => {
+    const { service } = creerService({
+      etat: verrouillee('A_PLANIFIER'),
+      adresse: { adresseArchivee: true, clientArchive: false },
+    });
+
+    await expect(service.modifier(42, { adresseId: 16 })).rejects.toThrow(BadRequestException);
+  });
+
+  it('refuse en 400 un type inexistant', async () => {
+    const { service } = creerService({ etat: verrouillee('A_PLANIFIER'), dureeParDefaut: null });
+
+    await expect(service.modifier(42, { typeInterventionId: 99 })).rejects.toThrow(
+      'Type d’intervention inexistant.',
+    );
+  });
+
+  it('verrouille technicien, tournée puis intervention, comme l’affectation', async () => {
+    const { service, evenements } = creerService({ etat: verrouillee('PLANIFIEE') });
+
+    await service.modifier(42, { description: 'Autre' });
+
+    expect(evenements).toEqual([
+      'verrou technicien',
+      'verrou tournée',
+      'verrou intervention',
+      'modification',
+      'transaction validée',
+    ]);
+  });
+
+  it('ne verrouille que l’intervention quand elle n’est dans aucune tournée', async () => {
+    const { service, evenements } = creerService({ etat: verrouillee('A_PLANIFIER') });
+
+    await service.modifier(42, { dureeEstimeeMin: 90 });
+
+    expect(evenements).toEqual(['verrou intervention', 'modification', 'transaction validée']);
+  });
+
+  it('répond 409 si l’intervention a changé de tournée entre la lecture et le verrou', async () => {
+    const { service, operations } = creerService({
+      etat: verrouillee('A_PLANIFIER'),
+      idTourneeLue: 5,
+    });
+
+    await expect(service.modifier(42, { description: 'Autre' })).rejects.toThrow(
+      new ConflictException('L’intervention a été modifiée entre-temps, rechargez la page.'),
+    );
+    expect(operations.modifier).not.toHaveBeenCalled();
+  });
+
+  it('répond 404 pour une intervention inexistante', async () => {
+    const { service } = creerService({ etat: null });
+
+    await expect(service.modifier(99, { description: 'Autre' })).rejects.toThrow(NotFoundException);
+  });
+
+  describe('nouvelle durée d’une intervention planifiée (RG09 à RG11)', () => {
+    it('vérifie le créneau allongé, sans compter l’intervention elle-même', async () => {
+      const { service, operations } = creerService({ etat: verrouillee('PLANIFIEE') });
+
+      await service.modifier(42, { dureeEstimeeMin: 90 });
+
+      expect(operations.listerInterventionsDuTechnicien).toHaveBeenCalledWith(
+        2,
+        {
+          debut: new Date('2026-12-07T10:00:00+04:00'),
+          fin: new Date('2026-12-07T11:30:00+04:00'),
+        },
+        42,
+      );
+      expect(operations.modifier).toHaveBeenCalledWith(42, { dureeEstimeeMin: 90 });
+    });
+
+    it('répond 409 si le créneau allongé chevauche l’intervention suivante', async () => {
+      const { service, operations } = creerService({ etat: verrouillee('PLANIFIEE') });
+      vi.mocked(operations.listerInterventionsDuTechnicien).mockResolvedValue([
+        {
+          id: 43,
+          debut: new Date('2026-12-07T11:00:00+04:00'),
+          fin: new Date('2026-12-07T12:00:00+04:00'),
+        },
+      ]);
+
+      await expect(service.modifier(42, { dureeEstimeeMin: 90 })).rejects.toThrow(
+        ConflictException,
+      );
+      expect(operations.modifier).not.toHaveBeenCalled();
+    });
+
+    it('répond 409 si le créneau allongé tombe sur une indisponibilité', async () => {
+      const { service, operations } = creerService({ etat: verrouillee('PLANIFIEE') });
+      vi.mocked(operations.listerIndisponibilites).mockResolvedValue([
+        {
+          debut: new Date('2026-12-07T11:00:00+04:00'),
+          fin: new Date('2026-12-07T15:00:00+04:00'),
+          motif: 'Médecin',
+        },
+      ]);
+
+      await expect(service.modifier(42, { dureeEstimeeMin: 90 })).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('répond 400 si le créneau allongé finit après 19 h', async () => {
+      const { service } = creerService({
+        etat: verrouillee('PLANIFIEE', { debutPrevu: new Date('2026-12-07T18:00:00+04:00') }),
+      });
+
+      await expect(service.modifier(42, { dureeEstimeeMin: 90 })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('ne vérifie aucun créneau pour une intervention à planifier', async () => {
+      const { service, operations } = creerService({ etat: verrouillee('A_PLANIFIER') });
+
+      await service.modifier(42, { dureeEstimeeMin: 720 });
+
+      expect(operations.listerInterventionsDuTechnicien).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('InterventionsService : annulation (US16, RG05)', () => {
+  it('sort l’intervention de sa tournée et fait remonter les suivantes', async () => {
+    const { service, operations } = creerService({ etat: verrouillee('PLANIFIEE') });
+
+    await service.annuler(42, { motif: 'Client absent' }, GESTIONNAIRE);
+
+    expect(operations.annuler).toHaveBeenCalledWith(42, { motif: 'Client absent', le: MAINTENANT });
+    expect(operations.decalerRangs).toHaveBeenCalledWith(5, 3, -1);
+  });
+
+  it('ne décale aucun rang pour une intervention à planifier', async () => {
+    const { service, operations } = creerService({ etat: verrouillee('A_PLANIFIER') });
+
+    await service.annuler(42, { motif: 'Doublon' }, GESTIONNAIRE);
+
+    expect(operations.annuler).toHaveBeenCalled();
+    expect(operations.decalerRangs).not.toHaveBeenCalled();
+  });
+
+  it('journalise INTERVENTION_ANNULEE avec le motif, après la validation de la transaction', async () => {
+    const { service, journal, evenements } = creerService({ etat: verrouillee('EN_COURS') });
+
+    await service.annuler(42, { motif: 'Pièce indisponible' }, GESTIONNAIRE);
+
+    expect(journal.enregistrer).toHaveBeenCalledWith({
+      type: 'INTERVENTION_ANNULEE',
+      auteur: { id: GESTIONNAIRE.id, role: 'GESTIONNAIRE' },
+      interventionId: 42,
+      ancienStatut: 'EN_COURS',
+      motif: 'Pièce indisponible',
+    });
+    expect(evenements.slice(-2)).toEqual(['transaction validée', 'journal']);
+  });
+
+  it.each<StatutIntervention>(['TERMINEE', 'ANNULEE'])(
+    'refuse en 400 d’annuler une intervention %s, sans rien écrire ni journaliser',
+    async (statut) => {
+      const { service, operations, journal } = creerService({ etat: verrouillee(statut) });
+
+      await expect(service.annuler(42, { motif: 'Erreur' }, GESTIONNAIRE)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(operations.annuler).not.toHaveBeenCalled();
+      expect(journal.enregistrer).not.toHaveBeenCalled();
+    },
+  );
+
+  it('répond 409 sans journaliser si l’intervention a été retirée entre-temps', async () => {
+    const { service, journal } = creerService({
+      etat: verrouillee('A_PLANIFIER'),
+      idTourneeLue: 5,
+    });
+
+    await expect(service.annuler(42, { motif: 'Erreur' }, GESTIONNAIRE)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(journal.enregistrer).not.toHaveBeenCalled();
+  });
+});
+
+describe('InterventionsService : démarrage et fin sur le terrain (US17, RG03)', () => {
+  it('démarre l’intervention à l’heure de l’horloge et journalise le changement de statut', async () => {
+    const { service, operations, journal, evenements } = creerService({
+      etat: verrouillee('PLANIFIEE'),
+    });
+
+    await service.demarrer(42, KEVIN);
+
+    expect(operations.demarrer).toHaveBeenCalledWith(42, MAINTENANT);
+    expect(journal.enregistrer).toHaveBeenCalledWith({
+      type: 'STATUT_MODIFIE',
+      auteur: { id: KEVIN.id, role: 'TECHNICIEN' },
+      interventionId: 42,
+      ancienStatut: 'PLANIFIEE',
+      nouveauStatut: 'EN_COURS',
+    });
+    expect(evenements).toEqual([
+      'verrou intervention',
+      'démarrage',
+      'transaction validée',
+      'journal',
+    ]);
+  });
+
+  it('répond 403 à un technicien qui n’est pas celui de la tournée, sans rien écrire', async () => {
+    const { service, operations, journal } = creerService({ etat: verrouillee('PLANIFIEE') });
+
+    await expect(service.demarrer(42, MATHIEU)).rejects.toThrow(ForbiddenException);
+    expect(operations.demarrer).not.toHaveBeenCalled();
+    expect(journal.enregistrer).not.toHaveBeenCalled();
+  });
+
+  it('RG24 : répond 400 si la tournée n’est pas celle du jour à La Réunion', async () => {
+    const { service, operations } = creerService({
+      etat: verrouillee('PLANIFIEE'),
+      dateTournee: '2026-12-08',
+    });
+
+    await expect(service.demarrer(42, KEVIN)).rejects.toThrow(
+      'Cette intervention est prévue le 2026-12-08 : elle ne peut être démarrée que ce jour-là.',
+    );
+    expect(operations.demarrer).not.toHaveBeenCalled();
+  });
+
+  it('US17 : répond 400 (et non 403) pour une intervention à planifier, sans technicien', async () => {
+    const { service } = creerService({ etat: verrouillee('A_PLANIFIER') });
+
+    await expect(service.demarrer(42, KEVIN)).rejects.toThrow(
+      'Impossible de démarrer une intervention à planifier.',
+    );
+  });
+
+  it('répond 403 avant 400 pour l’intervention terminée d’un collègue', async () => {
+    const { service } = creerService({ etat: verrouillee('TERMINEE') });
+
+    await expect(service.demarrer(42, MATHIEU)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('répond 404 pour une intervention inexistante', async () => {
+    const { service } = creerService({ etat: null });
+
+    await expect(service.demarrer(99, KEVIN)).rejects.toThrow(NotFoundException);
+  });
+
+  it('termine l’intervention en cours à l’heure de l’horloge, avec le compte rendu', async () => {
+    const { service, operations, journal } = creerService({ etat: verrouillee('EN_COURS') });
+
+    await service.terminer(42, { compteRendu: 'Joint changé' }, KEVIN);
+
+    expect(operations.terminer).toHaveBeenCalledWith(42, {
+      le: MAINTENANT,
+      compteRendu: 'Joint changé',
+    });
+    expect(journal.enregistrer).toHaveBeenCalledWith(
+      expect.objectContaining({ ancienStatut: 'EN_COURS', nouveauStatut: 'TERMINEE' }),
+    );
+  });
+
+  it('termine une intervention commencée la veille : RG24 ne vaut que pour le démarrage', async () => {
+    const { service, operations } = creerService({
+      etat: verrouillee('EN_COURS'),
+      dateTournee: '2026-12-05',
+    });
+
+    await service.terminer(42, {}, KEVIN);
+
+    expect(operations.terminer).toHaveBeenCalledWith(42, {
+      le: MAINTENANT,
+      compteRendu: undefined,
+    });
+  });
+
+  it('refuse en 400 de terminer une intervention planifiée, sans journaliser', async () => {
+    const { service, journal } = creerService({ etat: verrouillee('PLANIFIEE') });
+
+    await expect(service.terminer(42, {}, KEVIN)).rejects.toThrow(
+      'Impossible de terminer une intervention planifiée.',
+    );
+    expect(journal.enregistrer).not.toHaveBeenCalled();
+  });
+
+  it('répond 403 au collègue qui veut terminer', async () => {
+    const { service } = creerService({ etat: verrouillee('EN_COURS') });
+
+    await expect(service.terminer(42, {}, MATHIEU)).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('InterventionsService : compte rendu (US18)', () => {
+  it('enregistre le compte rendu d’une intervention terminée, sans journaliser', async () => {
+    const { service, operations, journal } = creerService({ etat: verrouillee('TERMINEE') });
+
+    await service.completerCompteRendu(42, { compteRendu: 'Siphon remplacé' }, KEVIN);
+
+    expect(operations.enregistrerCompteRendu).toHaveBeenCalledWith(42, 'Siphon remplacé');
+    expect(journal.enregistrer).not.toHaveBeenCalled();
+  });
+
+  it('refuse en 400 le compte rendu d’une intervention en cours', async () => {
+    const { service, operations } = creerService({ etat: verrouillee('EN_COURS') });
+
+    await expect(service.completerCompteRendu(42, { compteRendu: 'Texte' }, KEVIN)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(operations.enregistrerCompteRendu).not.toHaveBeenCalled();
+  });
+
+  it('répond 403 au collègue', async () => {
+    const { service } = creerService({ etat: verrouillee('TERMINEE') });
+
+    await expect(
+      service.completerCompteRendu(42, { compteRendu: 'Texte' }, MATHIEU),
+    ).rejects.toThrow(ForbiddenException);
   });
 });

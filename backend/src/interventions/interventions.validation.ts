@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import {
   type Champs,
   estUneDate,
@@ -14,7 +15,10 @@ import {
 import { StatutIntervention, Urgence } from '../generated/prisma/client.ts';
 import { lireDuree } from './duree.js';
 import {
+  type Annulation,
+  type CompteRendu,
   type FiltresInterventions,
+  type FinDIntervention,
   type ModificationIntervention,
   type NouvelleIntervention,
   TRIS_INTERVENTIONS,
@@ -26,6 +30,8 @@ import {
  */
 
 const LONGUEUR_DESCRIPTION = 1000;
+const LONGUEUR_MOTIF = 500;
+const LONGUEUR_COMPTE_RENDU = 2000;
 const STATUTS = Object.values(StatutIntervention);
 const URGENCES = Object.values(Urgence);
 
@@ -57,6 +63,59 @@ export function lireNouvelleIntervention(corps: unknown): NouvelleIntervention {
   const intervention = lireChampsIntervention(champs, erreurs, { obligatoire: true });
   signalerErreurs(erreurs);
   return intervention as NouvelleIntervention;
+}
+
+/** PATCH /interventions/:id (US16) : champs facultatifs, au moins un. */
+export function lireModificationIntervention(corps: unknown): ModificationIntervention {
+  const champs = lireObjet(corps, CHAMPS_INTERVENTION);
+  const erreurs: string[] = [];
+  const modification = lireChampsIntervention(champs, erreurs, { obligatoire: false });
+  signalerErreurs(erreurs);
+  if (Object.keys(modification).length === 0) {
+    throw new BadRequestException(['Aucun champ à modifier']);
+  }
+  return modification;
+}
+
+/** POST /interventions/:id/cancel : motif obligatoire (RG05), espaces des extrémités retirés. */
+export function lireAnnulation(corps: unknown): Annulation {
+  const champs = lireObjet(corps, ['motif']);
+  const erreurs: string[] = [];
+  const motif = lireTexte(champs, 'motif', erreurs, {
+    obligatoire: true,
+    maximum: LONGUEUR_MOTIF,
+  });
+  signalerErreurs(erreurs);
+  return { motif: motif as string };
+}
+
+/** POST /interventions/:id/start : aucun corps attendu. */
+export function lireDemarrage(corps: unknown): void {
+  lireObjet(corps ?? {}, []);
+}
+
+/** POST /interventions/:id/complete : compte rendu facultatif ; le corps peut être absent. */
+export function lireFinDIntervention(corps: unknown): FinDIntervention {
+  const champs = lireObjet(corps ?? {}, ['compteRendu']);
+  const erreurs: string[] = [];
+  const compteRendu = lireTexte(champs, 'compteRendu', erreurs, {
+    obligatoire: false,
+    maximum: LONGUEUR_COMPTE_RENDU,
+  });
+  signalerErreurs(erreurs);
+  return typeof compteRendu === 'string' ? { compteRendu } : {};
+}
+
+/** PATCH /interventions/:id/report (US18) : texte obligatoire, qui remplace le précédent. */
+export function lireCompteRendu(corps: unknown): CompteRendu {
+  const champs = lireObjet(corps, ['compteRendu']);
+  const erreurs: string[] = [];
+  const compteRendu = lireTexte(champs, 'compteRendu', erreurs, {
+    obligatoire: true,
+    maximum: LONGUEUR_COMPTE_RENDU,
+  });
+  signalerErreurs(erreurs);
+  return { compteRendu: compteRendu as string };
 }
 
 /** GET /interventions (US15) : par défaut, les plus urgentes puis les plus anciennes (RG18). */

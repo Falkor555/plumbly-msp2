@@ -1,8 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { ajouterJours, debutDuJourMetier } from '../commun/fuseau-metier.js';
-import { Prisma, type Urgence } from '../generated/prisma/client.ts';
+import { Prisma, StatutIntervention, type Urgence } from '../generated/prisma/client.ts';
 import { dansLOrdreDe, echapperMotif, NOM_AFFICHE_CLIENT } from '../prisma/outils-de-recherche.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import {
+  decalerRangs,
+  listerIndisponibilites,
+  listerInterventionsDuTechnicien,
+  type TourneeVerrouillee,
+  verrouillerLigneIntervention,
+  verrouillerTechnicienDeLaTournee,
+  verrouillerTournee,
+} from '../tournees/operations-verrouillees.js';
+import type {
+  Creneau,
+  Indisponibilite,
+  InterventionPlanifiee,
+} from '../tournees/regles-planification.js';
 import { INTERVENTION_DETAILLEE, type InterventionDetaillee } from './intervention-detaillee.js';
 import type { FiltresInterventions, TriInterventions } from './interventions.types.js';
 
@@ -35,6 +49,61 @@ export interface OperationsDeCreation {
   /** Durée par défaut du type, null s'il n'existe pas. */
   trouverDureeParDefaut(idTypeIntervention: number): Promise<number | null>;
   creer(intervention: InterventionACreer): Promise<number>;
+}
+
+/** Ligne de l'intervention, lue après l'avoir verrouillée. */
+export interface InterventionVerrouillee {
+  id: number;
+  statut: StatutIntervention;
+  idTournee: number | null;
+  ordreTournee: number | null;
+  debutPrevu: Date | null;
+  dureeEstimeeMin: number;
+}
+
+/** Tournée qui contient l'intervention, et compte du technicien qui la fait (RG03). */
+export interface Affectation {
+  dateTournee: Date;
+  idTechnicien: number;
+  idCompteDuTechnicien: number;
+}
+
+/** Champs modifiables par PATCH /interventions/:id, sous leur nom en base. */
+export interface ChampsModifiables {
+  idAdresse?: number;
+  idTypeIntervention?: number;
+  description?: string;
+  urgence?: Urgence;
+  dureeEstimeeMin?: number;
+}
+
+/**
+ * Lectures et écritures faites dans la transaction d'une modification d'intervention.
+ * Les verrous du planning (technicien, tournée) sont partagés avec les tournées
+ * (tournees/operations-verrouillees.ts) et se prennent dans le même ordre.
+ */
+export interface OperationsSurIntervention extends Omit<OperationsDeCreation, 'creer'> {
+  /** Tournée de l'intervention, lue sans verrou ; undefined si l'intervention n'existe pas. */
+  lireIdTournee(idIntervention: number): Promise<number | null | undefined>;
+  /** Verrouille la ligne du technicien de la tournée : null si la tournée n'existe pas. */
+  verrouillerTechnicienDeLaTournee(idTournee: number): Promise<number | null>;
+  verrouillerTournee(idTournee: number): Promise<TourneeVerrouillee | null>;
+  verrouillerIntervention(idIntervention: number): Promise<InterventionVerrouillee | null>;
+  lireAffectation(idTournee: number): Promise<Affectation>;
+  listerInterventionsDuTechnicien(
+    idTechnicien: number,
+    creneau: Creneau,
+    idInterventionExclue: number,
+  ): Promise<InterventionPlanifiee[]>;
+  listerIndisponibilites(idTechnicien: number, creneau: Creneau): Promise<Indisponibilite[]>;
+  decalerRangs(idTournee: number, aPartirDuRang: number, decalage: 1 | -1): Promise<void>;
+  modifier(idIntervention: number, champs: ChampsModifiables): Promise<void>;
+  /** ANNULEE, sortie de sa tournée (rang, début prévu), date et motif d'annulation renseignés. */
+  annuler(idIntervention: number, annulation: { motif: string; le: Date }): Promise<void>;
+  demarrer(idIntervention: number, le: Date): Promise<void>;
+  /** Le compte rendu existant est gardé s'il n'en est pas envoyé de nouveau. */
+  terminer(idIntervention: number, fin: { le: Date; compteRendu?: string }): Promise<void>;
+  enregistrerCompteRendu(idIntervention: number, compteRendu: string): Promise<void>;
 }
 
 /*
@@ -101,6 +170,17 @@ export class InterventionsRepository {
   ): Promise<number> {
     return this.prisma.$transaction((tx) => travail(creerOperationsDeCreation(tx)));
   }
+
+  /**
+   * Exécute une modification dans une transaction. Les vérifications et les écritures se font
+   * sur des lignes verrouillées : deux modifications simultanées de la même intervention, ou de
+   * sa tournée, passent l'une après l'autre.
+   */
+  modifierIntervention<T>(
+    travail: (operations: OperationsSurIntervention) => Promise<T>,
+  ): Promise<T> {
+    return this.prisma.$transaction((tx) => travail(creerOperationsSurIntervention(tx)));
+  }
 }
 
 /**
@@ -164,6 +244,103 @@ function creerOperationsDeCreation(tx: Prisma.TransactionClient): OperationsDeCr
     async creer(intervention) {
       const creee = await tx.intervention.create({ data: intervention, select: { id: true } });
       return creee.id;
+    },
+  };
+}
+
+function creerOperationsSurIntervention(tx: Prisma.TransactionClient): OperationsSurIntervention {
+  const { verrouillerAdresse, trouverDureeParDefaut } = creerOperationsDeCreation(tx);
+  return {
+    verrouillerAdresse,
+    trouverDureeParDefaut,
+
+    async lireIdTournee(idIntervention) {
+      const intervention = await tx.intervention.findUnique({
+        where: { id: idIntervention },
+        select: { idTournee: true },
+      });
+      return intervention === null ? undefined : intervention.idTournee;
+    },
+
+    verrouillerTechnicienDeLaTournee: (idTournee) =>
+      verrouillerTechnicienDeLaTournee(tx, idTournee),
+    verrouillerTournee: (idTournee) => verrouillerTournee(tx, idTournee),
+
+    async verrouillerIntervention(idIntervention) {
+      if (!(await verrouillerLigneIntervention(tx, idIntervention))) {
+        return null;
+      }
+      return tx.intervention.findUniqueOrThrow({
+        where: { id: idIntervention },
+        select: {
+          id: true,
+          statut: true,
+          idTournee: true,
+          ordreTournee: true,
+          debutPrevu: true,
+          dureeEstimeeMin: true,
+        },
+      });
+    },
+
+    async lireAffectation(idTournee) {
+      const tournee = await tx.tournee.findUniqueOrThrow({
+        where: { id: idTournee },
+        select: {
+          dateTournee: true,
+          idTechnicien: true,
+          technicien: { select: { idUtilisateur: true } },
+        },
+      });
+      return {
+        dateTournee: tournee.dateTournee,
+        idTechnicien: tournee.idTechnicien,
+        idCompteDuTechnicien: tournee.technicien.idUtilisateur,
+      };
+    },
+
+    listerInterventionsDuTechnicien: (idTechnicien, creneau, idInterventionExclue) =>
+      listerInterventionsDuTechnicien(tx, idTechnicien, creneau, idInterventionExclue),
+    listerIndisponibilites: (idTechnicien, creneau) =>
+      listerIndisponibilites(tx, idTechnicien, creneau),
+    decalerRangs: (idTournee, aPartirDuRang, decalage) =>
+      decalerRangs(tx, idTournee, aPartirDuRang, decalage),
+
+    async modifier(idIntervention, champs) {
+      await tx.intervention.update({ where: { id: idIntervention }, data: champs });
+    },
+
+    async annuler(idIntervention, { motif, le }) {
+      // demarreeLe est gardé : une intervention commencée puis annulée l'a bien été.
+      await tx.intervention.update({
+        where: { id: idIntervention },
+        data: {
+          statut: StatutIntervention.ANNULEE,
+          motifAnnulation: motif,
+          annuleeLe: le,
+          idTournee: null,
+          ordreTournee: null,
+          debutPrevu: null,
+        },
+      });
+    },
+
+    async demarrer(idIntervention, le) {
+      await tx.intervention.update({
+        where: { id: idIntervention },
+        data: { statut: StatutIntervention.EN_COURS, demarreeLe: le },
+      });
+    },
+
+    async terminer(idIntervention, { le, compteRendu }) {
+      await tx.intervention.update({
+        where: { id: idIntervention },
+        data: { statut: StatutIntervention.TERMINEE, termineeLe: le, compteRendu },
+      });
+    },
+
+    async enregistrerCompteRendu(idIntervention, compteRendu) {
+      await tx.intervention.update({ where: { id: idIntervention }, data: { compteRendu } });
     },
   };
 }

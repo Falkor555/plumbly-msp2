@@ -1,5 +1,13 @@
 import { BadRequestException } from '@nestjs/common';
-import { lireFiltresInterventions, lireNouvelleIntervention } from './interventions.validation.js';
+import {
+  lireAnnulation,
+  lireCompteRendu,
+  lireDemarrage,
+  lireFiltresInterventions,
+  lireFinDIntervention,
+  lireModificationIntervention,
+  lireNouvelleIntervention,
+} from './interventions.validation.js';
 
 function erreursDe(lecture: () => unknown): string[] {
   try {
@@ -156,6 +164,98 @@ describe('validation des interventions', () => {
     it('accepte du seul ou au seul', () => {
       expect(lireFiltresInterventions({ du: '2026-12-07' }).du).toBe('2026-12-07');
       expect(lireFiltresInterventions({ au: '2026-12-07' }).au).toBe('2026-12-07');
+    });
+  });
+
+  describe('PATCH /interventions/:id', () => {
+    it('ne garde que les champs envoyés', () => {
+      expect(lireModificationIntervention({ urgence: 'URGENTE', dureeEstimeeMin: 30 })).toEqual({
+        urgence: 'URGENTE',
+        dureeEstimeeMin: 30,
+      });
+    });
+
+    it('refuse une modification vide', () => {
+      expect(erreursDe(() => lireModificationIntervention({}))).toEqual(['Aucun champ à modifier']);
+    });
+
+    it.each(['statut', 'idTournee', 'ordreTournee', 'debutPrevu'])(
+      'refuse le champ %s : il ne se modifie que par les routes d’action et des tournées',
+      (champ) => {
+        expect(erreursDe(() => lireModificationIntervention({ [champ]: 1 }))).toEqual([
+          `Le champ ${champ} n’est pas autorisé`,
+        ]);
+      },
+    );
+
+    it('refuse null sur la description', () => {
+      expect(erreursDe(() => lireModificationIntervention({ description: null }))).toEqual([
+        'description ne peut pas être null',
+      ]);
+    });
+  });
+
+  describe('POST /interventions/:id/cancel', () => {
+    it('retire les espaces autour du motif', () => {
+      expect(lireAnnulation({ motif: '  Client absent  ' })).toEqual({ motif: 'Client absent' });
+    });
+
+    it.each([
+      ['absent', {}, 'motif est obligatoire'],
+      ['vide', { motif: '' }, 'motif ne peut pas être vide'],
+      ['fait d’espaces', { motif: '   ' }, 'motif ne peut pas être vide'],
+      ['trop long', { motif: 'a'.repeat(501) }, 'motif ne doit pas dépasser 500 caractères'],
+    ])('refuse un motif %s', (_cas, corps, message) => {
+      expect(erreursDe(() => lireAnnulation(corps))).toEqual([message]);
+    });
+
+    it('accepte un motif de 500 caractères', () => {
+      expect(lireAnnulation({ motif: 'a'.repeat(500) }).motif).toHaveLength(500);
+    });
+  });
+
+  describe('POST /interventions/:id/start', () => {
+    it('accepte un corps absent ou vide', () => {
+      expect(() => lireDemarrage(undefined)).not.toThrow();
+      expect(() => lireDemarrage({})).not.toThrow();
+    });
+
+    it('refuse un corps qui porte un champ', () => {
+      expect(erreursDe(() => lireDemarrage({ demarreeLe: '2026-12-07T08:00:00Z' }))).toEqual([
+        'Le champ demarreeLe n’est pas autorisé',
+      ]);
+    });
+  });
+
+  describe('compte rendu (complete et report)', () => {
+    it('complete : le compte rendu est facultatif, même sans corps', () => {
+      expect(lireFinDIntervention(undefined)).toEqual({});
+      expect(lireFinDIntervention({ compteRendu: ' Joint changé ' })).toEqual({
+        compteRendu: 'Joint changé',
+      });
+    });
+
+    it('accepte 2 000 caractères et refuse 2 001, aux deux routes', () => {
+      expect(lireCompteRendu({ compteRendu: 'a'.repeat(2000) }).compteRendu).toHaveLength(2000);
+      expect(erreursDe(() => lireCompteRendu({ compteRendu: 'a'.repeat(2001) }))).toEqual([
+        'compteRendu ne doit pas dépasser 2000 caractères',
+      ]);
+      expect(erreursDe(() => lireFinDIntervention({ compteRendu: 'a'.repeat(2001) }))).toEqual([
+        'compteRendu ne doit pas dépasser 2000 caractères',
+      ]);
+    });
+
+    it('report : le compte rendu est obligatoire et non vide', () => {
+      expect(erreursDe(() => lireCompteRendu({}))).toEqual(['compteRendu est obligatoire']);
+      expect(erreursDe(() => lireCompteRendu({ compteRendu: '  ' }))).toEqual([
+        'compteRendu ne peut pas être vide',
+      ]);
+    });
+
+    it('refuse un champ inconnu', () => {
+      expect(erreursDe(() => lireCompteRendu({ compteRendu: 'Ok', statut: 'TERMINEE' }))).toEqual([
+        'Le champ statut n’est pas autorisé',
+      ]);
     });
   });
 });
