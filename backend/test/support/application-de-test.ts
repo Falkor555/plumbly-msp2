@@ -4,6 +4,7 @@ import type { NextFunction, Response } from 'express';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../../src/app.module.js';
+import { AuthentificationGuard } from '../../src/authentification/authentification.guard.js';
 import type {
   RequeteAuthentifiee,
   UtilisateurConnecte,
@@ -27,6 +28,10 @@ export interface ApplicationDeTest {
 
 export async function demarrerApplication(maintenant: Date): Promise<ApplicationDeTest> {
   const module = await Test.createTestingModule({ imports: [AppModule] })
+    // L'authentification est simulée par l'en-tête x-test-utilisateur (plus bas) : le vrai
+    // guard est remplacé ici, et testé à part dans authentification.e2e-spec.ts.
+    .overrideProvider(AuthentificationGuard)
+    .useValue({ canActivate: () => true })
     .overrideProvider(Horloge)
     .useValue({ maintenant: () => maintenant })
     .overrideProvider(JournalDesActions)
