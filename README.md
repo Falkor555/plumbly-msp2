@@ -62,37 +62,54 @@ Certaines requêtes sont toutefois **écrites directement en SQL**, avec `$query
 
 ## Structure du projet
 
-> Structure proposée, à ajuster selon l'organisation retenue.
-
 ```
 plumbly-msp2/
-├── frontend/            # Application React (Vite + Tailwind)
-├── backend/             # API NestJS
-│   └── prisma/          # Schéma Prisma et migrations
-├── docker-compose.yml   # Orchestration des services (front, back, PostgreSQL)
-└── README.md
+├── frontend/            # Application React (Vite) : voir frontend/README.md
+├── backend/             # API NestJS : voir backend/README.md
+├── docs/                # Cahier des charges, ADR, modèle de données
+├── docker-compose.yml   # Front, API, PostgreSQL et MongoDB pour le développement
+├── .env.example         # Modèle des variables d'environnement (copier en .env)
+├── eslint.config.mjs    # Configuration ESLint commune au front et au back
+├── .prettierrc.json     # Configuration Prettier commune
+└── package.json         # Outillage commun (lint, formatage)
 ```
 
 ## Installation et lancement
 
 ### Prérequis
 
-- [Docker](https://www.docker.com/) et Docker Compose
-- [Node.js](https://nodejs.org/) (version LTS) pour le développement hors conteneur
+- [Docker Desktop](https://www.docker.com/) (avec WSL2 sous Windows) et Docker Compose
+- [Node.js](https://nodejs.org/) 24 LTS (version indiquée dans `.nvmrc`), pour le lint et le développement hors conteneur
 
 ### Démarrage avec Docker
 
 ```bash
 git clone https://github.com/Falkor555/plumbly-msp2.git
 cd plumbly-msp2
-cp .env.example .env   # puis renseigner les variables
-docker compose up -d
+cp .env.example .env   # PowerShell : Copy-Item .env.example .env, puis remplacer les « a-changer »
+docker compose up --build
 ```
 
-L'application sera alors accessible sur :
+| Service | Adresse | Rôle |
+| --- | --- | --- |
+| Front-end | http://localhost:5173 | Application React ; `/api` est relayé vers l'API |
+| API | http://localhost:3000/api/v1 | API NestJS |
+| PostgreSQL | `localhost:5432` | Données métier |
+| MongoDB | `localhost:27017` | Journal des actions |
 
-- Front-end : http://localhost:5173 *(à confirmer)*
-- API : http://localhost:3000 *(à confirmer)*
+Les ports sont réglables dans `.env` si l'un d'eux est déjà occupé sur le poste. Les services sont réglés sur le fuseau horaire `Indian/Reunion` (variable `TZ`). Le code de `frontend/` et `backend/` est monté dans les conteneurs : une modification est rechargée à chaud.
+
+Arrêt : `docker compose down` (ajouter `-v` pour effacer aussi les données des bases).
+
+### Lint et formatage
+
+À la racine du dépôt, après un `npm install` :
+
+```bash
+npm run lint           # ESLint sur frontend/ et backend/
+npm run format:check   # vérifie la mise en forme Prettier
+npm run format         # applique la mise en forme
+```
 
 ### Lancer les tests
 
@@ -101,11 +118,9 @@ L'application sera alors accessible sur :
 cd backend
 npm run test        # tests unitaires
 npm run test:e2e    # tests d'intégration
-
-# Front-end
-cd frontend
-npm run test
 ```
+
+Les tests du front-end seront ajoutés avec l'environnement de test (card #11).
 
 ## Auteurs
 
