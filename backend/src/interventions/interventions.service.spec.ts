@@ -130,6 +130,7 @@ function creerService({
   etat = verrouillee('PLANIFIEE'),
   idTourneeLue = etat?.idTournee,
   dateTournee = '2026-12-07',
+  maintenant = MAINTENANT,
 }: {
   adresse?: AdresseUtilisable | null;
   dureeParDefaut?: number | null;
@@ -139,6 +140,7 @@ function creerService({
   /** Tournée lue avant les verrous ; undefined si l'intervention n'existe pas. */
   idTourneeLue?: number | null;
   dateTournee?: string;
+  maintenant?: Date;
 } = {}) {
   // Suit l'ordre des appels : verrous, écritures, validation de la transaction, journal.
   const evenements: string[] = [];
@@ -194,7 +196,7 @@ function creerService({
     ),
   };
   const journal = { enregistrer: vi.fn(noter('journal', undefined)), historiqueDe: vi.fn() };
-  const horloge = { maintenant: () => MAINTENANT } as Horloge;
+  const horloge = { maintenant: () => maintenant } as Horloge;
   const service = new InterventionsService(
     depot as unknown as InterventionsRepository,
     horloge,
@@ -592,6 +594,30 @@ describe('InterventionsService : démarrage et fin sur le terrain (US17, RG03)',
     expect(operations.demarrer).not.toHaveBeenCalled();
   });
 
+  it('RG24 : le jour est celui de La Réunion, pas le jour UTC (mardi 2 h, encore lundi en UTC)', async () => {
+    const mardi2h = new Date('2026-12-08T02:00:00+04:00');
+    const { service, operations } = creerService({
+      etat: verrouillee('PLANIFIEE'),
+      dateTournee: '2026-12-08',
+      maintenant: mardi2h,
+    });
+
+    await service.demarrer(42, KEVIN);
+
+    expect(operations.demarrer).toHaveBeenCalledWith(42, mardi2h);
+  });
+
+  it('RG24 : à mardi 2 h à La Réunion, la tournée de lundi n’est plus celle du jour', async () => {
+    const { service } = creerService({
+      etat: verrouillee('PLANIFIEE'),
+      dateTournee: '2026-12-07',
+      maintenant: new Date('2026-12-08T02:00:00+04:00'),
+    });
+
+    await expect(service.demarrer(42, KEVIN)).rejects.toThrow(
+      'Cette intervention est prévue le 2026-12-07 : elle ne peut être démarrée que ce jour-là.',
+    );
+  });
   it('US17 : répond 400 (et non 403) pour une intervention à planifier, sans technicien', async () => {
     const { service } = creerService({ etat: verrouillee('A_PLANIFIER') });
 

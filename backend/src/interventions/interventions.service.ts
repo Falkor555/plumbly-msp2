@@ -212,6 +212,9 @@ export class InterventionsService {
    * Démarrer ou terminer. Seule l'intervention est verrouillée : sa tournée ne change que par un
    * retrait ou une annulation, qui verrouillent aussi l'intervention. Avec un seul verrou, aucun
    * interblocage n'est possible avec l'ordre technicien → tournée → intervention des autres.
+   * Un réordonnancement simultané de la tournée reste correct : il ne lit que les statuts et
+   * n'écrit que les rangs, quand le démarrage fait l'inverse ; le résultat est celui de
+   * « réordonner, puis démarrer ».
    * Ordre des refus : 404, puis 403 (pas le technicien de la tournée), puis 400 (transition).
    */
   private async changerStatutSurLeTerrain(

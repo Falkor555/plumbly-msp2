@@ -247,7 +247,8 @@ export class InterventionsController {
   @ApiResponse({ status: 200, schema: { example: EXEMPLE_INTERVENTION } })
   @ApiBadRequestResponse({
     description:
-      'Champ invalide ou inconnu ; intervention en cours, terminée ou annulée ; changement ' +
+      'Champ invalide ou inconnu ; aucun champ à modifier ; adresse ou type inexistant ; ' +
+      'adresse ou client archivé ; intervention en cours, terminée ou annulée ; changement ' +
       'd’adresse d’une intervention planifiée ; créneau hors de 7 h – 19 h (RG11)',
   })
   @ApiForbiddenResponse({ description: 'Technicien' })
@@ -406,6 +407,8 @@ export class InterventionsController {
       example: {
         ...EXEMPLE_INTERVENTION,
         statut: 'TERMINEE',
+        demarreeLe: '2026-11-25T08:03:12.000Z',
+        termineeLe: '2026-11-25T08:58:40.000Z',
         compteRendu: CORPS_COMPTE_RENDU.example,
       },
     },
