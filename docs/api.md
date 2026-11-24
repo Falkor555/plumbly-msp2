@@ -1172,6 +1172,18 @@ Réponse `200` : trois listes d'objets Intervention (section 6.3), chacune limit
 
 Une intervention urgente en attente depuis plus de 48 h apparaît dans les deux premières listes.
 
+### 6.9 Écarts de la mise en œuvre des clients et des techniciens (#15)
+
+Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'implémentation.
+
+| Route | Écart |
+| --- | --- |
+| `GET /clients` | `tri` accepte `nomAffiche` (par défaut), `-nomAffiche`, `creeLe` et `-creeLe` ; toute autre valeur répond `400` |
+| `GET /technicians` | `tri` accepte `nom` (par défaut) et `-nom` ; toute autre valeur répond `400` |
+| `PATCH /clients/:id`, `PATCH /clients/:id/addresses/:addressId` | `null` efface un champ facultatif (`prenomClient`, `emailClient`, `complement`, `infosAcces`, et `nomClient` ou `raisonSociale` si la règle selon le type de client le permet). Une chaîne vide, ou faite seulement d'espaces, répond `400` au lieu d'effacer le champ. `null` sur un champ obligatoire (`rue`, `ville`, `telephone`…) répond `400` |
+| `POST /technicians/:id/archive` | Une intervention `EN_COURS` bloque l'archivage (`409`) **quelle que soit sa date**, même d'un jour passé ; une intervention `PLANIFIEE` ne le bloque que si sa tournée a lieu aujourd'hui ou plus tard |
+| `DELETE /technicians/:id/unavailabilities/:unavailabilityId` | `400` seulement si l'indisponibilité est terminée (sa fin est passée) ; une indisponibilité en cours peut encore être supprimée |
+
 ## 7. Points ouverts
 
 - [x] **Routes d'Arnaud** : routes des sections 5.5 à 5.8 validées par le binôme.
