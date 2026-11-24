@@ -10,7 +10,9 @@
     "lint": "eslint frontend backend",
     "lint:fix": "eslint frontend backend --fix",
     "format": "prettier --write frontend backend",
-    "format:check": "prettier --check frontend backend"
+    "format:check": "prettier --check frontend backend",
+    "test": "npm run test --prefix backend && npm run test --prefix frontend",
+    "test:e2e": "npm run test:e2e --prefix backend"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

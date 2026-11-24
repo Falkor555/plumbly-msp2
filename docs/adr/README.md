@@ -13,9 +13,10 @@ Ce dossier contient les ADR (*Architecture Decision Records*) de Plumbly. Un ADR
 | [0005](0005-postgresql-prisma-et-sql-manuel.md) | PostgreSQL avec Prisma, et requêtes SQL écrites à la main | Acceptée | 2026-11-23 |
 | [0006](0006-mongodb-pour-le-journal-des-actions.md) | MongoDB pour le journal des actions | Acceptée | 2026-11-23 |
 | [0007](0007-authentification-jwt-et-argon2.md) | Authentification par JWT et hachage argon2 | Acceptée | 2026-11-23 |
-| [0008](0008-tests-unitaires-et-integration.md) | Tests unitaires et d'intégration avec Testcontainers | Acceptée | 2026-11-23 |
+| [0008](0008-tests-unitaires-et-integration.md) | Tests unitaires et d'intégration avec Testcontainers | Remplacée par 0011 | 2026-11-23 |
 | [0009](0009-docker-compose-environnement-de-dev.md) | Docker Compose pour l'environnement de développement | Acceptée | 2026-11-23 |
 | [0010](0010-flux-git-develop.md) | Flux Git : `develop` par défaut et une seule fusion finale vers `main` | Acceptée | 2026-11-23 |
+| [0011](0011-vitest-pour-tous-les-tests.md) | Vitest pour tous les tests, front-end et back-end | Acceptée | 2026-11-24 |
 
 ## Rédiger un nouvel ADR
 
