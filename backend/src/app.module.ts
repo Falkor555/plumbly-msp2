@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { ClientsModule } from './clients/clients.module.js';
+import { InterventionsModule } from './interventions/interventions.module.js';
 import { JournalModule } from './journal/journal.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ReportingModule } from './reporting/reporting.module.js';
@@ -18,6 +19,7 @@ import { TypesInterventionModule } from './types-intervention/types-intervention
     ClientsModule,
     TechniciensModule,
     TypesInterventionModule,
+    InterventionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
