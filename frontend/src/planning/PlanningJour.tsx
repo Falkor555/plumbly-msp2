@@ -13,7 +13,6 @@ import {
   minutesDansLaJournee,
 } from '../commun/dates';
 import { BoutonAffecter } from './BoutonAffecter';
-import { BadgesIntervention } from './BadgesIntervention';
 import { CelluleIndisponibilite } from './CelluleIndisponibilite';
 import type { CaseAAffecter } from './modele';
 import { indisponibilitesDuJour, tourneeDuJour } from './modele';
@@ -22,6 +21,7 @@ import {
   couleurTechnicien,
   creneau,
   LIBELLES_STATUT,
+  LIBELLES_URGENCE,
   nombreDInterventions,
   nomComplet,
 } from './presentation';
@@ -32,6 +32,12 @@ const HEURES = Array.from(
   { length: HEURE_FERMETURE - HEURE_OUVERTURE + 1 },
   (_, rang) => HEURE_OUVERTURE + rang,
 );
+
+/*
+ * Marge de chaque côté de la frise, la même dans l'en-tête et dans les lignes : les libellés
+ * 07:00 et 19:00 restent centrés sur leur trait sans passer sous la colonne fixe.
+ */
+const MARGE_FRISE = 'px-6';
 
 /** Position horizontale (en %) d'une plage horaire sur la frise 7 h – 19 h. */
 function placement(debutMin: number, finMin: number): { left: string; width: string } {
@@ -75,18 +81,18 @@ export function PlanningJour({ jour, techniciens, onAffecter, onOuvrirInterventi
             <span className="sticky left-0 z-20 border-r border-bordure bg-fond px-3 py-3">
               Technicien
             </span>
-            <div className="relative h-10" aria-hidden="true">
-              {HEURES.map((heure) => (
-                <span
-                  key={heure}
-                  className={`absolute top-3 whitespace-nowrap tabular-nums ${
-                    heure === HEURE_FERMETURE ? '-translate-x-full' : '-translate-x-1/2'
-                  }`}
-                  style={{ left: placement(heure * 60, heure * 60).left }}
-                >
-                  {libelleHeure(heure)}
-                </span>
-              ))}
+            <div className={MARGE_FRISE} aria-hidden="true">
+              <div className="relative h-10">
+                {HEURES.map((heure) => (
+                  <span
+                    key={heure}
+                    className="absolute top-3 -translate-x-1/2 whitespace-nowrap tabular-nums"
+                    style={{ left: placement(heure * 60, heure * 60).left }}
+                  >
+                    {libelleHeure(heure)}
+                  </span>
+                ))}
+              </div>
             </div>
             <span className="sr-only">Actions</span>
           </div>
@@ -133,45 +139,15 @@ function LigneJournee({ jour, technicien, onAffecter, onOuvrirIntervention }: Pr
           {interventions.length} interv.
         </span>
       </h3>
-      <div className="relative min-h-24">
-        {HEURES.map((heure) => (
-          <span
-            key={heure}
-            aria-hidden="true"
-            className="absolute inset-y-0 border-l border-gray-100"
-            style={{ left: placement(heure * 60, heure * 60).left }}
-          />
-        ))}
-        {indisponibilites.map((indisponibilite) => (
-          <div
-            key={indisponibilite.id}
-            className="absolute inset-y-2 overflow-hidden"
-            style={placementIndisponibilite(jour, indisponibilite)}
-          >
-            <CelluleIndisponibilite indisponibilite={indisponibilite} />
-          </div>
-        ))}
-        <ol aria-label={`Tournée de ${nomComplet(technicien)}`}>
-          {interventions.map(
-            (intervention) =>
-              intervention.debutPrevu &&
-              intervention.finPrevue && (
-                <BlocIntervention
-                  key={intervention.id}
-                  intervention={intervention}
-                  debut={intervention.debutPrevu}
-                  fin={intervention.finPrevue}
-                  couleur={couleur}
-                  onOuvrir={onOuvrirIntervention}
-                />
-              ),
-          )}
-        </ol>
-        {sansCreneau.length > 0 && (
-          <p className="absolute bottom-1 left-1 text-xs text-chantier">
-            {nombreDInterventions(sansCreneau.length)} sans horaire
-          </p>
-        )}
+      <div className={MARGE_FRISE}>
+        <FriseDuTechnicien
+          jour={jour}
+          technicien={technicien}
+          interventions={interventions}
+          indisponibilites={indisponibilites}
+          nombreSansCreneau={sansCreneau.length}
+          onOuvrirIntervention={onOuvrirIntervention}
+        />
       </div>
       <div className="flex items-center border-l border-bordure px-2">
         <BoutonAffecter
@@ -179,6 +155,68 @@ function LigneJournee({ jour, technicien, onAffecter, onOuvrirIntervention }: Pr
           onClick={() => onAffecter({ technicien, jour, tournee })}
         />
       </div>
+    </div>
+  );
+}
+
+interface PropsFrise {
+  jour: DateIso;
+  technicien: TechnicienDuPlanning;
+  interventions: Intervention[];
+  indisponibilites: Indisponibilite[];
+  nombreSansCreneau: number;
+  onOuvrirIntervention: (intervention: Intervention) => void;
+}
+
+function FriseDuTechnicien({
+  jour,
+  technicien,
+  interventions,
+  indisponibilites,
+  nombreSansCreneau,
+  onOuvrirIntervention,
+}: PropsFrise) {
+  const couleur = couleurTechnicien(technicien.couleurPlanning);
+  return (
+    <div className="relative h-full min-h-24">
+      {HEURES.map((heure) => (
+        <span
+          key={heure}
+          aria-hidden="true"
+          className="absolute inset-y-0 border-l border-gray-100"
+          style={{ left: placement(heure * 60, heure * 60).left }}
+        />
+      ))}
+      {indisponibilites.map((indisponibilite) => (
+        <div
+          key={indisponibilite.id}
+          className="absolute inset-y-2 overflow-hidden"
+          style={placementIndisponibilite(jour, indisponibilite)}
+        >
+          <CelluleIndisponibilite indisponibilite={indisponibilite} />
+        </div>
+      ))}
+      <ol aria-label={`Tournée de ${nomComplet(technicien)}`}>
+        {interventions.map(
+          (intervention) =>
+            intervention.debutPrevu &&
+            intervention.finPrevue && (
+              <BlocIntervention
+                key={intervention.id}
+                intervention={intervention}
+                debut={intervention.debutPrevu}
+                fin={intervention.finPrevue}
+                couleur={couleur}
+                onOuvrir={onOuvrirIntervention}
+              />
+            ),
+        )}
+      </ol>
+      {nombreSansCreneau > 0 && (
+        <p className="absolute bottom-1 left-1 text-xs text-chantier">
+          {nombreDInterventions(nombreSansCreneau)} sans horaire
+        </p>
+      )}
     </div>
   );
 }
@@ -194,6 +232,7 @@ interface PropsBloc {
 function BlocIntervention({ intervention, debut, fin, couleur, onOuvrir }: PropsBloc) {
   const position = placement(minutesDansLaJournee(debut), minutesDansLaJournee(fin));
   const { client, adresse, type } = intervention;
+  const urgente = intervention.urgence !== 'NORMALE';
   return (
     <li
       className={`absolute inset-y-2 rounded border border-bordure border-l-[3px] text-xs shadow-[0_1px_2px_rgb(31_41_55/0.06)] ${CLASSES_BLOC_STATUT[intervention.statut]}`}
@@ -204,8 +243,9 @@ function BlocIntervention({ intervention, debut, fin, couleur, onOuvrir }: Props
         type="button"
         aria-haspopup="dialog"
         onClick={() => onOuvrir(intervention)}
-        className="block size-full overflow-hidden rounded-r px-1.5 py-1 text-left hover:bg-black/3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle"
+        className={`relative block size-full overflow-hidden rounded-r py-1 pl-1.5 text-left hover:bg-black/3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle ${urgente ? 'pr-4' : 'pr-1.5'}`}
       >
+        {urgente && <RepereUrgence libelle={LIBELLES_URGENCE[intervention.urgence]} />}
         <span className="block font-semibold tabular-nums">
           <span className="sr-only">Étape {intervention.ordreTournee} : </span>
           {creneau(intervention)}
@@ -215,16 +255,28 @@ function BlocIntervention({ intervention, debut, fin, couleur, onOuvrir }: Props
           {client.nomAffiche}
           <span className="sr-only">, {adresse.ville}</span>
         </span>
-        {/* Faute de place sous xl, le badge n'est pas affiché mais reste lu par les lecteurs d'écran. */}
-        <span className="sr-only mt-0.5 xl:not-sr-only xl:block">
-          <BadgesIntervention intervention={intervention} />
+        {/*
+         * Les badges rogneraient dans un bloc étroit : le statut est porté par le style du bloc
+         * et l'urgence par le repère orange. Les lecteurs d'écran lisent le statut et le retard.
+         */}
+        <span className="sr-only">
+          , {LIBELLES_STATUT[intervention.statut]}
+          {intervention.enRetard && ', En retard'}
         </span>
       </button>
     </li>
   );
 }
 
-const STATUTS_LEGENDE: StatutIntervention[] = ['PLANIFIEE', 'EN_COURS', 'TERMINEE'];
+function RepereUrgence({ libelle }: { libelle: string }) {
+  return (
+    <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-chantier">
+      <span className="sr-only">{libelle}</span>
+    </span>
+  );
+}
+
+const STATUTS_LEGENDE: StatutIntervention[] = ['PLANIFIEE', 'EN_COURS', 'TERMINEE', 'ANNULEE'];
 
 function LegendeStatuts() {
   return (
@@ -238,9 +290,15 @@ function LegendeStatuts() {
             aria-hidden="true"
             className={`size-3 rounded-sm border border-bordure ${CLASSES_BLOC_STATUT[statut]}`}
           />
-          {LIBELLES_STATUT[statut]}
+          <span className={statut === 'ANNULEE' ? 'line-through' : undefined}>
+            {LIBELLES_STATUT[statut]}
+          </span>
         </li>
       ))}
+      <li className="flex items-center gap-1.5">
+        <span aria-hidden="true" className="size-2 rounded-full bg-chantier" />
+        Urgente ou prioritaire
+      </li>
     </ul>
   );
 }

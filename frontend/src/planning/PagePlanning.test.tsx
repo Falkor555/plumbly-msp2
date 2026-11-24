@@ -112,6 +112,26 @@ describe('planning du gestionnaire', () => {
     expect(requetesPlanning.at(-1)?.get('au')).toBe(LUNDI);
   });
 
+  it("annonce l'urgence et le statut des blocs de la vue jour, et les explique dans la légende", async () => {
+    const utilisateur = userEvent.setup();
+    render(<PagePlanning aujourdhui={LUNDI} />);
+    await screen.findByRole('rowheader', { name: /Jean Rivière/ });
+
+    await utilisateur.click(screen.getByRole('button', { name: 'jour' }));
+
+    const tourneeJean = await screen.findByRole('list', { name: 'Tournée de Jean Rivière' });
+    const [fuite, chauffeEau] = within(tourneeJean).getAllByRole('button');
+    expect(chauffeEau).toHaveAccessibleName(/^Urgente.*10:00–11:30.*En cours$/);
+    expect(fuite).toHaveAccessibleName(/08:00–09:00.*Planifiée$/);
+    expect(fuite).not.toHaveAccessibleName(/Urgente/);
+    const legende = screen.getByRole('list', { name: 'Légende des statuts' });
+    expect(
+      within(legende)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Planifiée', 'En cours', 'Terminée', 'Annulée', 'Urgente ou prioritaire']);
+  });
+
   it("ouvre la vue jour d'une date en cliquant sur l'en-tête de colonne", async () => {
     const utilisateur = userEvent.setup();
     render(<PagePlanning aujourdhui={LUNDI} />);
