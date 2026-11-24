@@ -1,11 +1,14 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOperation,
   ApiParam,
   ApiResponse,
   ApiServiceUnavailableResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Roles } from '../commun/autorisation/roles.decorator.js';
 import { RolesGuard } from '../commun/autorisation/roles.guard.js';
@@ -15,8 +18,9 @@ import { type EntreeHistoriqueApi, HistoriqueService } from './historique.servic
 /**
  * Historique des statuts d'une intervention (US19), lu dans le journal MongoDB.
  *
- * Porté par le module journal en attendant le module interventions (#17) : ce contrôleur ne
- * déclare que cette route ; #17 peut le garder tel quel ou déplacer la route dans le sien.
+ * Portée par le module journal plutôt que par le module interventions : elle ne lit que le
+ * journal et vérifie l'existence de l'intervention. Pas de conflit avec GET /interventions/:id,
+ * car « :id » ne capte pas de « / ».
  */
 @ApiTags('Interventions')
 @ApiBearerAuth()
@@ -49,6 +53,9 @@ export class HistoriqueController {
       ],
     },
   })
+  @ApiUnauthorizedResponse({ description: 'Non connecté' })
+  @ApiForbiddenResponse({ description: 'Technicien' })
+  @ApiNotFoundResponse({ description: 'Intervention inexistante' })
   @ApiServiceUnavailableResponse({ description: 'Journal des actions (MongoDB) injoignable' })
   historique(@Param('id') id: string): Promise<EntreeHistoriqueApi[]> {
     return this.service.historiqueDeLIntervention(lireIdentifiant(id));

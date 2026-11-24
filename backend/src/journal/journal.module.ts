@@ -12,7 +12,7 @@ import { JournalRepository } from './journal.repository.js';
 // injecte JournalDesActions sans réimporter ce module.
 @Global()
 @Module({
-  // Route d'historique des interventions, portée ici en attendant le module interventions (#17).
+  // Route d'historique des interventions : elle ne lit que le journal (voir historique.controller.ts).
   controllers: [HistoriqueController],
   providers: [
     ConnexionMongoDb,
