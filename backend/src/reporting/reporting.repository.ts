@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { FUSEAU_METIER } from '../commun/fuseau-metier.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
   EtapeTournee,
@@ -9,12 +10,6 @@ import type {
   TempsMoyenDeTraitement,
   TourneeDetaillee,
 } from './reporting.types.js';
-
-/**
- * Fuseau métier : une « journée » de l'entreprise est une journée à La Réunion, alors que
- * les instants sont stockés en UTC (timestamptz) et que la session Prisma tourne en UTC.
- */
-export const FUSEAU_METIER = 'Indian/Reunion';
 
 type EnteteTournee = Omit<TourneeDetaillee, 'etapes'>;
 
