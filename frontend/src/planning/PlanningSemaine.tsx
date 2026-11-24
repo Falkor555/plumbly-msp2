@@ -1,4 +1,4 @@
-import type { DateIso, TechnicienDuPlanning } from '../api/types';
+import type { DateIso, Intervention, TechnicienDuPlanning } from '../api/types';
 import { libelleJourCourt, libelleJourLong } from '../commun/dates';
 import { BoutonAffecter } from './BoutonAffecter';
 import { CarteIntervention } from './CarteIntervention';
@@ -7,11 +7,18 @@ import type { CaseAAffecter } from './modele';
 import { indisponibilitesDuJour, tourneeDuJour } from './modele';
 import { couleurTechnicien, nomComplet } from './presentation';
 
+/*
+ * La colonne des techniciens reste visible pendant le défilement horizontal. Avec
+ * border-collapse, la bordure d'une cellule fixe défile avec le tableau : une ombre la remplace.
+ */
+const COLONNE_FIXE = 'sticky left-0 z-10 shadow-[1px_0_0_var(--color-bordure)]';
+
 interface Props {
   jours: DateIso[];
   techniciens: TechnicienDuPlanning[];
   aujourdhui: DateIso;
   onAffecter: (caseAAffecter: CaseAAffecter) => void;
+  onOuvrirIntervention: (intervention: Intervention) => void;
   onOuvrirJour: (jour: DateIso) => void;
 }
 
@@ -21,17 +28,18 @@ export function PlanningSemaine({
   techniciens,
   aujourdhui,
   onAffecter,
+  onOuvrirIntervention,
   onOuvrirJour,
 }: Props) {
   return (
-    <div className="overflow-x-auto rounded border border-bordure bg-white">
+    <div className="overflow-x-auto rounded-lg border border-bordure bg-white">
       <table className="w-full min-w-[960px] table-fixed border-collapse text-left">
         <caption className="sr-only">Planning de la semaine par technicien</caption>
         <thead>
           <tr className="border-b border-bordure bg-fond">
             <th
               scope="col"
-              className="w-48 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gris-texte"
+              className={`w-48 bg-fond px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gris-texte ${COLONNE_FIXE}`}
             >
               Technicien
             </th>
@@ -60,6 +68,7 @@ export function PlanningSemaine({
               technicien={technicien}
               jours={jours}
               onAffecter={onAffecter}
+              onOuvrirIntervention={onOuvrirIntervention}
             />
           ))}
         </tbody>
@@ -72,13 +81,14 @@ interface PropsLigne {
   technicien: TechnicienDuPlanning;
   jours: DateIso[];
   onAffecter: (caseAAffecter: CaseAAffecter) => void;
+  onOuvrirIntervention: (intervention: Intervention) => void;
 }
 
-function LigneTechnicien({ technicien, jours, onAffecter }: PropsLigne) {
+function LigneTechnicien({ technicien, jours, onAffecter, onOuvrirIntervention }: PropsLigne) {
   const couleur = couleurTechnicien(technicien.couleurPlanning);
   return (
     <tr className="border-b border-bordure align-top last:border-b-0">
-      <th scope="row" className="px-3 py-2 text-sm font-semibold">
+      <th scope="row" className={`bg-white px-3 py-2 text-sm font-semibold ${COLONNE_FIXE}`}>
         <span className="flex items-center gap-2">
           <span
             aria-hidden="true"
@@ -104,6 +114,7 @@ function LigneTechnicien({ technicien, jours, onAffecter }: PropsLigne) {
                 key={intervention.id}
                 intervention={intervention}
                 couleur={couleur}
+                onOuvrir={onOuvrirIntervention}
               />
             ))}
             <BoutonAffecter

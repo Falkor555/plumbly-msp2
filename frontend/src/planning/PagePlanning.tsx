@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
 import { tourneesApi } from '../api/tournees.api';
-import type { DateIso, Planning } from '../api/types';
+import type { DateIso, Intervention, Planning } from '../api/types';
 import { jourMetier, joursOuvres, libelleJourChiffres, libelleJourLong } from '../commun/dates';
 import { useChargement } from '../commun/useChargement';
 import { BarrePlanning } from './BarrePlanning';
 import { FenetreAffectation } from './FenetreAffectation';
+import { FenetreDetailIntervention } from './FenetreDetailIntervention';
 import type { CaseAAffecter } from './modele';
 import { deplacer, periodeAffichee, type Vue } from './navigation';
 import { PlanningJour } from './PlanningJour';
@@ -26,6 +27,8 @@ export function PagePlanning({ aujourdhui = jourMetier(new Date()) }: Props) {
   const [jour, setJour] = useState<DateIso>(aujourdhui);
   const [technicienId, setTechnicienId] = useState<number | null>(null);
   const [caseAAffecter, setCaseAAffecter] = useState<CaseAAffecter | null>(null);
+  const [interventionDetaillee, setInterventionDetaillee] = useState<Intervention | null>(null);
+  const fermerDetail = useCallback(() => setInterventionDetaillee(null), []);
 
   const { du, au } = periodeAffichee(vue, jour);
   const chargerPlanning = useCallback(
@@ -81,7 +84,9 @@ export function PagePlanning({ aujourdhui = jourMetier(new Date()) }: Props) {
         </div>
       )}
       {etat.statut === 'pret' && techniciens.length === 0 && (
-        <p className="text-sm text-gris-texte">Aucun technicien actif.</p>
+        <p className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
+          Aucun technicien actif.
+        </p>
       )}
       {etat.statut === 'pret' &&
         techniciens.length > 0 &&
@@ -91,14 +96,24 @@ export function PagePlanning({ aujourdhui = jourMetier(new Date()) }: Props) {
             techniciens={techniciensAffiches}
             aujourdhui={aujourdhui}
             onAffecter={setCaseAAffecter}
+            onOuvrirIntervention={setInterventionDetaillee}
             onOuvrirJour={(jourChoisi) => {
               setJour(jourChoisi);
               setVue('jour');
             }}
           />
         ) : (
-          <PlanningJour jour={du} techniciens={techniciensAffiches} onAffecter={setCaseAAffecter} />
+          <PlanningJour
+            jour={du}
+            techniciens={techniciensAffiches}
+            onAffecter={setCaseAAffecter}
+            onOuvrirIntervention={setInterventionDetaillee}
+          />
         ))}
+
+      {interventionDetaillee && (
+        <FenetreDetailIntervention intervention={interventionDetaillee} onFermer={fermerDetail} />
+      )}
 
       {caseAAffecter && (
         <FenetreAffectation caseAAffecter={caseAAffecter} onFermer={fermerAffectation} />

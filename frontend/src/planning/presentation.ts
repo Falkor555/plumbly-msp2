@@ -18,6 +18,18 @@ export const CLASSES_STATUT: Record<StatutIntervention, string> = {
   ANNULEE: 'bg-gray-100 text-gris-texte ring-bordure line-through',
 };
 
+/**
+ * Mise en avant d'une intervention selon son statut, lisible même quand le badge est masqué
+ * faute de place. La bordure gauche reste réservée à la couleur du technicien.
+ */
+export const CLASSES_BLOC_STATUT: Record<StatutIntervention, string> = {
+  A_PLANIFIER: 'bg-white',
+  PLANIFIEE: 'bg-white',
+  EN_COURS: 'bg-white ring-2 ring-sarcelle',
+  TERMINEE: 'bg-gray-50 text-gris-texte',
+  ANNULEE: 'bg-gray-50 text-gris-texte line-through',
+};
+
 export const LIBELLES_URGENCE: Record<Urgence, string> = {
   NORMALE: 'Normale',
   PRIORITAIRE: 'Prioritaire',
@@ -38,6 +50,11 @@ export function couleurTechnicien(couleur: string): string {
 export function creneau(intervention: Pick<Intervention, 'debutPrevu' | 'finPrevue'>): string {
   if (!intervention.debutPrevu || !intervention.finPrevue) return 'Horaire à définir';
   return `${heureMetier(intervention.debutPrevu)}–${heureMetier(intervention.finPrevue)}`;
+}
+
+/** « 1 intervention », « 3 interventions ». */
+export function nombreDInterventions(nombre: number): string {
+  return `${nombre} intervention${nombre > 1 ? 's' : ''}`;
 }
 
 export function nomComplet(personne: { prenom: string; nom: string }): string {

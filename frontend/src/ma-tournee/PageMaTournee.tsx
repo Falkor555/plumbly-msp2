@@ -1,15 +1,20 @@
 import { useCallback } from 'react';
 import { tourneesApi } from '../api/tournees.api';
-import type { Intervention, Tournee } from '../api/types';
+import type { Intervention, StatutIntervention, Tournee } from '../api/types';
 import { jourMetier, libelleJourLong } from '../commun/dates';
+import { lienItineraire, lienTelephone } from '../commun/liens';
 import { useChargement } from '../commun/useChargement';
 import { BadgesIntervention } from '../planning/BadgesIntervention';
-import { creneau } from '../planning/presentation';
+import { creneau, nombreDInterventions } from '../planning/presentation';
 
-/** Garde les chiffres et le « + » : un numéro saisi « 0692 12 34 56 » donne un lien tel: valide. */
-function lienTelephone(telephone: string): string {
-  return `tel:${telephone.replace(/[^+\d]/g, '')}`;
-}
+/** L'étape en cours est mise en avant ; celles qui sont finies passent au second plan. */
+const CLASSES_ETAPE: Record<StatutIntervention, string> = {
+  A_PLANIFIER: 'bg-white',
+  PLANIFIEE: 'bg-white',
+  EN_COURS: 'border-l-[3px] border-l-sarcelle bg-white',
+  TERMINEE: 'bg-gray-50 text-gris-texte',
+  ANNULEE: 'bg-gray-50 text-gris-texte',
+};
 
 /** US24 : la tournée du jour du technicien connecté, pensée pour le téléphone. */
 export function PageMaTournee() {
@@ -43,7 +48,7 @@ export function PageMaTournee() {
         </div>
       )}
       {etat.statut === 'pret' && etat.donnees === null && (
-        <p className="rounded border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
+        <p className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
           Vous n'avez pas de tournée aujourd'hui.
         </p>
       )}
@@ -52,7 +57,7 @@ export function PageMaTournee() {
           <p className="mb-3 text-sm font-medium">
             {etat.donnees.interventions.length === 0
               ? 'Aucune intervention prévue pour le moment.'
-              : `${etat.donnees.interventions.length} intervention(s), dans l'ordre de passage`}
+              : `${nombreDInterventions(etat.donnees.interventions.length)}, dans l'ordre de passage`}
           </p>
           <ol className="space-y-3">
             {etat.donnees.interventions.map((intervention, rang) => (
@@ -68,7 +73,7 @@ export function PageMaTournee() {
 function EtapeTournee({ intervention, numero }: { intervention: Intervention; numero: number }) {
   const { adresse, client } = intervention;
   return (
-    <li className="rounded border border-bordure bg-white">
+    <li className={`rounded-lg border border-bordure ${CLASSES_ETAPE[intervention.statut]}`}>
       <div className="flex items-start gap-3 border-b border-bordure px-4 py-3">
         <span
           aria-hidden="true"
@@ -81,9 +86,8 @@ function EtapeTournee({ intervention, numero }: { intervention: Intervention; nu
             <span className="sr-only">Étape {numero} : </span>
             {creneau(intervention)}
           </p>
-          <p className="text-sm text-gris-texte">
-            {intervention.type.libelle} · {intervention.dureeEstimeeMin} min
-          </p>
+          <p className="font-semibold">{intervention.type.libelle}</p>
+          <p className="text-sm text-gris-texte">{intervention.dureeEstimeeMin} min</p>
           <div className="mt-1">
             <BadgesIntervention intervention={intervention} />
           </div>
@@ -91,13 +95,24 @@ function EtapeTournee({ intervention, numero }: { intervention: Intervention; nu
       </div>
       <div className="space-y-2 px-4 py-3 text-sm">
         <p className="font-semibold">{client.nomAffiche}</p>
-        <address className="not-italic">
-          {adresse.rue}
-          {adresse.complement && <span className="block">{adresse.complement}</span>}
-          <span className="block">
-            {adresse.codePostal} {adresse.ville}
+        <a
+          href={lienItineraire(adresse)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-start justify-between gap-3 rounded border border-bordure px-3 py-2 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle"
+        >
+          <address className="not-italic">
+            {adresse.rue}
+            {adresse.complement && <span className="block">{adresse.complement}</span>}
+            <span className="block">
+              {adresse.codePostal} {adresse.ville}
+            </span>
+          </address>
+          <span className="shrink-0 font-semibold text-sarcelle-profonde underline">
+            Itinéraire
+            <span className="sr-only"> (nouvel onglet)</span>
           </span>
-        </address>
+        </a>
         {adresse.infosAcces && (
           <p className="rounded bg-fond px-3 py-2 text-gris-texte">
             <span className="font-semibold text-anthracite">Accès : </span>

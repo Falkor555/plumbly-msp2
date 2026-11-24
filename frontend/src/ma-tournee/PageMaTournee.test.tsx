@@ -67,6 +67,7 @@ describe('ma tournée du jour (technicien)', () => {
 
     const etapes = within(await screen.findByRole('list')).getAllByRole('listitem');
     expect(etapes).toHaveLength(2);
+    expect(screen.getByText("2 interventions, dans l'ordre de passage")).toBeInTheDocument();
     expect(etapes[0]).toHaveTextContent('Étape 1 : 08:00–09:00');
     expect(etapes[0]).toHaveTextContent('Mme Hoarau');
     expect(etapes[1]).toHaveTextContent('Étape 2 : 10:00–11:30');
@@ -83,6 +84,22 @@ describe('ma tournée du jour (technicien)', () => {
 
     const liens = await screen.findAllByRole('link', { name: /Appeler le client/ });
     expect(liens[0]).toHaveAttribute('href', 'tel:0692123456');
+  });
+
+  it("ouvre l'itinéraire vers l'adresse de chaque étape, encodée, dans un nouvel onglet", async () => {
+    serveurApi.use(http.get(urlApi('/tours/me/today'), () => HttpResponse.json(tourneeDuJour())));
+
+    render(<PageMaTournee />);
+
+    const etapes = within(await screen.findByRole('list')).getAllByRole('listitem');
+    const itineraire = within(etapes[1]).getByRole('link', { name: /Itinéraire/ });
+    expect(itineraire).toHaveTextContent('12 rue de Paris');
+    expect(itineraire).toHaveAttribute(
+      'href',
+      'https://www.google.com/maps/dir/?api=1&destination=12%20rue%20de%20Paris%2C%2097438%20Sainte-Marie',
+    );
+    expect(itineraire).toHaveAttribute('target', '_blank');
+    expect(itineraire).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
   it("indique qu'il n'y a pas de tournée quand l'API répond 204", async () => {
