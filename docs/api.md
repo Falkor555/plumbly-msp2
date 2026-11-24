@@ -1181,4 +1181,4 @@ Une intervention urgente en attente depuis plus de 48 h apparaît dans les deux 
 - [ ] **E-mail de réinitialisation** (US04) : ajouter Mailpit au `docker-compose.yml` pour capturer les e-mails en développement (card #7).
 - [ ] **Durée d'une intervention** : limites de 15 à 720 minutes à confirmer.
 - [ ] **Démarrage d'une intervention** : uniquement le jour de sa tournée ; à ajouter aux règles de gestion si la règle est retenue.
-- [ ] **Swagger** : configurer la documentation sur `/api/docs` après l'initialisation de NestJS (card #8).
+- [x] **Swagger** : documentation interactive sur `/api/docs`, désactivée en production. Les corps de requête sont décrits à la main (`@ApiBody`) tant que la validation n'utilise pas de classes DTO.
