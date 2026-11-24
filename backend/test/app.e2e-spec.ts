@@ -13,11 +13,13 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    // Même préfixe que main.ts : le test appelle les routes telles que le front les appelle.
+    app.setGlobalPrefix('api/v1');
     await app.init();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer()).get('/').expect(200).expect('Hello World!');
+  it('GET /api/v1 répond 200 avec le message de bienvenue', () => {
+    return request(app.getHttpServer()).get('/api/v1').expect(200).expect('Hello World!');
   });
 
   afterEach(async () => {

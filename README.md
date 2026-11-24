@@ -48,15 +48,15 @@ Certaines requêtes sont toutefois **écrites directement en SQL**, avec `$query
 
 | Type de test | Front-end | Back-end |
 | --- | --- | --- |
-| Unitaires | [Vitest](https://vitest.dev/) + [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) | [Jest](https://jestjs.io/) (intégré par défaut à NestJS) |
-| Intégration | Vitest + [MSW](https://mswjs.io/) (simulation de l'API) | Jest + [Supertest](https://github.com/ladjs/supertest) + [Testcontainers](https://testcontainers.com/) (PostgreSQL réel dans Docker) |
+| Unitaires | [Vitest](https://vitest.dev/) + [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) | Vitest (configuré par défaut par NestJS 12) |
+| Intégration | Vitest + [MSW](https://mswjs.io/) (simulation de l'API) | Vitest + [Supertest](https://github.com/ladjs/supertest) + [Testcontainers](https://testcontainers.com/) (PostgreSQL réel dans Docker) |
 
 **Pourquoi ces choix :**
 
-- **Vitest** reprend la configuration de Vite, s'exécute très vite et garde une API compatible avec Jest.
+- **Vitest** reprend la configuration de Vite, s'exécute très vite et sert des deux côtés : une seule syntaxe de test dans tout le dépôt (ADR 0011).
 - **React Testing Library** teste les composants comme l'utilisateur s'en sert (textes, boutons, formulaires), pas leurs détails d'implémentation.
 - **MSW** intercepte les appels réseau, ce qui permet de tester le front sans lancer le back-end.
-- **Jest** est déjà configuré dans tout projet NestJS. Il fonctionne avec le module de test de Nest (`@nestjs/testing`).
+- **`@nestjs/testing`** construit un module Nest de test, où l'on remplace les repositories par des simulations.
 - **Supertest** envoie de vraies requêtes HTTP à l'application NestJS pour vérifier les routes de bout en bout côté API.
 - **Testcontainers** lance une vraie base PostgreSQL éphémère pendant les tests d'intégration. On teste donc sur le même moteur que l'application, et non sur une base simulée.
 
@@ -113,14 +113,16 @@ npm run format         # applique la mise en forme
 
 ### Lancer les tests
 
+Une fois les dépendances installées (`npm install` à la racine, dans `backend/` et dans `frontend/`), depuis la racine du dépôt :
+
 ```bash
-# Back-end
-cd backend
-npm run test        # tests unitaires
-npm run test:e2e    # tests d'intégration
+npm run test        # tests unitaires du back-end puis du front-end
+npm run test:e2e    # tests d'intégration de l'API (Docker doit tourner)
 ```
 
-Les tests du front-end seront ajoutés avec l'environnement de test (card #11).
+Chaque dossier a aussi ses propres scripts (`npm run test`, `npm run test:watch`, `npm run test:cov` dans `backend/`).
+
+Les tests d'intégration démarrent eux-mêmes une base PostgreSQL 17 jetable avec Testcontainers : Docker Desktop doit être lancé, mais `docker compose up` n'est pas nécessaire. Le premier lancement télécharge l'image, les suivants prennent une dizaine de secondes.
 
 ## Auteurs
 
