@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+package-lock.json
+backend/src/generated
+# Généré par « npx msw init » : à remplacer, jamais à reformater.
+frontend/public/mockServiceWorker.js
+# La documentation (Markdown) est mise en forme à la main.
+*.md

@@ -46,6 +46,8 @@ playwright/.cache/
 
 # ---------- Prisma ----------
 # Les migrations (prisma/migrations) sont versionnées, pas les bases locales
+# ni le client généré par `prisma generate` (recréé par les scripts npm)
+backend/src/generated/
 *.db
 *.db-journal
 *.sqlite

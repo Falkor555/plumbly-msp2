@@ -1,0 +1,28 @@
+{
+  "name": "plumbly",
+  "private": true,
+  "description": "Outillage commun du monorepo Plumbly : ESLint et Prettier pour frontend/ et backend/",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint": "eslint frontend backend",
+    "lint:fix": "eslint frontend backend --fix",
+    "format": "prettier --write frontend backend",
+    "format:check": "prettier --check frontend backend",
+    "test": "npm run test --prefix backend && npm run test --prefix frontend",
+    "test:e2e": "npm run test:e2e --prefix backend"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.15.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.8",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "typescript": "~6.0",
+    "typescript-eslint": "^8.74.0"
+  }
+}

@@ -459,9 +459,9 @@ Les tests unitaires répondent aux attendus du CCP 1 (composants métier testés
 
 | Niveau | Ce qui est testé | Outils | Objectif |
 | --- | --- | --- | --- |
-| Unitaire back | Services et règles de gestion (statuts, conflits de planning, droits) | Jest, `@nestjs/testing`, mocks des repositories | 80 % de couverture sur les services |
+| Unitaire back | Services et règles de gestion (statuts, conflits de planning, droits) | Vitest, `@nestjs/testing`, mocks des repositories | 80 % de couverture sur les services |
 | Unitaire front | Composants, formulaires, hooks | Vitest, React Testing Library | Composants critiques couverts |
-| Intégration back | Routes de l'API de bout en bout, avec une vraie base | Jest, Supertest, Testcontainers (PostgreSQL) | Chaque user story Must couverte |
+| Intégration back | Routes de l'API de bout en bout, avec une vraie base | Vitest, Supertest, Testcontainers (PostgreSQL) | Chaque user story Must couverte |
 | Intégration front | Écrans branchés sur une API simulée | Vitest, MSW | Parcours principaux |
 | Sécurité | Accès refusés, injections, entrées invalides | Tests d'intégration dédiés, `npm audit` | Aucune faille connue critique |
 

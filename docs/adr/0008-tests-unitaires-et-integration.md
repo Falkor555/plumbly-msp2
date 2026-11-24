@@ -1,6 +1,6 @@
 # 0008. Tests unitaires et d'intégration avec Testcontainers
 
-- **Statut** : Acceptée
+- **Statut** : Remplacée par [0011](0011-vitest-pour-tous-les-tests.md)
 - **Date** : 2026-11-23
 - **Décideurs** : Loïc BOTSY, Arnaud BIDEL
 

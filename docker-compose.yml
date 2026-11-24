@@ -1,0 +1,89 @@
+# Environnement de développement de Plumbly (ADR 0009).
+# Prérequis : copier .env.example en .env et renseigner les mots de passe.
+# Lancement : docker compose up
+
+name: plumbly
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER manquant dans .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB manquant dans .env}
+      TZ: ${TZ:-Indian/Reunion}
+      PGTZ: ${TZ:-Indian/Reunion}
+    ports:
+      # Lié à 127.0.0.1 : la base n'est pas exposée au reste du réseau local.
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?MONGO_USER manquant dans .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD manquant dans .env}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:?MONGO_DB manquant dans .env}
+      TZ: ${TZ:-Indian/Reunion}
+    ports:
+      - '127.0.0.1:${MONGO_PORT:-27017}:27017'
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      TZ: ${TZ:-Indian/Reunion}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      MONGODB_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/${MONGO_DB}?authSource=admin
+      # Utilisé seulement par `docker compose exec backend npx prisma db seed`.
+      SEED_MOT_DE_PASSE: ${SEED_MOT_DE_PASSE:-}
+      # Un dossier monté depuis Windows ne transmet pas les événements fichiers au conteneur :
+      # le compilateur TypeScript surveille donc les fichiers par polling.
+      TSC_WATCHFILE: DynamicPriorityPolling
+      TSC_WATCHDIRECTORY: DynamicPriorityPolling
+    ports:
+      - '127.0.0.1:${API_PORT:-3000}:3000'
+    volumes:
+      - ./backend:/app
+      # Volume anonyme : garde le node_modules Linux de l'image au lieu de celui du poste.
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Indian/Reunion}
+      CHOKIDAR_USEPOLLING: 'true'
+      VITE_API_PROXY_TARGET: http://backend:3000
+    ports:
+      - '127.0.0.1:${FRONT_PORT:-5173}:5173'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  mongodata:

@@ -1,0 +1,12 @@
+# Fins de ligne LF pour tout le dépôt, quel que soit le réglage Git du poste (Windows compris) :
+# les fichiers sont exécutés dans des conteneurs Linux.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
