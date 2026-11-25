@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import cookieParser from 'cookie-parser';
+import { configurerApplication } from '../src/configurer-application.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
@@ -43,9 +43,8 @@ async function demarrer(limiterLesTentatives: boolean): Promise<INestApplication
   }
   const module = await constructeur.compile();
   const app = module.createNestApplication<INestApplication<App>>();
-  // Mêmes réglages que main.ts : lecture des cookies et préfixe des routes.
-  app.use(cookieParser());
-  app.setGlobalPrefix('api/v1');
+  // Mêmes réglages que main.ts : Helmet, lecture des cookies et préfixe des routes.
+  configurerApplication(app);
   await app.init();
   return app;
 }
@@ -111,6 +110,17 @@ describe('authentification (e2e)', () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  describe('en-têtes de sécurité (Helmet)', () => {
+    it('ne révèlent pas la technologie du serveur et protègent le navigateur', async () => {
+      const reponse = await api().get('/api/v1').expect(200);
+
+      expect(reponse.headers['x-powered-by']).toBeUndefined();
+      expect(reponse.headers['x-content-type-options']).toBe('nosniff');
+      expect(reponse.headers['x-frame-options']).toBe('SAMEORIGIN');
+      expect(reponse.headers['content-security-policy']).toContain("default-src 'self'");
+    });
   });
 
   describe('POST /auth/login (US01)', () => {

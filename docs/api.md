@@ -190,7 +190,7 @@ Chaque route est rattachée à une user story ([user-stories.md](user-stories.md
 
 ## 6. Détail des routes
 
-Pour chaque route : les données envoyées (DTO) et leurs règles de validation, la réponse en cas de succès, les erreurs possibles et les effets. Les DTO sont implémentés avec `class-validator` ; les erreurs listées servent de base aux tests d'intégration (card #12).
+Pour chaque route : les données envoyées (DTO) et leurs règles de validation, la réponse en cas de succès, les erreurs possibles et les effets. La validation utilise les fonctions communes de `backend/src/commun/validation.ts` (voir les points ouverts) ; les erreurs listées servent de base aux tests d'intégration (card #12).
 
 **Politique de mot de passe** (cahier des charges, 6.1) : 12 caractères minimum, avec au moins une majuscule, une minuscule, un chiffre et un caractère spécial.
 
@@ -1194,3 +1194,8 @@ Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'i
 - [ ] **Durée d'une intervention** : limites de 15 à 720 minutes à confirmer.
 - [ ] **Démarrage d'une intervention** : uniquement le jour de sa tournée ; à ajouter aux règles de gestion si la règle est retenue.
 - [x] **Swagger** : documentation interactive sur `/api/docs`, désactivée en production. Les corps de requête sont décrits à la main (`@ApiBody`) tant que la validation n'utilise pas de classes DTO.
+- [x] **Authentification** (card #13) : connexion, rafraîchissement avec rotation, déconnexion, profil, changement de mot de passe et gestion des comptes ; en-têtes de sécurité posés par Helmet.
+- [ ] **Validation par classes DTO** : comme dans tous les modules, la validation est écrite à la main (`commun/validation.ts`) au lieu de `class-validator`, avec les mêmes règles et le même format d'erreur. Passer aux classes DTO pour tous les modules à la fois permettrait à Swagger de générer les schémas lui-même.
+- [ ] **Journal des connexions et des comptes** : `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE` et `COMPTE_DESACTIVE` à enregistrer avec la card #27.
+- [ ] **Mot de passe oublié** (US04, Should) : `POST /auth/forgot-password` et `POST /auth/reset-password` ne sont pas développées ; elles dépendent de Mailpit.
+- [ ] **Mot de passe provisoire** : `mdpAChanger` n'est imposé que par le front ; l'API pourrait refuser les autres routes tant qu'il vaut `true`.

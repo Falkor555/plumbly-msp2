@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
-import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
+import { configurerApplication } from './configurer-application.js';
 import { configurerSwagger } from './configurer-swagger.js';
 
 const PORT_PAR_DEFAUT = 3000;
@@ -14,9 +14,8 @@ if (existsSync('.env')) {
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
-  // Lecture des cookies : le jeton de rafraîchissement arrive dans le cookie refresh_token.
-  app.use(cookieParser());
-  app.setGlobalPrefix('api/v1');
+  // Helmet, cookies et préfixe : les mêmes réglages que dans les tests d'intégration.
+  configurerApplication(app);
   // Documentation interactive sur /api/docs, jamais exposée en production :
   // elle donnerait la carte complète de l'API, routes d'administration comprises.
   if (process.env.NODE_ENV !== 'production') {
