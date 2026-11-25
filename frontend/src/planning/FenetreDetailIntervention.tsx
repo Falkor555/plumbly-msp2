@@ -23,12 +23,7 @@ export function FenetreDetailIntervention({ intervention, onFermer }: Props) {
   const { client, adresse } = intervention;
 
   return (
-    <Fenetre
-      idTitre={idTitre}
-      onFermer={onFermer}
-      focusInitial={boutonFermer}
-      className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto"
-    >
+    <Fenetre idTitre={idTitre} onFermer={onFermer} focusInitial={boutonFermer}>
       <header className="flex items-start gap-3 border-b border-bordure px-6 py-4">
         <div className="min-w-0 flex-1">
           <h2 id={idTitre} className="text-lg font-semibold">

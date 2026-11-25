@@ -4,12 +4,14 @@ import type { FinDIntervention, Intervention } from '../api/types';
 import { heureMetier } from '../commun/dates';
 import { Fenetre } from '../commun/Fenetre';
 import { messageErreur } from '../commun/messageErreur';
+import { statutAtteintMalgreLEchec } from '../commun/statutApresEchec';
 import {
   estTropLourde,
   LONGUEUR_COMPTE_RENDU,
   LONGUEUR_NOM_SIGNATAIRE,
   MESSAGE_IMAGE_TROP_LOURDE,
   raisonsDeBlocage,
+  tronquerSansCouper,
 } from './regles';
 import { type PoigneeZoneSignature, ZoneSignature } from './ZoneSignature';
 
@@ -22,10 +24,15 @@ const nombre = new Intl.NumberFormat('fr-FR');
 
 type Envoi = 'avec signature' | 'sans signature';
 
+/**
+ * terminee : clôture enregistrée ; incertaine : fermée après une erreur, l'état de l'intervention
+ * est à relire ; abandonnee : fermée sans rien envoyer.
+ */
+export type IssueCloture = 'terminee' | 'incertaine' | 'abandonnee';
+
 interface Props {
   intervention: Intervention;
-  /** `terminee` : l'intervention a été clôturée, la tournée doit être relue. */
-  onFermer: (terminee: boolean) => void;
+  onFermer: (issue: IssueCloture) => void;
 }
 
 /**
@@ -44,13 +51,16 @@ export function FenetreCloture({ intervention, onFermer }: Props) {
   const idRaisons = useId();
   const boutonFermer = useRef<HTMLButtonElement>(null);
   const zone = useRef<PoigneeZoneSignature>(null);
-  const nomPropose = intervention.client.nomAffiche.slice(0, LONGUEUR_NOM_SIGNATAIRE);
+  const nomPropose = tronquerSansCouper(intervention.client.nomAffiche, LONGUEUR_NOM_SIGNATAIRE);
 
   const [compteRendu, setCompteRendu] = useState('');
   const [nomSignataire, setNomSignataire] = useState(nomPropose);
   const [zoneDessinee, setZoneDessinee] = useState(false);
   const [envoi, setEnvoi] = useState<Envoi | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+  // Après une erreur, l'état de l'intervention est incertain : la tournée est relue à la fermeture.
+  const [erreurSurvenue, setErreurSurvenue] = useState(false);
+  const fermer = () => onFermer(erreurSurvenue ? 'incertaine' : 'abandonnee');
 
   const raisons = raisonsDeBlocage({ compteRendu, nomSignataire, zoneVide: !zoneDessinee });
   const saisieEnCours = zoneDessinee || compteRendu.trim() !== '' || nomSignataire !== nomPropose;
@@ -61,9 +71,14 @@ export function FenetreCloture({ intervention, onFermer }: Props) {
     setEnvoi(type);
     try {
       await interventionsApi.terminer(intervention.id, fin);
-      onFermer(true);
+      onFermer('terminee');
     } catch (cause) {
+      if (await statutAtteintMalgreLEchec(intervention.id, 'TERMINEE')) {
+        onFermer('terminee');
+        return;
+      }
       setErreur(messageErreur(cause, 'Clôture impossible'));
+      setErreurSurvenue(true);
       setEnvoi(null);
     }
   }
@@ -88,10 +103,9 @@ export function FenetreCloture({ intervention, onFermer }: Props) {
   return (
     <Fenetre
       idTitre={idTitre}
-      onFermer={() => onFermer(false)}
+      onFermer={fermer}
       focusInitial={boutonFermer}
       fermableParEchap={envoi === null && !saisieEnCours}
-      className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto"
     >
       <header className="flex items-start gap-3 border-b border-bordure px-4 py-4 sm:px-6">
         <div className="min-w-0 flex-1">
@@ -103,7 +117,7 @@ export function FenetreCloture({ intervention, onFermer }: Props) {
         <button
           ref={boutonFermer}
           type="button"
-          onClick={() => onFermer(false)}
+          onClick={fermer}
           disabled={envoi !== null}
           className="h-11 rounded border border-gray-300 bg-white px-3 text-sm font-semibold hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -174,7 +188,7 @@ export function FenetreCloture({ intervention, onFermer }: Props) {
         {erreur && (
           <p
             role="alert"
-            className="rounded border border-erreur/30 bg-red-50 px-3 py-2 text-sm whitespace-pre-line text-erreur"
+            className="rounded border border-erreur/30 bg-red-50 px-3 py-2 text-sm whitespace-pre-line text-red-700"
           >
             {erreur}
           </p>

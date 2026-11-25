@@ -79,6 +79,34 @@ describe('zone de signature (US33)', () => {
     expect(pinceau.lineTo).toHaveBeenCalledWith(40, 20);
   });
 
+  it('termine le trait sur pointerup : un déplacement ensuite ne trace plus rien', () => {
+    const { pinceau } = simulerCanvas();
+    const { zone } = afficher();
+
+    fireEvent.pointerDown(zone, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(zone, { pointerId: 1 });
+    fireEvent.pointerMove(zone, { pointerId: 1, clientX: 50, clientY: 50 });
+
+    expect(pinceau.lineTo).not.toHaveBeenCalled();
+  });
+
+  it('accepte une signature en plusieurs traits, chacun avec son propre pointeur', () => {
+    const { pinceau } = simulerCanvas();
+    const { zone } = afficher();
+
+    fireEvent.pointerDown(zone, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(zone, { pointerId: 1, clientX: 20, clientY: 10 });
+    fireEvent.pointerUp(zone, { pointerId: 1 });
+    fireEvent.pointerDown(zone, { pointerId: 2, clientX: 100, clientY: 50 });
+    fireEvent.pointerMove(zone, { pointerId: 2, clientX: 110, clientY: 60 });
+    fireEvent.pointerUp(zone, { pointerId: 2 });
+
+    expect(pinceau.arc).toHaveBeenCalledTimes(2);
+    expect(pinceau.lineTo).toHaveBeenNthCalledWith(1, 40, 20);
+    expect(pinceau.moveTo).toHaveBeenNthCalledWith(2, 200, 100);
+    expect(pinceau.lineTo).toHaveBeenNthCalledWith(2, 220, 120);
+  });
+
   it('termine le trait sur pointercancel (geste repris par le système)', () => {
     const { pinceau } = simulerCanvas();
     const { zone } = afficher();

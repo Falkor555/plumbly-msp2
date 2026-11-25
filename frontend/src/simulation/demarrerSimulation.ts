@@ -36,7 +36,9 @@ export async function demarrerSimulation(): Promise<void> {
  */
 function ajouterTourneeDuJour(jeu: JeuDeDemonstration, jour: string): void {
   const technicien = jeu.techniciens[0];
-  if (technicien.tournees.some(({ dateTournee }) => dateTournee === jour)) return;
+  // Le lundi, la démonstration du planning a déjà une tournée ce jour-là : elle est remplacée,
+  // pour que les quatre états restent visibles quel que soit le jour.
+  technicien.tournees = technicien.tournees.filter(({ dateTournee }) => dateTournee !== jour);
   const signee = terminee(
     planifier(
       fabriquerIntervention({

@@ -16,6 +16,10 @@ export const interventionsApi = {
       signal,
     }),
 
+  /** US14 et US24 : une intervention, par exemple pour relire son statut après une réponse perdue. */
+  consulter: (id: number, signal?: AbortSignal): Promise<Intervention> =>
+    api.get<Intervention>(`/interventions/${id}`, { signal }),
+
   /** US17 : planifiée → en cours, le jour de la tournée (RG24, sinon 400). */
   demarrer: (id: number): Promise<Intervention> =>
     api.post<Intervention>(`/interventions/${id}/start`),

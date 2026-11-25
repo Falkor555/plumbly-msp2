@@ -1,14 +1,15 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { interventionsApi } from '../api/interventions.api';
 import { tourneesApi } from '../api/tournees.api';
 import type { Intervention, StatutIntervention, Tournee } from '../api/types';
 import { heureMetier, jourMetier, libelleJourLong } from '../commun/dates';
 import { lienItineraire, lienTelephone } from '../commun/liens';
 import { messageErreur } from '../commun/messageErreur';
+import { statutAtteintMalgreLEchec } from '../commun/statutApresEchec';
 import { useChargement } from '../commun/useChargement';
 import { BadgesIntervention } from '../planning/BadgesIntervention';
 import { creneau, nombreDInterventions } from '../planning/presentation';
-import { FenetreCloture } from '../signature/FenetreCloture';
+import { FenetreCloture, type IssueCloture } from '../signature/FenetreCloture';
 import { FenetreCompteRendu } from './FenetreCompteRendu';
 
 /** L'étape en cours est mise en avant ; celles qui sont finies passent au second plan. */
@@ -30,23 +31,52 @@ type FenetreOuverte = { type: 'cloture' | 'compte rendu'; intervention: Interven
 /**
  * US24 : la tournée du jour du technicien connecté, pensée pour le téléphone. US17, US18 et
  * US33 : chaque étape propose l'action de son statut ; la tournée est relue après chacune.
+ * Pendant la relecture, la tournée affichée reste celle d'avant : la page ne se vide pas, le
+ * défilement est gardé, puis le focus va sur l'étape modifiée et le résultat est annoncé.
  */
 export function PageMaTournee() {
+  const prefixeEtape = useId();
   const [fenetre, setFenetre] = useState<FenetreOuverte | null>(null);
+  const [annonce, setAnnonce] = useState('');
+  const etapeAFocaliser = useRef<number | null>(null);
   const charger = useCallback(
     (signal: AbortSignal) => tourneesApi.consulterMaTourneeDuJour(signal),
     [],
   );
-  const { etat, recharger } = useChargement<Tournee | null>(charger);
-  const fermerFenetre = useCallback(
-    (modifiee: boolean) => {
-      setFenetre(null);
-      if (modifiee) recharger();
-    },
-    [recharger],
-  );
-  const jour =
-    etat.statut === 'pret' && etat.donnees ? etat.donnees.dateTournee : jourMetier(new Date());
+  const { etat, recharger, dernieresDonnees } = useChargement<Tournee | null>(charger);
+  const tournee =
+    etat.statut === 'pret'
+      ? etat.donnees
+      : etat.statut === 'chargement'
+        ? dernieresDonnees
+        : undefined;
+  const jour = tournee ? tournee.dateTournee : jourMetier(new Date());
+  const idEtape = (idIntervention: number) => `${prefixeEtape}-etape-${idIntervention}`;
+
+  useEffect(() => {
+    if (etat.statut !== 'pret' || etapeAFocaliser.current === null) return;
+    document.getElementById(idEtape(etapeAFocaliser.current))?.focus();
+    etapeAFocaliser.current = null;
+  });
+
+  function apresAction(idIntervention: number, message: string) {
+    etapeAFocaliser.current = idIntervention;
+    setAnnonce(message);
+    recharger();
+  }
+
+  function fermerCloture(issue: IssueCloture) {
+    const { id } = (fenetre as FenetreOuverte).intervention;
+    setFenetre(null);
+    if (issue === 'terminee') apresAction(id, 'Intervention terminée.');
+    if (issue === 'incertaine') apresAction(id, 'Tournée mise à jour.');
+  }
+
+  function fermerCompteRendu(enregistre: boolean) {
+    const { id } = (fenetre as FenetreOuverte).intervention;
+    setFenetre(null);
+    if (enregistre) apresAction(id, 'Compte rendu enregistré.');
+  }
 
   return (
     <main className="mx-auto min-h-dvh max-w-md bg-fond px-4 pt-4 pb-8">
@@ -54,8 +84,11 @@ export function PageMaTournee() {
         <h1 className="text-[1.75rem] leading-9 font-bold tracking-tight">Ma tournée du jour</h1>
         <p className="text-sm text-gris-texte first-letter:uppercase">{libelleJourLong(jour)}</p>
       </header>
+      <p role="status" className="sr-only">
+        {annonce}
+      </p>
 
-      {etat.statut === 'chargement' && (
+      {etat.statut === 'chargement' && tournee === undefined && (
         <p className="text-sm text-gris-texte">Chargement de votre tournée…</p>
       )}
       {etat.statut === 'erreur' && (
@@ -69,25 +102,26 @@ export function PageMaTournee() {
           </button>
         </div>
       )}
-      {etat.statut === 'pret' && etat.donnees === null && (
+      {tournee === null && (
         <p className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
           Vous n'avez pas de tournée aujourd'hui.
         </p>
       )}
-      {etat.statut === 'pret' && etat.donnees !== null && (
+      {tournee && (
         <>
           <p className="mb-3 text-sm font-medium">
-            {etat.donnees.interventions.length === 0
+            {tournee.interventions.length === 0
               ? 'Aucune intervention prévue pour le moment.'
-              : `${nombreDInterventions(etat.donnees.interventions.length)}, dans l'ordre de passage`}
+              : `${nombreDInterventions(tournee.interventions.length)}, dans l'ordre de passage`}
           </p>
-          <ol className="space-y-3">
-            {etat.donnees.interventions.map((intervention, rang) => (
+          <ol className="space-y-3" aria-busy={etat.statut === 'chargement'}>
+            {tournee.interventions.map((intervention, rang) => (
               <EtapeTournee
                 key={intervention.id}
+                id={idEtape(intervention.id)}
                 intervention={intervention}
                 numero={rang + 1}
-                onDemarree={recharger}
+                onDemarree={() => apresAction(intervention.id, 'Intervention démarrée.')}
                 onOuvrir={(type) => setFenetre({ type, intervention })}
               />
             ))}
@@ -96,26 +130,31 @@ export function PageMaTournee() {
       )}
 
       {fenetre?.type === 'cloture' && (
-        <FenetreCloture intervention={fenetre.intervention} onFermer={fermerFenetre} />
+        <FenetreCloture intervention={fenetre.intervention} onFermer={fermerCloture} />
       )}
       {fenetre?.type === 'compte rendu' && (
-        <FenetreCompteRendu intervention={fenetre.intervention} onFermer={fermerFenetre} />
+        <FenetreCompteRendu intervention={fenetre.intervention} onFermer={fermerCompteRendu} />
       )}
     </main>
   );
 }
-
 interface PropsEtape {
+  id: string;
   intervention: Intervention;
   numero: number;
   onDemarree: () => void;
   onOuvrir: (fenetre: FenetreOuverte['type']) => void;
 }
 
-function EtapeTournee({ intervention, numero, onDemarree, onOuvrir }: PropsEtape) {
+function EtapeTournee({ id, intervention, numero, onDemarree, onOuvrir }: PropsEtape) {
   const { adresse, client } = intervention;
   return (
-    <li className={`rounded-lg border border-bordure ${CLASSES_ETAPE[intervention.statut]}`}>
+    <li
+      id={id}
+      // Reçoit le focus après une action, pour que la lecture reprenne sur l'étape modifiée.
+      tabIndex={-1}
+      className={`rounded-lg border border-bordure focus:outline-2 focus:outline-offset-2 focus:outline-sarcelle ${CLASSES_ETAPE[intervention.statut]}`}
+    >
       <div className="flex items-start gap-3 border-b border-bordure px-4 py-3">
         <span
           aria-hidden="true"
@@ -175,7 +214,7 @@ function EtapeTournee({ intervention, numero, onDemarree, onOuvrir }: PropsEtape
 }
 
 /** L'action que permet le statut de l'étape (cycle de vie, cahier des charges 5.1). */
-function ActionsEtape({ intervention, onDemarree, onOuvrir }: Omit<PropsEtape, 'numero'>) {
+function ActionsEtape({ intervention, onDemarree, onOuvrir }: Omit<PropsEtape, 'id' | 'numero'>) {
   switch (intervention.statut) {
     case 'PLANIFIEE':
       return <BoutonDemarrer intervention={intervention} onDemarree={onDemarree} />;
@@ -207,6 +246,10 @@ function BoutonDemarrer({
       await interventionsApi.demarrer(intervention.id);
       onDemarree();
     } catch (cause) {
+      if (await statutAtteintMalgreLEchec(intervention.id, 'EN_COURS')) {
+        onDemarree();
+        return;
+      }
       setErreur(messageErreur(cause, 'Démarrage impossible'));
       setEnvoiEnCours(false);
     }
@@ -220,7 +263,7 @@ function BoutonDemarrer({
       {erreur && (
         <p
           role="alert"
-          className="rounded border border-erreur/30 bg-red-50 px-3 py-2 whitespace-pre-line text-erreur"
+          className="rounded border border-erreur/30 bg-red-50 px-3 py-2 whitespace-pre-line text-red-700"
         >
           {erreur}
         </p>
@@ -239,7 +282,10 @@ function EtapeTerminee({ intervention, onOuvrir }: Pick<PropsEtape, 'interventio
         <p className="whitespace-pre-line">{compteRendu ?? 'Aucun compte rendu.'}</p>
       </div>
       {signature ? (
-        <p className="font-semibold text-succes">
+        <p className="flex items-center gap-2 font-semibold text-anthracite">
+          <span aria-hidden="true" className="text-succes">
+            ✓
+          </span>
           Signée par {signature.nomSignataire} à {heureMetier(signature.signeeLe)}
         </p>
       ) : (

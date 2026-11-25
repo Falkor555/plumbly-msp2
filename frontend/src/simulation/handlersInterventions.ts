@@ -51,6 +51,12 @@ export function creerHandlersInterventions(
   }
 
   return [
+    http.get(urlApi('/interventions/:id'), ({ params }) => {
+      const trouvee = trouverDansUneTournee(Number(params.id));
+      if (!trouvee) return erreur(404, 'Intervention introuvable.');
+      return HttpResponse.json(trouvee.intervention);
+    }),
+
     http.post(urlApi('/interventions/:id/start'), ({ params }) => {
       const trouvee = trouverDansUneTournee(Number(params.id));
       if (!trouvee) return erreur(404, 'Intervention introuvable.');

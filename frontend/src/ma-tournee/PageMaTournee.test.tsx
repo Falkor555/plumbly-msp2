@@ -193,18 +193,53 @@ describe('actions sur le terrain (US17, US18, US33)', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('démarre l’intervention planifiée et recharge la tournée', async () => {
+  it('démarre l’intervention planifiée, recharge la tournée sans vider la page, puis met le focus sur l’étape', async () => {
     servirLaTournee();
+    const utilisateur = userEvent.setup();
+    render(<PageMaTournee />);
+    const planifiee = (await etapes())[3];
+    const affichages: boolean[] = [];
+    const observateur = new MutationObserver(() =>
+      affichages.push(screen.queryByText('Chargement de votre tournée…') !== null),
+    );
+    observateur.observe(document.body, { childList: true, subtree: true });
+
+    await utilisateur.click(within(planifiee).getByRole('button', { name: 'Démarrer' }));
+
+    await vi.waitFor(() =>
+      expect(screen.getAllByRole('button', { name: "Terminer l'intervention" })).toHaveLength(2),
+    );
+    observateur.disconnect();
+    const etape = (await etapes())[3];
+    expect(within(etape).getByText('En cours')).toBeInTheDocument();
+    await vi.waitFor(() => expect(etape).toHaveFocus());
+    expect(screen.getByRole('status')).toHaveTextContent('Intervention démarrée.');
+    expect(affichages).not.toContain(true);
+  });
+
+  it('réponse perdue au démarrage : relit l’intervention et la montre en cours', async () => {
+    const jeu = servirLaTournee();
+    serveurApi.use(
+      http.post(
+        urlApi('/interventions/:id/start'),
+        () => {
+          // Le serveur a démarré l'intervention, mais la réponse n'arrive jamais.
+          Object.assign(jeu.techniciens[0].tournees[0].interventions[3], { statut: 'EN_COURS' });
+          return HttpResponse.error();
+        },
+        { once: true },
+      ),
+    );
     const utilisateur = userEvent.setup();
     render(<PageMaTournee />);
     const planifiee = (await etapes())[3];
 
     await utilisateur.click(within(planifiee).getByRole('button', { name: 'Démarrer' }));
 
-    const rechargee = (await screen.findAllByRole('button', { name: "Terminer l'intervention" }))
-      .length;
-    expect(rechargee).toBe(2);
-    expect(within((await etapes())[3]).getByText('En cours')).toBeInTheDocument();
+    await vi.waitFor(() =>
+      expect(screen.getAllByRole('button', { name: "Terminer l'intervention" })).toHaveLength(2),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('RG24 : affiche à côté du bouton le refus de l’API quand la tournée n’est pas celle du jour', async () => {
@@ -270,9 +305,9 @@ describe('actions sur le terrain (US17, US18, US33)', () => {
       within(fenetre).getByRole('button', { name: 'Terminer sans signature' }),
     );
 
-    expect(
-      await screen.findAllByRole('button', { name: 'Compléter le compte rendu' }),
-    ).toHaveLength(2);
+    await vi.waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Compléter le compte rendu' })).toHaveLength(2),
+    );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -296,6 +331,40 @@ describe('actions sur le terrain (US17, US18, US33)', () => {
 
     expect(await screen.findByText('Évier débouché. Siphon remplacé.')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('US18 : désactive « Enregistrer » pendant la requête : un double appui n’envoie qu’une requête', async () => {
+    servirLaTournee();
+    const enregistrements = vi.fn();
+    let repondre: () => void = () => undefined;
+    serveurApi.use(
+      http.patch(urlApi('/interventions/:id/report'), async () => {
+        enregistrements();
+        await new Promise<void>((resolve) => (repondre = resolve));
+        return new HttpResponse(null, { status: 500 });
+      }),
+    );
+    const utilisateur = userEvent.setup();
+    render(<PageMaTournee />);
+    const sansSignature = (await etapes())[1];
+    await utilisateur.click(
+      within(sansSignature).getByRole('button', { name: 'Compléter le compte rendu' }),
+    );
+    const fenetre = screen.getByRole('dialog', { name: 'Compléter le compte rendu' });
+    const bouton = within(fenetre).getByRole('button', { name: 'Enregistrer le compte rendu' });
+
+    await utilisateur.click(bouton);
+    await utilisateur.click(bouton);
+
+    expect(bouton).toBeDisabled();
+    expect(bouton).toHaveTextContent('Enregistrement en cours…');
+    await vi.waitFor(() => expect(enregistrements).toHaveBeenCalledTimes(1));
+    repondre();
+    expect(await within(fenetre).findByRole('alert')).toHaveTextContent(
+      'Une erreur est survenue. Réessayez plus tard.',
+    );
+    expect(bouton).toBeEnabled();
+    expect(enregistrements).toHaveBeenCalledTimes(1);
   });
 
   it('US18 : affiche le refus de l’API dans la fenêtre du compte rendu', async () => {

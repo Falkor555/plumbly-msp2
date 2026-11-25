@@ -123,7 +123,7 @@ describe('fenêtre de clôture (US17, US18, US33)', () => {
 
     await utilisateur.click(boutonSigner);
 
-    await vi.waitFor(() => expect(onFermer).toHaveBeenCalledWith(true));
+    await vi.waitFor(() => expect(onFermer).toHaveBeenCalledWith('terminee'));
     expect(ecritures).toEqual([
       {
         methode: 'POST',
@@ -146,7 +146,7 @@ describe('fenêtre de clôture (US17, US18, US33)', () => {
       within(fenetre).getByRole('button', { name: 'Terminer sans signature' }),
     );
 
-    await vi.waitFor(() => expect(onFermer).toHaveBeenCalledWith(true));
+    await vi.waitFor(() => expect(onFermer).toHaveBeenCalledWith('terminee'));
     expect(ecritures).toEqual([
       {
         methode: 'POST',
@@ -164,7 +164,7 @@ describe('fenêtre de clôture (US17, US18, US33)', () => {
       within(fenetre).getByRole('button', { name: 'Terminer sans signature' }),
     );
 
-    await vi.waitFor(() => expect(onFermer).toHaveBeenCalledWith(true));
+    await vi.waitFor(() => expect(onFermer).toHaveBeenCalledWith('terminee'));
     expect(ecritures).toEqual([
       { methode: 'POST', chemin: '/interventions/3/complete', corps: {} },
     ]);
@@ -233,8 +233,79 @@ describe('fenêtre de clôture (US17, US18, US33)', () => {
     expect(within(fenetre).getByRole('button', { name: 'Fermer' })).toBeDisabled();
     await vi.waitFor(() => expect(ecritures).toHaveLength(1));
     repondre();
-    await vi.waitFor(() => expect(onFermer).toHaveBeenCalledWith(true));
+    await vi.waitFor(() => expect(onFermer).toHaveBeenCalledWith('terminee'));
     expect(ecritures).toHaveLength(1);
+  });
+
+  describe('réponse perdue (contrat 6.3) : l’intervention est relue avant d’afficher un échec', () => {
+    it('ferme comme un succès si la clôture a été enregistrée malgré la coupure', async () => {
+      simulerCanvas();
+      serveurApi.use(
+        http.post(
+          urlApi('/interventions/:id/complete'),
+          () => {
+            // Le serveur a enregistré la clôture, mais la réponse n'arrive jamais.
+            Object.assign(enCours, { statut: 'TERMINEE' });
+            return HttpResponse.error();
+          },
+          { once: true },
+        ),
+      );
+      const { utilisateur, onFermer, fenetre, boutonSigner } = ouvrir();
+      await utilisateur.type(within(fenetre).getByLabelText('Compte rendu'), 'Joint changé');
+      signer(fenetre);
+
+      await utilisateur.click(boutonSigner);
+
+      await vi.waitFor(() => expect(onFermer).toHaveBeenCalledWith('terminee'));
+      expect(within(fenetre).queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('affiche l’échec si l’intervention est toujours en cours, et fait relire la tournée à la fermeture', async () => {
+      simulerCanvas();
+      serveurApi.use(
+        http.post(urlApi('/interventions/:id/complete'), () => HttpResponse.error(), {
+          once: true,
+        }),
+      );
+      const { utilisateur, onFermer, fenetre } = ouvrir();
+
+      await utilisateur.click(
+        within(fenetre).getByRole('button', { name: 'Terminer sans signature' }),
+      );
+
+      expect(await within(fenetre).findByRole('alert')).toHaveTextContent(
+        'Connexion au serveur impossible.',
+      );
+      await utilisateur.click(within(fenetre).getByRole('button', { name: 'Fermer' }));
+      expect(onFermer).toHaveBeenCalledWith('incertaine');
+    });
+  });
+
+  it('garde le focus dans la fenêtre avec Tab et Maj+Tab', async () => {
+    simulerCanvas();
+    const { utilisateur, fenetre } = ouvrir();
+    const fermer = within(fenetre).getByRole('button', { name: 'Fermer' });
+    const dernier = within(fenetre).getByRole('button', { name: 'Terminer sans signature' });
+    expect(fermer).toHaveFocus();
+
+    await utilisateur.tab({ shift: true });
+    expect(dernier).toHaveFocus();
+
+    await utilisateur.tab();
+    expect(fermer).toHaveFocus();
+  });
+
+  it('propose un nom long coupé à 100 caractères sans couper un emoji en deux', () => {
+    simulerCanvas();
+    enCours = {
+      ...enCours,
+      client: { ...enCours.client, nomAffiche: `${'a'.repeat(99)}😀 Dupont` },
+    };
+
+    const { fenetre } = ouvrir();
+
+    expect(within(fenetre).getByLabelText('Nom du signataire')).toHaveValue('a'.repeat(99));
   });
 
   describe('une saisie ne se perd pas par erreur', () => {
@@ -244,7 +315,7 @@ describe('fenêtre de clôture (US17, US18, US33)', () => {
 
       await utilisateur.keyboard('{Escape}');
 
-      expect(onFermer).toHaveBeenCalledWith(false);
+      expect(onFermer).toHaveBeenCalledWith('abandonnee');
     });
 
     it.each([
@@ -268,7 +339,7 @@ describe('fenêtre de clôture (US17, US18, US33)', () => {
       expect(onFermer).not.toHaveBeenCalled();
 
       await utilisateur.click(within(fenetre).getByRole('button', { name: 'Fermer' }));
-      expect(onFermer).toHaveBeenCalledWith(false);
+      expect(onFermer).toHaveBeenCalledWith('abandonnee');
     });
 
     it('un clic sur le voile ne ferme pas la fenêtre', async () => {

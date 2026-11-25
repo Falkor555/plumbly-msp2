@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estTropLourde, raisonsDeBlocage, tailleDecodee } from './regles';
+import { estTropLourde, raisonsDeBlocage, tailleDecodee, tronquerSansCouper } from './regles';
 
 const PREFIXE = 'data:image/png;base64,';
 const COMPLET = { compteRendu: 'Joint remplacé', nomSignataire: 'Jean Dupont', zoneVide: false };
@@ -24,6 +24,21 @@ describe('raisonsDeBlocage (RG31)', () => {
       'Indiquez le nom du signataire.',
       'Faites signer le client dans le cadre.',
     ]);
+  });
+});
+
+describe('tronquerSansCouper', () => {
+  it('garde un texte assez court tel quel', () => {
+    expect(tronquerSansCouper('Jean Dupont', 100)).toBe('Jean Dupont');
+  });
+
+  it('coupe au maximum compté comme le serveur (unités UTF-16)', () => {
+    expect(tronquerSansCouper('a'.repeat(120), 100)).toHaveLength(100);
+  });
+
+  it('s’arrête avant un emoji qui dépasserait le maximum, plutôt que de le couper en deux', () => {
+    expect(tronquerSansCouper(`${'a'.repeat(99)}😀`, 100)).toBe('a'.repeat(99));
+    expect(tronquerSansCouper(`${'a'.repeat(98)}😀`, 100)).toBe(`${'a'.repeat(98)}😀`);
   });
 });
 

@@ -26,6 +26,19 @@ export function raisonsDeBlocage({ compteRendu, nomSignataire, zoneVide }: Saisi
   return raisons;
 }
 
+/**
+ * Les « maximum » caractères du début d'un texte, comptés comme le serveur (unités UTF-16),
+ * sans jamais couper un emoji en deux : une moitié d'emoji isolée serait refusée en 400.
+ */
+export function tronquerSansCouper(texte: string, maximum: number): string {
+  let resultat = '';
+  for (const caractere of texte) {
+    if (resultat.length + caractere.length > maximum) break;
+    resultat += caractere;
+  }
+  return resultat;
+}
+
 /** Taille en octets de l'image contenue dans une data URL en base64, sans la décoder. */
 export function tailleDecodee(dataUrl: string): number {
   const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
