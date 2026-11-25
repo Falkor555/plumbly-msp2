@@ -1,4 +1,4 @@
-import { RequestMethod, type Type } from '@nestjs/common';
+import { Logger, RequestMethod, type Type } from '@nestjs/common';
 import {
   GUARDS_METADATA,
   METHOD_METADATA,
@@ -8,12 +8,14 @@ import {
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum.js';
 import { MetadataScanner, ModulesContainer, Reflector } from '@nestjs/core';
 import { AppController } from '../src/app.controller.js';
+import { ClientsRepository } from '../src/clients/clients.repository.js';
 import { CLE_ROLES } from '../src/commun/autorisation/roles.decorator.js';
 import { RolesGuard } from '../src/commun/autorisation/roles.guard.js';
 import type { UtilisateurConnecte } from '../src/commun/autorisation/utilisateur-connecte.js';
 import { type Role, StatutIntervention, Urgence } from '../src/generated/prisma/client.ts';
 import type { PrismaService } from '../src/prisma/prisma.service.js';
 import {
+  type ApplicationDeTest,
   creerCompte,
   demarrerApplication,
   requetesEn,
@@ -538,5 +540,52 @@ describe('TS-05 : un champ inconnu est refusé sur chaque route', () => {
     expect(archive.archive).toBe(true);
     expect(await application.prisma.client.findUnique({ where: { id: 999 } })).toBeNull();
     expect(await autresClients()).toEqual(avant);
+  });
+});
+
+describe('TS-06 : une erreur interne ne fuit pas vers le client', () => {
+  // Message qui trahirait le schéma de la base et la requête s'il arrivait au navigateur.
+  const ERREUR_SQL = 'relation "client" does not exist — SELECT * FROM client WHERE …';
+  const rechercher = vi.fn(() => {
+    throw new Error(ERREUR_SQL);
+  });
+  let applicationEnPanne: ApplicationDeTest;
+  let gestionnaire: UtilisateurConnecte;
+
+  beforeAll(async () => {
+    applicationEnPanne = await demarrerApplication(MAINTENANT, {
+      doubles: [[ClientsRepository, { rechercher }]],
+    });
+    gestionnaire = await creerCompte(applicationEnPanne.prisma, {
+      email: 'gestion@test.re',
+      nom: 'Payet',
+      prenom: 'Céline',
+      role: 'GESTIONNAIRE',
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterAll(async () => {
+    await viderLaBase(applicationEnPanne.prisma);
+    await applicationEnPanne.app.close();
+  });
+
+  it('TS-06 : GET /clients répond 500 avec un message générique, sans le texte de l’erreur', async () => {
+    // NestJS trace l'erreur complète côté serveur (non vérifié ici) : la sortie des tests reste lisible.
+    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+    const reponse = await requetesEn(applicationEnPanne.app, gestionnaire).get('/clients');
+
+    // L'erreur vient bien du repository remplacé, pas d'une autre panne.
+    expect(rechercher).toHaveBeenCalledOnce();
+    expect(reponse.status).toBe(500);
+    expect(reponse.body).toEqual({ statusCode: 500, message: 'Internal server error' });
+    const reponseComplete = reponse.text + JSON.stringify(reponse.headers);
+    for (const fragment of [ERREUR_SQL, 'relation', 'SELECT', 'does not exist']) {
+      expect(reponseComplete).not.toContain(fragment);
+    }
   });
 });
