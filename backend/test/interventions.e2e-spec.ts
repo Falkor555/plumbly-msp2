@@ -1293,6 +1293,35 @@ describe('interventions (e2e)', () => {
         expect(reponse.body.message).toBe('Intervention introuvable.');
       });
 
+      it('reste intègre avec des accents et un emoji, relus depuis PostgreSQL', async () => {
+        const id = await enCours();
+        await terminer(id, {
+          compteRendu: 'Siphon changé, client ravi 😀',
+          signature: { nomSignataire: 'Jérôme Hoarau-Técher', image: IMAGE },
+        }).expect(200);
+
+        const reponse = await en(fixtures.gestionnaire)
+          .get(`/interventions/${id}/signature`)
+          .expect(200);
+
+        expect(reponse.body).toMatchObject({
+          nomSignataire: 'Jérôme Hoarau-Técher',
+          integre: true,
+        });
+      });
+
+      it('refuse en 400 une moitié d’emoji, qui rendrait la signature non intègre', async () => {
+        const id = await enCours();
+
+        const reponse = await terminer(id, {
+          compteRendu: 'Fuite réparée \ud83d',
+          signature: SIGNATURE,
+        }).expect(400);
+
+        expect(reponse.body.message).toEqual(['compteRendu contient un caractère non autorisé']);
+        await verifierRienDEcrit(id);
+      });
+
       it('RG34 : signale un compte rendu modifié en SQL direct, hors de l’API', async () => {
         const id = await signee();
         await application.prisma.$executeRaw`

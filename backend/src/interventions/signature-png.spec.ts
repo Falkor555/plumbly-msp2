@@ -57,19 +57,43 @@ describe('lireImagePng (RG35)', () => {
   });
 
   describe('base64 strict', () => {
-    const base64 = fabriquerPng().toString('base64');
+    // 598 octets, pas un multiple de 3 : le base64 se termine par « == » et contient « + » et
+    // « / ». Chaque variante ci-dessous redonne ces mêmes octets avec Buffer.from : elle ne peut
+    // donc être refusée que par le contrôle strict du base64, pas par celui de la structure.
+    const png = fabriquerPng({ taille: 598 });
+    const base64 = png.toString('base64');
+    const milieu = base64.length / 2;
+    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const avantRemplissage = base64.at(-3) as string;
+    const bitsDeRemplissageNonNuls =
+      base64.slice(0, -3) + ALPHABET[ALPHABET.indexOf(avantRemplissage) + 1] + '==';
+
+    it('accepte ce PNG en base64 canonique', () => {
+      expect(base64).toMatch(/==$/);
+      expect(base64).toMatch(/[+]/);
+      expect(base64).toMatch(/[/]/);
+
+      expect(Buffer.compare(lireImagePng(PREFIXE + base64), png)).toBe(0);
+    });
 
     it.each([
-      ['vide', ''],
-      ['avec un espace', `${base64.slice(0, 8)} ${base64.slice(8)}`],
-      ['avec un saut de ligne', `${base64.slice(0, 8)}\n${base64.slice(8)}`],
-      ['en base64url', base64.replaceAll('+', '-').replaceAll('/', '_') + '-_'],
-      // 8 octets s'encodent en « iVBORw0KGgo= » : le « = » final est obligatoire.
-      ['sans remplissage', 'iVBORw0KGgo'],
-      ['avec un caractère hors alphabet', `${base64.slice(0, -4)}*AAA`],
-      ['avec des bits de remplissage non nuls', 'iVBORw0KGgp='],
-    ])('refuse un texte %s', (_cas, texte) => {
+      ['avec des espaces', `${base64.slice(0, milieu)}    ${base64.slice(milieu)}`],
+      ['avec des sauts de ligne', `${base64.slice(0, milieu)}\n\n\n\n${base64.slice(milieu)}`],
+      ['en base64url', base64.replaceAll('+', '-').replaceAll('/', '_')],
+      ['sans remplissage', base64.replace(/=+$/, '')],
+      [
+        'avec des caractères hors alphabet',
+        `${base64.slice(0, milieu)}****${base64.slice(milieu)}`,
+      ],
+      ['avec des bits de remplissage non nuls', bitsDeRemplissageNonNuls],
+    ])('refuse un texte %s, même si Buffer.from en tirerait le PNG', (_cas, texte) => {
+      expect(Buffer.compare(Buffer.from(texte, 'base64'), png)).toBe(0);
+
       expect(refus(PREFIXE + texte)).toBe(MESSAGE_PNG_INVALIDE);
+    });
+
+    it('refuse un texte vide', () => {
+      expect(refus(PREFIXE)).toBe(MESSAGE_PNG_INVALIDE);
     });
 
     it('refuse un texte quelconque encodé en base64', () => {
@@ -78,7 +102,6 @@ describe('lireImagePng (RG35)', () => {
       expect(refus(PREFIXE + texte)).toBe(MESSAGE_PNG_INVALIDE);
     });
   });
-
   describe('taille décodée', () => {
     it('accepte exactement 49 152 octets', () => {
       const png = fabriquerPng({ taille: 49_152 });
