@@ -335,7 +335,7 @@ Réponse `204`.
 | `400` | Ancien mot de passe incorrect ; nouveau mot de passe non conforme ou identique à l'ancien |
 | `401` | Non connecté |
 
-Effets : mot de passe mis à jour ; `mdpAChanger` passe à `false` ; les autres sessions de l'utilisateur sont révoquées.
+Effets, dans une seule transaction : mot de passe mis à jour ; `mdpAChanger` passe à `false` ; **toutes** les sessions de l'utilisateur sont révoquées, la session en cours comprise. Le cookie de rafraîchissement n'étant envoyé qu'aux routes `/api/v1/auth`, cette route ne peut pas distinguer la session en cours ; tout couper est aussi le plus sûr si l'ancien mot de passe avait fuité. Le front renvoie l'utilisateur vers la connexion.
 
 Un ancien mot de passe incorrect renvoie `400` et non `401` : le front interprète un `401` comme une session expirée et déconnecterait l'utilisateur à tort.
 
@@ -407,7 +407,7 @@ Réponse `200` : l'objet Utilisateur mis à jour.
 
 | Erreur | Cas |
 | --- | --- |
-| `400` | Champ invalide |
+| `400` | Champ invalide ; un administrateur tente de retirer son propre rôle ADMIN |
 | `401` | Non connecté |
 | `403` | Rôle autre qu'ADMIN |
 | `404` | Compte inexistant |
