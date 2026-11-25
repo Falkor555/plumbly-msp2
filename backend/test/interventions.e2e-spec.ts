@@ -213,13 +213,22 @@ describe('interventions (e2e)', () => {
       const collegue = await planifiee(await creerTournee(fixtures.mathieu), 1, '10:00');
 
       const reponse = await en(fixtures.kevin.compte).get(`/interventions/${sienne}`).expect(200);
-      await en(fixtures.kevin.compte).get(`/interventions/${collegue}`).expect(403);
+      const refus = await en(fixtures.kevin.compte).get(`/interventions/${collegue}`).expect(403);
 
       expect(reponse.body.tournee.technicien).toEqual({
         id: fixtures.kevin.idTechnicien,
         nom: 'Hoarau',
         prenom: 'Kévin',
       });
+      // TI11 : le refus ne laisse rien filtrer de l'intervention, seul le format d'erreur du contrat.
+      expect(refus.body).toEqual({
+        statusCode: 403,
+        message: 'Cette intervention ne fait pas partie de vos tournées.',
+        error: 'Forbidden',
+      });
+      for (const donnee of ['Grondin', 'Hélène', 'rue des Lilas', 'Saint-Denis', 'Fuite']) {
+        expect(refus.text).not.toContain(donnee);
+      }
     });
 
     it('refuse en 403 au technicien une intervention à planifier', async () => {
@@ -598,12 +607,59 @@ describe('interventions (e2e)', () => {
   });
 
   describe('droits sur les changements de statut (RG03, cahier des charges 5.5)', () => {
+    function lireEnBase(id: number) {
+      return application.prisma.intervention.findUniqueOrThrow({ where: { id } });
+    }
+
     it('répond 403 au technicien qui démarre l’intervention d’un collègue', async () => {
       const id = await planifiee(await creerTournee(fixtures.mathieu), 1, '10:00');
+      const avant = await lireEnBase(id);
 
       await en(fixtures.kevin.compte).post(`/interventions/${id}/start`).expect(403);
 
+      const apres = await lireEnBase(id);
+      expect(apres).toEqual(avant);
+      expect(apres).toMatchObject({ statut: 'PLANIFIEE', demarreeLe: null });
       expect(journal.enregistrer).not.toHaveBeenCalled();
+    });
+
+    it('TI07 : répond 403 au technicien qui termine l’intervention d’un collègue, sans rien changer en base', async () => {
+      const id = await creerIntervention({
+        statut: StatutIntervention.EN_COURS,
+        idTournee: await creerTournee(fixtures.mathieu),
+        ordreTournee: 1,
+        debutPrevu: a('08:00'),
+        demarreeLe: a('08:05'),
+      });
+      const avant = await lireEnBase(id);
+
+      const reponse = await en(fixtures.kevin.compte)
+        .post(`/interventions/${id}/complete`)
+        .send({ compteRendu: 'Clôturée par un autre technicien' })
+        .expect(403);
+
+      expect(reponse.body.message).toBe(
+        'Seul le technicien de la tournée peut changer le statut de cette intervention.',
+      );
+      const apres = await lireEnBase(id);
+      expect(apres).toEqual(avant);
+      expect(apres).toMatchObject({ statut: 'EN_COURS', termineeLe: null, compteRendu: null });
+      expect(journal.enregistrer).not.toHaveBeenCalled();
+    });
+
+    it('TI11 : un technicien ne lit pas la tournée d’un collègue, car GET /tours/:id est réservé à ADMIN et GESTIONNAIRE (403 du rôle)', async () => {
+      const tourneeDeMathieu = await creerTournee(fixtures.mathieu);
+      await planifiee(tourneeDeMathieu, 1, '10:00');
+
+      const reponse = await en(fixtures.kevin.compte).get(`/tours/${tourneeDeMathieu}`).expect(403);
+
+      // Refus du rôle, pas d'un contrôle de propriété : le technicien n'a pas accès à cette route,
+      // même pour sa propre tournée, et passe par /tours/me/today.
+      expect(reponse.body).toEqual({
+        statusCode: 403,
+        message: 'Accès refusé.',
+        error: 'Forbidden',
+      });
     });
 
     it.each([
@@ -636,11 +692,17 @@ describe('interventions (e2e)', () => {
         ordreTournee: 1,
         debutPrevu: a('07:00'),
       });
+      const avant = await lireEnBase(id);
 
       await en(fixtures.mathieu.compte)
         .patch(`/interventions/${id}/report`)
         .send({ compteRendu: 'Pas le mien' })
         .expect(403);
+
+      const apres = await lireEnBase(id);
+      expect(apres).toEqual(avant);
+      expect(apres).toMatchObject({ statut: 'TERMINEE', compteRendu: null });
+      expect(journal.enregistrer).not.toHaveBeenCalled();
     });
 
     it('répond 401 sans utilisateur', async () => {
