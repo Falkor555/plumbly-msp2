@@ -3,6 +3,7 @@ import { enDataUrl, fabriquerPng } from '../../test/support/fabriquer-png.js';
 import {
   lireAnnulation,
   lireCompteRendu,
+  lireCriteresExportInterventions,
   lireDemarrage,
   lireFiltresInterventions,
   lireFinDIntervention,
@@ -166,6 +167,51 @@ describe('validation des interventions', () => {
     it('accepte du seul ou au seul', () => {
       expect(lireFiltresInterventions({ du: '2026-12-07' }).du).toBe('2026-12-07');
       expect(lireFiltresInterventions({ au: '2026-12-07' }).au).toBe('2026-12-07');
+    });
+  });
+
+  describe('GET /interventions/export (US29)', () => {
+    it('applique le tri par défaut de la liste, sans pagination', () => {
+      expect(lireCriteresExportInterventions({})).toEqual({ tri: '-urgence' });
+    });
+
+    it('lit les mêmes filtres que la liste', () => {
+      expect(
+        lireCriteresExportInterventions({
+          recherche: 'grondin',
+          statut: 'PLANIFIEE,EN_COURS',
+          urgence: 'URGENTE',
+          technicienId: '2',
+          clientId: '8',
+          du: '2026-12-07',
+          au: '2026-12-11',
+          tri: 'debutPrevu',
+        }),
+      ).toEqual({
+        recherche: 'grondin',
+        statuts: ['PLANIFIEE', 'EN_COURS'],
+        urgence: 'URGENTE',
+        technicienId: 2,
+        clientId: 8,
+        du: '2026-12-07',
+        au: '2026-12-11',
+        tri: 'debutPrevu',
+      });
+    });
+
+    it.each(['page', 'limit'])(
+      'refuse le paramètre %s : le fichier contient toute la liste',
+      (nom) => {
+        expect(erreursDe(() => lireCriteresExportInterventions({ [nom]: '1' }))).toEqual([
+          `Le champ ${nom} n’est pas autorisé`,
+        ]);
+      },
+    );
+
+    it('refuse les mêmes valeurs invalides que la liste', () => {
+      expect(
+        erreursDe(() => lireCriteresExportInterventions({ du: '2026-12-11', au: '2026-12-07' })),
+      ).toEqual(['du doit précéder au ou lui être égal']);
     });
   });
 

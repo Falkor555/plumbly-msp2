@@ -6,6 +6,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { UtilisateurConnecte } from '../commun/autorisation/utilisateur-connecte.js';
+import { ecrireCsv } from '../commun/csv/ecrire-csv.js';
+import {
+  type FichierCsv,
+  LIMITE_DE_LIGNES_EXPORT,
+  nomDuFichierCsv,
+  verifierLimiteExport,
+} from '../commun/csv/fichier-csv.js';
 import { depuisColonneDate, jourMetier } from '../commun/fuseau-metier.js';
 import { Horloge } from '../commun/horloge.js';
 import { type PageApi, paginer } from '../commun/validation.js';
@@ -26,6 +33,10 @@ import {
   verifierModifiable,
 } from './cycle-de-vie.js';
 import { calculerEmpreinte } from './empreinte-signature.js';
+import {
+  COLONNES_EXPORT_INTERVENTIONS,
+  versLignesCsvInterventions,
+} from './export-interventions.js';
 import type { InterventionDetaillee } from './intervention-detaillee.js';
 import { versInterventionApi, versSignatureApi } from './interventions.presentation.js';
 import {
@@ -39,6 +50,7 @@ import {
 import type {
   Annulation,
   CompteRendu,
+  CriteresInterventions,
   FiltresInterventions,
   FinDIntervention,
   FinSignee,
@@ -68,6 +80,37 @@ export class InterventionsService {
     private readonly horloge: Horloge,
     private readonly journal: JournalDesActions,
   ) {}
+
+  /**
+   * US29 : toute la liste filtrée, dans l'ordre de GET /interventions. Au-delà de 5 000 lignes,
+   * refus (RG26) et rien n'est journalisé ; sinon une entrée EXPORT_CSV avec le nom des filtres
+   * reçus (RG25).
+   */
+  async exporter(
+    criteres: CriteresInterventions,
+    auteur: UtilisateurConnecte,
+    nomsDesFiltres: string[],
+  ): Promise<FichierCsv> {
+    // Une ligne de plus que la limite suffit à savoir qu'elle est dépassée.
+    const { interventions } = await this.depot.rechercher({
+      ...criteres,
+      page: 1,
+      limit: LIMITE_DE_LIGNES_EXPORT + 1,
+    });
+    verifierLimiteExport(interventions.length);
+    const contenu = ecrireCsv(
+      COLONNES_EXPORT_INTERVENTIONS,
+      versLignesCsvInterventions(interventions),
+    );
+    await this.journal.enregistrer({
+      type: 'EXPORT_CSV',
+      auteur: { id: auteur.id, role: auteur.role },
+      ressource: 'interventions',
+      lignes: interventions.length,
+      filtres: nomsDesFiltres,
+    });
+    return { nom: nomDuFichierCsv('interventions', this.horloge.maintenant()), contenu };
+  }
 
   /** US15 : liste filtrée, les plus urgentes puis les plus anciennes par défaut (RG18). */
   async lister(filtres: FiltresInterventions): Promise<PageApi<InterventionApi>> {

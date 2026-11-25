@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { Horloge } from '../commun/horloge.js';
+import type { JournalDesActions } from '../journal/journal-des-actions.js';
 import type {
   ClientAvecAdresses,
   ClientsRepository,
@@ -7,7 +8,7 @@ import type {
   OperationsSurClient,
 } from './clients.repository.js';
 import { ClientsService } from './clients.service.js';
-import type { NouveauClient } from './clients.types.js';
+import type { CriteresClients, NouveauClient } from './clients.types.js';
 
 const MAINTENANT = new Date('2026-12-07T09:00:00+04:00');
 const CREE_LE = new Date('2026-11-20T06:00:00Z');
@@ -73,11 +74,95 @@ function creerService(client: ClientVerrouille | null = VERROUILLE) {
     ),
   };
   const horloge = { maintenant: () => MAINTENANT } as Horloge;
-  const service = new ClientsService(depot as unknown as ClientsRepository, horloge);
-  return { service, depot, operations };
+  const journal = { enregistrer: vi.fn().mockResolvedValue(undefined), historiqueDe: vi.fn() };
+  const service = new ClientsService(
+    depot as unknown as ClientsRepository,
+    horloge,
+    journal as unknown as JournalDesActions,
+  );
+  return { service, depot, operations, journal };
 }
 
 describe('ClientsService', () => {
+  describe('export CSV (US32)', () => {
+    const CRITERES: CriteresClients = { archives: false, tri: 'nomAffiche', recherche: 'payet' };
+    const GESTIONNAIRE = { id: 3, role: 'GESTIONNAIRE' as const };
+
+    function clients(nombre: number, adressesParClient = 1): ClientAvecAdresses[] {
+      return Array.from({ length: nombre }, (_, rang) => ({
+        ...CLIENT,
+        id: rang + 1,
+        adresses: Array.from({ length: adressesParClient }, (_v, i) => ({ ...ADRESSE, id: i + 1 })),
+      }));
+    }
+
+    it('lit toute la liste filtrée avec le tri de la liste, sans pagination de 100', async () => {
+      const { service, depot } = creerService();
+
+      await service.exporter(CRITERES, GESTIONNAIRE, ['recherche']);
+
+      expect(depot.rechercher).toHaveBeenCalledWith({ ...CRITERES, page: 1, limit: 5001 });
+    });
+
+    it('renvoie le fichier clients-AAAA-MM-JJ.csv daté du jour à La Réunion', async () => {
+      const { service } = creerService();
+
+      const fichier = await service.exporter(CRITERES, GESTIONNAIRE, []);
+
+      expect(fichier.nom).toBe('clients-2026-12-07.csv');
+      expect(fichier.contenu.startsWith('\uFEFFid;type_client;nom;')).toBe(true);
+      expect(fichier.contenu).toContain('\r\n8;PARTICULIER;Payet;Hélène;;0692123456;');
+    });
+
+    it('journalise EXPORT_CSV une fois, avec le nombre de lignes et le nom des filtres seulement', async () => {
+      const { service, depot, journal } = creerService();
+      depot.rechercher.mockResolvedValue({ clients: clients(2, 2), total: 2 });
+
+      await service.exporter(CRITERES, { ...GESTIONNAIRE, email: 's@exemple.re' } as never, [
+        'recherche',
+        'tri',
+      ]);
+
+      expect(journal.enregistrer).toHaveBeenCalledTimes(1);
+      expect(journal.enregistrer).toHaveBeenCalledWith({
+        type: 'EXPORT_CSV',
+        auteur: { id: 3, role: 'GESTIONNAIRE' },
+        ressource: 'clients',
+        lignes: 4,
+        filtres: ['recherche', 'tri'],
+      });
+    });
+
+    it('accepte exactement 5 000 lignes', async () => {
+      const { service, depot, journal } = creerService();
+      depot.rechercher.mockResolvedValue({ clients: clients(5000), total: 5000 });
+
+      await service.exporter(CRITERES, GESTIONNAIRE, []);
+
+      expect(journal.enregistrer).toHaveBeenCalledWith(expect.objectContaining({ lignes: 5000 }));
+    });
+
+    it('refuse plus de 5 000 clients (400) sans rien journaliser', async () => {
+      const { service, depot, journal } = creerService();
+      depot.rechercher.mockResolvedValue({ clients: clients(5001), total: 7000 });
+
+      await expect(service.exporter(CRITERES, GESTIONNAIRE, [])).rejects.toThrow(
+        new BadRequestException('L’export dépasse 5 000 lignes : affinez les filtres.'),
+      );
+      expect(journal.enregistrer).not.toHaveBeenCalled();
+    });
+
+    it('refuse 2 501 clients à deux adresses : la limite porte sur les lignes du fichier', async () => {
+      const { service, depot, journal } = creerService();
+      depot.rechercher.mockResolvedValue({ clients: clients(2501, 2), total: 2501 });
+
+      await expect(service.exporter(CRITERES, GESTIONNAIRE, [])).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(journal.enregistrer).not.toHaveBeenCalled();
+    });
+  });
+
   describe('liste et consultation', () => {
     it('met en forme une page de clients avec le nom affiché', async () => {
       const { service } = creerService();
