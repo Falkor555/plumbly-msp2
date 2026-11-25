@@ -86,7 +86,7 @@ La fin prévue est une donnée dérivée : elle n'apparaît pas dans le MCD, mai
 | --- | --- | --- | --- | --- |
 | id_intervention | Intervention signée | Entier | Clé primaire et clé étrangère vers `intervention` | Signature d'intervention |
 | image | Image de la signature | Binaire (`BYTEA`) | Obligatoire, PNG, 48 Ko maximum | Signature d'intervention |
-| nom_signataire | Nom de la personne qui signe | Texte (100) | Obligatoire | Signature d'intervention |
+| nom_signataire | Nom de la personne qui signe | Texte (100) | Obligatoire, non vide | Signature d'intervention |
 | signee_le | Date et heure serveur de la signature | Date-heure | Obligatoire, égale à `terminee_le` | Signature d'intervention |
 | empreinte | Empreinte SHA-256 du contenu signé | Texte (64) | Obligatoire, 64 caractères hexadécimaux | Signature d'intervention |
 | id_auteur | Compte qui a enregistré la signature | Entier | Clé étrangère vers `utilisateur` | Signature d'intervention |
@@ -356,8 +356,8 @@ erDiagram
 | client | PARTICULIER ⇒ `nom_client` renseigné ; PROFESSIONNEL ⇒ `raison_sociale` renseignée | CHECK | Identité du client |
 | toutes | Clés étrangères en `ON DELETE RESTRICT` | FOREIGN KEY | D12 : on archive au lieu de supprimer |
 | jetons | Clé étrangère en `ON DELETE CASCADE` | FOREIGN KEY | Les jetons disparaissent avec le compte |
-| signature_intervention | `octet_length(image) <= 49152` ; `empreinte ~ '^[0-9a-f]{64}$'` | CHECK | RG35, RG34 |
-| signature_intervention | Mise à jour refusée | TRIGGER `BEFORE UPDATE` | RG32 : une signature est définitive |
+| signature_intervention | `octet_length(image) <= 49152` ; `empreinte ~ '^[0-9a-f]{64}$'` ; `btrim(nom_signataire) <> ''` | CHECK | RG35, RG34, RG31 |
+| signature_intervention | Mise à jour refusée | TRIGGER `BEFORE UPDATE` | RG32 : une signature est définitive. La suppression reste permise (anonymisation RGPD) : une suppression suivie d'une nouvelle insertion n'est pas détectée par l'empreinte (ADR 0013) |
 
 Prisma ne gère pas directement les contraintes `CHECK`, les contraintes `DEFERRABLE` ni les colonnes générées : elles seront ajoutées en SQL dans la migration générée par Prisma (card #8).
 
@@ -417,7 +417,7 @@ Le journal des actions est stocké dans MongoDB, dans la collection `journal_act
 | --- | --- | --- | --- |
 | `_id` | ObjectId | Oui | Identifiant généré par MongoDB |
 | `date` | Date | Oui | Date et heure de l'action |
-| `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE` |
+| `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `SIGNATURE_ENREGISTREE` (empreinte dans `contexte`, ni image ni nom du signataire), `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE` |
 | `auteur` | Objet | Non | Utilisateur qui a agi : `{ id, role }` ; absent pour une connexion échouée |
 | `entite` | Objet | Oui | Élément concerné : `{ type, id }`, par exemple `{ "type": "intervention", "id": 42 }` ; `id` vaut `null` pour une connexion échouée sur un e-mail qui ne correspond à aucun compte (`{ "type": "utilisateur", "id": null }`) |
 | `avant` | Objet | Non | Valeurs modifiées avant l'action |
