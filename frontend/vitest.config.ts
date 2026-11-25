@@ -20,7 +20,8 @@ export default mergeConfig(
         VITE_API_URL: 'http://localhost/api/v1',
       },
       // Vitest vide les feuilles de style par défaut : le test des contrastes lit les jetons de la
-      // charte dans index.css (import « ?raw »), il lui faut donc son vrai contenu.
+      // charte dans index.css (import « ?raw »), il lui faut donc son vrai contenu. À garder :
+      // sans cette option, index.css arrive vide et tous les couples de contraste échouent.
       css: { include: [/\/src\/index\.css/] },
       restoreMocks: true,
       unstubGlobals: true,

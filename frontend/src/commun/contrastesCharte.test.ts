@@ -18,6 +18,8 @@ const JETONS = lireJetons(feuilleDeStyle);
 /*
  * Couleurs Tailwind tolérées hors @theme. Tailwind les écrit en oklch, que le calcul WCAG ne lit
  * pas : elles sont recopiées ici, converties en sRGB (arrondi à l'octet).
+ * Valeurs de Tailwind 4.3.5 : à revérifier à chaque montée de version de Tailwind, qui peut
+ * retoucher sa palette sans que ce test le remarque.
  */
 const HORS_THEME: Record<string, string> = {
   white: '#ffffff',
