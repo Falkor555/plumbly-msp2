@@ -68,7 +68,11 @@ function parametresCommuns(criteres: CriteresCommuns): ParametresRequete {
   };
 }
 
-function rechercheEnvoyable(recherche?: string): string | undefined {
+/**
+ * Recherche telle que l'API la recevra, ou undefined si elle ne partira pas. Les écrans s'en
+ * servent aussi pour ne relire la liste que lorsque la recherche envoyée change réellement.
+ */
+export function rechercheEnvoyable(recherche?: string): string | undefined {
   const texte = recherche?.trim() ?? '';
   return texte.length >= LONGUEUR_MIN_RECHERCHE ? texte : undefined;
 }
