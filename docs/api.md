@@ -12,7 +12,7 @@ Ce document définit le contrat de l'API REST de Plumbly : les routes, les donn�
 | Élément | Convention | Exemple |
 | --- | --- | --- |
 | URL de base | Préfixe versionné | `http://localhost:3000/api/v1` |
-| Format | JSON en UTF-8 | `Content-Type: application/json` |
+| Format | JSON en UTF-8 ; les exports sont des fichiers CSV (section 6.12) | `Content-Type: application/json` |
 | Noms des ressources | Anglais, au pluriel (cahier des charges, 8.3) | `/interventions`, `/tours` |
 | Noms des champs | Français, en camelCase, identiques au dictionnaire de données | `debutPrevu`, `dureeEstimeeMin` |
 | Identifiants | Entiers | `"id": 42` |
@@ -124,6 +124,7 @@ Chaque route est rattachée à une user story ([user-stories.md](user-stories.md
 | Méthode | Route | Droits | Rôle de la route | US |
 | --- | --- | --- | --- | --- |
 | GET | `/interventions` | ADMIN, GEST | Lister et filtrer les interventions, urgentes en tête | US15 |
+| GET | `/interventions/export` | ADMIN, GEST | Exporter en CSV la liste filtrée | US29 |
 | POST | `/interventions` | ADMIN, GEST | Créer une intervention au statut « à planifier » | US14 |
 | GET | `/interventions/:id` | ADMIN, GEST, TECH (les siennes) | Consulter une intervention | US14, US24 |
 | PATCH | `/interventions/:id` | ADMIN, GEST | Modifier une intervention non terminée | US16 |
@@ -147,6 +148,7 @@ Chaque route est rattachée à une user story ([user-stories.md](user-stories.md
 | Méthode | Route | Droits | Rôle de la route | US |
 | --- | --- | --- | --- | --- |
 | GET | `/clients` | ADMIN, GEST | Rechercher et lister les clients | US08 |
+| GET | `/clients/export` | ADMIN, GEST | Exporter en CSV la liste filtrée, une ligne par adresse | US32 |
 | POST | `/clients` | ADMIN, GEST | Créer un client avec sa première adresse | US06 |
 | GET | `/clients/:id` | ADMIN, GEST | Consulter un client et ses adresses | US06 |
 | PATCH | `/clients/:id` | ADMIN, GEST | Modifier un client | US10 |
@@ -1256,6 +1258,65 @@ Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'i
 | `POST /interventions/:id/cancel` | L'intervention perd sa tournée, son rang et son début prévu ; `demarreeLe` est gardé pour une intervention en cours, `annuleeLe` et `motifAnnulation` sont renseignés. Une intervention en cours puis annulée perd en base le lien avec son technicien : il ne reste que dans le journal, comme auteur de ses changements de statut |
 | `POST /interventions/:id/complete`, `PATCH /interventions/:id/report` | Un compte rendu vide ou fait d'espaces répond `400`. `report` remplace le texte précédent |
 | `POST /intervention-types`, `PATCH /intervention-types/:id` | L'unicité du libellé tient compte de la casse, comme la contrainte en base : « Fuite » et « fuite » sont deux types |
+
+### 6.12 Import et export CSV
+
+Règles de gestion : RG25 et RG26 du [cahier des charges](cahier-des-charges.md#5-règles-de-gestion). Routes réservées à ADMIN et GEST : elles répondent `401` sans connexion et `403` pour un technicien.
+
+#### Format des exports
+
+| Élément | Valeur |
+| --- | --- |
+| En-têtes HTTP | `Content-Type: text/csv; charset=utf-8` ; `Content-Disposition: attachment; filename="clients-2026-11-25.csv"` (jour à La Réunion) ; `Cache-Control: no-store` |
+| Encodage | UTF-8 avec BOM, pour qu'Excel affiche les accents |
+| Séparateur, fins de ligne | `;`, CRLF |
+| Guillemets | RFC 4180 : un champ qui contient `;`, `"`, un retour chariot ou un saut de ligne est entouré de guillemets, et ses `"` sont doublés |
+| Formules | Une cellule de texte qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est précédée d'une apostrophe (RG26) |
+| Dates | `AAAA-MM-JJ` et `AAAA-MM-JJ HH:MM`, à l'heure de La Réunion |
+| Valeur absente | Cellule vide |
+| Limite | 5 000 lignes ; au-delà, `400` « L'export dépasse 5 000 lignes : affinez les filtres. » |
+
+Chaque export réussi ajoute une entrée `EXPORT_CSV` au journal (RG25).
+
+#### `GET /interventions/export` — exporter les interventions (US29)
+
+Paramètres : ceux de `GET /interventions` (`recherche`, `statut`, `urgence`, `technicienId`, `clientId`, `du`, `au`, `tri`), avec les mêmes règles ; `page` et `limit` sont refusés (`400`). Les lignes sont dans l'ordre de la liste.
+
+Colonnes : `id`, `cree_le`, `client`, `code_postal`, `ville`, `type_intervention`, `description`, `urgence`, `statut`, `duree_estimee_min`, `debut_prevu`, `technicien`, `ordre_tournee`, `terminee_le`, `signee` (`oui` / `non`).
+
+Le téléphone et l'e-mail du client, la rue, les informations d'accès, le compte rendu, le motif d'annulation et la signature (image, nom du signataire, empreinte) ne sont pas exportés (minimisation) : seule la colonne `signee` dit si le client a signé (US33).
+
+Réponse `200` : le fichier `interventions-AAAA-MM-JJ.csv`.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Paramètre invalide, `page` ou `limit` présent, plus de 5 000 lignes |
+
+#### `GET /clients/export` — exporter les clients (US32)
+
+Paramètres : `recherche`, `typeClient`, `archives`, `tri` de `GET /clients`, avec les mêmes règles ; `page` et `limit` sont refusés (`400`).
+
+Une ligne par adresse non archivée ; un client sans adresse non archivée (client archivé) sort sur une ligne, colonnes d'adresse vides.
+
+Colonnes : `id`, `type_client`, `nom`, `prenom`, `raison_sociale`, `telephone`, `email`, `rue`, `complement`, `code_postal`, `ville`, `infos_acces`, `archive` (`oui` / `non`), `cree_le`. Ces noms sont reconnus par l'import.
+
+Réponse `200` : le fichier `clients-AAAA-MM-JJ.csv`.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Paramètre invalide, `page` ou `limit` présent, plus de 5 000 lignes |
+
+### 6.13 Écarts de la mise en œuvre de l'import et de l'export CSV (#47)
+
+Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'implémentation.
+
+| Route | Écart |
+| --- | --- |
+| `GET /interventions/export` | Colonne `signee` (`oui` / `non`) ajoutée après `terminee_le` : la signature du client (US33) a été livrée avant ce lot. Ni l'image, ni le nom du signataire, ni l'empreinte |
+| `GET /clients/export` | La limite de 5 000 porte sur les lignes du fichier, pas sur les clients : 2 501 clients à deux adresses donnent 5 002 lignes et sont refusés |
+| `GET /clients/export`, `GET /interventions/export` | `page` ou `limit` répond `400` avec le message des champs inconnus (« Le champ page n'est pas autorisé ») |
+| `GET /clients/export`, `GET /interventions/export` | `filtres` de l'entrée `EXPORT_CSV` contient les paramètres reçus dans l'ordre de l'URL ; un filtre absent n'y figure pas, même s'il a une valeur par défaut (`tri`, `archives`) |
+| `GET /clients/export`, `GET /interventions/export` | Un `400` (paramètre invalide, plus de 5 000 lignes) n'écrit rien dans le journal ; un `403` n'y écrit que l'entrée `ACCES_REFUSE` (TS-03) |
 
 ## 7. Points ouverts
 

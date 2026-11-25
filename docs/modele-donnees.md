@@ -417,7 +417,7 @@ Le journal des actions est stocké dans MongoDB, dans la collection `journal_act
 | --- | --- | --- | --- |
 | `_id` | ObjectId | Oui | Identifiant généré par MongoDB |
 | `date` | Date | Oui | Date et heure de l'action |
-| `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `SIGNATURE_ENREGISTREE` (empreinte dans `contexte`, ni image ni nom du signataire), `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE`, `ACCES_REFUSE` (requête refusée en 403 ; méthode et modèle de route dans `contexte`) |
+| `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `SIGNATURE_ENREGISTREE` (empreinte dans `contexte`, ni image ni nom du signataire), `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE`, `ACCES_REFUSE` (requête refusée en 403 ; méthode et modèle de route dans `contexte`), `EXPORT_CSV` (ressource, nombre de lignes et nom des filtres dans `contexte`) |
 | `auteur` | Objet | Non | Utilisateur qui a agi : `{ id, role }` ; absent pour une connexion échouée |
 | `entite` | Objet | Oui | Élément concerné : `{ type, id }`, par exemple `{ "type": "intervention", "id": 42 }` ; `id` vaut `null` pour une connexion échouée sur un e-mail qui ne correspond à aucun compte (`{ "type": "utilisateur", "id": null }`) ; pour un accès refusé, l'utilisateur refusé (`{ "type": "utilisateur", "id": 7 }`) |
 | `avant` | Objet | Non | Valeurs modifiées avant l'action |
@@ -450,6 +450,8 @@ Exemple de document pour un accès refusé (un technicien qui veut démarrer l'i
   "contexte": { "methode": "POST", "route": "/api/v1/interventions/:id/start" }
 }
 ```
+
+Pour `EXPORT_CSV`, l'entité est l'auteur (l'export porte sur une liste et ne cite aucun client), et `contexte` vaut par exemple `{ "ressource": "interventions", "lignes": 128, "filtres": ["statut", "du", "au"] }` : le nom des filtres, jamais leur valeur.
 
 ### 8.2 Règles
 

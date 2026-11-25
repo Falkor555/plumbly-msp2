@@ -84,6 +84,7 @@ Le MVP livré en deux semaines couvre l'authentification, la gestion des clients
 - Vue planning jour / semaine par technicien
 - Vue « ma tournée du jour » sur mobile pour le technicien
 - Signature du client sur le mobile du technicien à la clôture d'une intervention (Should, US33)
+- Export CSV des clients et des interventions filtrées (Should, US29, US32)
 - Tableau de bord : indicateurs d'activité calculés en SQL
 - Journal des actions dans MongoDB, incluant l'historique des changements de statut
 
@@ -167,7 +168,13 @@ Les besoins sont exprimés en user stories, priorisées selon la méthode MoSCoW
 | US26 | En tant qu'administrateur, je veux voir le nombre d'interventions par statut et par technicien sur une période afin de suivre l'activité. | M | Période paramétrable ; totaux cohérents avec les données de démonstration |
 | US27 | En tant qu'administrateur, je veux connaître le délai moyen entre la demande et la réalisation afin de mesurer la réactivité. | S | Délai en heures, par type d'intervention |
 | US28 | En tant que gestionnaire, je veux voir les interventions en retard ou non planifiées depuis plus de 48 h afin de les traiter en priorité. | S | Liste triée par ancienneté ; une intervention planifiée non démarrée 15 minutes après son heure de début prévue est considérée en retard |
-| US29 | En tant qu'administrateur, je veux exporter la liste des interventions en CSV afin de l'exploiter ailleurs. | C | Export filtré selon la vue courante ; évolution, hors MVP |
+
+### 4.7 Import et export
+
+| ID | User story | Priorité | Critères d'acceptation |
+| --- | --- | --- | --- |
+| US29 | En tant que gestionnaire ou administrateur, je veux exporter la liste des interventions filtrée en CSV afin de la suivre ou l'archiver dans un tableur. | S | Seules les lignes filtrées, dans l'ordre de la liste ; accents lisibles dans Excel, formules neutralisées (RG26) ; ni téléphone, ni e-mail, ni adresse précise, ni signature ; 5 000 lignes au plus ; refusé au technicien ; export journalisé (RG25) |
+| US32 | En tant que gestionnaire ou administrateur, je veux exporter les clients en CSV afin de les relire, les sauvegarder ou les transmettre à un autre outil. | S | Une ligne par adresse active ; colonnes reconnues par l'import ; mêmes règles d'encodage, de neutralisation, de droits, de limite et de journal que US29 |
 
 ## 5. Règles de gestion
 
@@ -245,6 +252,13 @@ stateDiagram-v2
 | RG22 | Un client ou un technicien lié à des interventions n'est jamais supprimé : il est archivé. |
 | RG23 | L'e-mail d'un compte utilisateur est unique. |
 
+### 5.6 Import et export
+
+| ID | Règle |
+| --- | --- |
+| RG25 | L'import et l'export CSV sont réservés aux administrateurs et aux gestionnaires. Chaque import et chaque export réussi est journalisé dans MongoDB avec l'auteur, la ressource, les compteurs et le nom des filtres utilisés, jamais leurs valeurs ni une donnée de client. |
+| RG26 | Un export est encodé en UTF-8 avec BOM, séparé par des points-virgules, avec des fins de ligne CRLF et des guillemets selon la RFC 4180. Toute cellule de texte qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est précédée d'une apostrophe. Un export est limité à 5 000 lignes. |
+
 ### 5.5 Droits par rôle
 
 | Action | Administrateur | Gestionnaire | Technicien |
@@ -259,6 +273,7 @@ stateDiagram-v2
 | Faire signer le client à la clôture | Non | Non | Oui |
 | Consulter la signature d'une intervention | Oui | Oui | Les siennes |
 | Consulter le tableau de bord | Oui | Oui (partiel) | Non |
+| Import et export de données | Oui | Oui | Non |
 
 ## 6. Besoins non fonctionnels
 
@@ -282,6 +297,7 @@ Les mesures suivent l'[OWASP Top 10 2025](https://owasp.org/www-project-top-ten/
 | Configuration | CORS limité à l'origine du front ; secrets dans des variables d'environnement, jamais dans le dépôt |
 | Fichier déguisé en image | Signature acceptée seulement en PNG : préfixe `data:image/png;base64,`, en-tête PNG et dimensions vérifiés côté serveur, taille plafonnée (RG35) ; renvoyée en data URL affichée par `<img>`, jamais interprétée comme du HTML |
 | Preuve modifiée après coup | Signature et compte rendu signé définitifs (RG32, RG33) ; déclencheur PostgreSQL qui refuse la mise à jour ; empreinte SHA-256 vérifiée à la lecture (RG34) |
+| Injection de formule CSV | Dans un export, toute cellule de texte qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est précédée d'une apostrophe : le tableur l'affiche comme du texte et n'exécute rien (RG26, OWASP « CSV Injection ») |
 | Dépendances vulnérables | `npm audit` et Dependabot sur le dépôt GitHub |
 
 ### 6.2 RGPD

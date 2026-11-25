@@ -1,14 +1,14 @@
 # User stories — Plumbly
 
-Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Chacune suit le format « En tant que…, je veux…, afin de… », porte une priorité MoSCoW et des critères d'acceptation au format « Étant donné / Quand / Alors ». Les acteurs sont décrits dans les [personas](personas.md) et les règles de gestion (RG) dans le [cahier des charges](cahier-des-charges.md#5-règles-de-gestion).
+Ce document détaille les 31 user stories de Plumbly, regroupées en 7 epics. Chacune suit le format « En tant que…, je veux…, afin de… », porte une priorité MoSCoW et des critères d'acceptation au format « Étant donné / Quand / Alors ». Les acteurs sont décrits dans les [personas](personas.md) et les règles de gestion (RG) dans le [cahier des charges](cahier-des-charges.md#5-règles-de-gestion).
 
 ## Priorisation MoSCoW
 
 | Priorité | Signification | Nombre |
 | --- | --- | --- |
 | **M** — Must | Indispensable au MVP, livré en semaine 2 | 19 |
-| **S** — Should | Important, livré si le temps le permet | 7 |
-| **C** — Could | Confort, prévu pour une version suivante | 3 |
+| **S** — Should | Important, livré si le temps le permet | 10 |
+| **C** — Could | Confort, prévu pour une version suivante | 2 |
 | **W** — Won't | Hors périmètre de cette version (voir cahier des charges, 3.3) | — |
 
 ## Vue d'ensemble
@@ -43,8 +43,9 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 | US26 | Tableau de bord | Interventions par statut et technicien | Administrateur | M | #21 |
 | US27 | Tableau de bord | Délai moyen de traitement | Administrateur | S | #21 |
 | US28 | Tableau de bord | Interventions en retard | Gestionnaire | S | #21 |
-| US29 | Tableau de bord | Export CSV | Administrateur | C | — |
+| US29 | Import et export | Exporter les interventions en CSV | Gestionnaire | S | #47 |
 | US33 | Interventions | Faire signer le client à la clôture | Technicien | S | #17, #18 |
+| US32 | Import et export | Exporter les clients en CSV | Gestionnaire | S | #47 |
 
 ---
 
@@ -297,13 +298,30 @@ La signature est dessinée au doigt sur l'écran du technicien. Elle ne crée pa
 - **Étant donné** une intervention urgente non planifiée depuis plus de 4 h, **quand** j'ouvre le tableau de bord, **alors** elle est signalée en tête (RG19).
 - **Étant donné** une intervention planifiée non démarrée 15 minutes après son heure de début, **quand** j'ouvre le tableau de bord, **alors** elle apparaît comme en retard (RG20).
 
-### US29 — Export CSV · Could
+---
 
-**En tant qu'**administrateur, **je veux** exporter la liste des interventions en CSV **afin de** l'exploiter dans un tableur.
+## Epic 7 — Import et export
 
-- **Étant donné** une liste filtrée, **quand** je clique sur « Exporter », **alors** un fichier CSV contenant uniquement les lignes filtrées est téléchargé.
+Règles de gestion RG25 et RG26 ; format des fichiers et règles détaillées dans le [contrat d'API](api.md) (section 6.12).
 
-> Évolution hors MVP (cahier des charges, 3.2).
+### US29 — Exporter les interventions en CSV · Should
+
+**En tant que** gestionnaire ou administrateur, **je veux** exporter la liste des interventions filtrée en CSV **afin de** la suivre ou l'archiver dans un tableur.
+
+- **Étant donné** une liste d'interventions filtrée (statut, urgence, technicien, client, période, recherche), **quand** je clique sur « Exporter en CSV », **alors** un fichier contenant uniquement les lignes filtrées, dans le même ordre, est téléchargé.
+- **Étant donné** le fichier téléchargé, **quand** je l'ouvre dans Excel ou LibreOffice, **alors** les accents s'affichent correctement et chaque champ est dans sa colonne (RG26).
+- **Étant donné** une description qui commence par `=`, `+`, `-` ou `@`, **quand** j'ouvre le fichier, **alors** le tableur l'affiche comme du texte et n'exécute aucune formule (RG26).
+- **Étant donné** que je suis technicien, **quand** j'appelle l'export, **alors** l'accès est refusé (403) (RG25).
+- **Étant donné** un export réussi, **alors** le journal des actions enregistre qui a exporté, quoi et combien de lignes, sans aucune donnée de client (RG25).
+- **Étant donné** des filtres qui donnent plus de 5 000 interventions, **quand** j'exporte, **alors** l'export est refusé avec un message qui demande d'affiner les filtres (RG26).
+
+### US32 — Exporter les clients en CSV · Should
+
+**En tant que** gestionnaire ou administrateur, **je veux** exporter les clients en CSV **afin de** les relire, les sauvegarder ou les transmettre à un autre outil.
+
+- **Étant donné** la liste des clients filtrée (recherche, type, archivés), **quand** je clique sur « Exporter en CSV », **alors** un fichier avec une ligne par adresse non archivée de chaque client est téléchargé.
+- **Étant donné** ce fichier, **quand** je le réimporte sans le modifier, **alors** toutes les lignes sont reconnues comme doublons : les colonnes de l'export sont reconnues par l'import.
+- Mêmes critères que US29 pour l'encodage, la neutralisation des formules, les droits, la limite de 5 000 lignes et le journal.
 
 ---
 
