@@ -19,7 +19,7 @@ Ce document définit le contrat de l'API REST de Plumbly : les routes, les donn�
 | Dates et heures | ISO 8601 **avec fuseau obligatoire** (`Z` ou `+04:00`) ; renvoyées en UTC ; affichées à l'heure de La Réunion (UTC+4, sans heure d'été) par le front | `"2026-11-24T08:00:00.000Z"` |
 | Dates seules | ISO 8601 ; un jour s'entend à l'heure de La Réunion | `"2026-11-24"` |
 | Énumérations | Majuscules, séparées par `_` | `"A_PLANIFIER"`, `"GESTIONNAIRE"` |
-| Champs inconnus | Refusés (`whitelist` et `forbidNonWhitelisted`) | `400` |
+| Champs inconnus | Refusés par `lireObjet()` (validation écrite à la main) | `400` |
 
 Les noms de champs reprennent ceux du [modèle de données](modele-donnees.md) : `debut_prevu` en base devient `debutPrevu` dans l'API. Prisma fait la correspondance avec `@map`.
 
@@ -192,7 +192,7 @@ Chaque route est rattachée à une user story ([user-stories.md](user-stories.md
 
 ## 6. Détail des routes
 
-Pour chaque route : les données envoyées (DTO) et leurs règles de validation, la réponse en cas de succès, les erreurs possibles et les effets. Les DTO sont implémentés avec `class-validator` ; les erreurs listées servent de base aux tests d'intégration (card #12).
+Pour chaque route : les données envoyées (DTO) et leurs règles de validation, la réponse en cas de succès, les erreurs possibles et les effets. Les corps et les paramètres de requête sont lus par les fonctions de `backend/src/commun/validation.ts` et des fichiers `*.validation.ts` de chaque module, écrites à la main ; les erreurs listées servent de base aux tests d'intégration (card #12).
 
 **Politique de mot de passe** (cahier des charges, 6.1) : 12 caractères minimum, avec au moins une majuscule, une minuscule, un chiffre et un caractère spécial.
 
@@ -1266,4 +1266,4 @@ Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'i
 - [ ] **E-mail de réinitialisation** (US04) : ajouter Mailpit au `docker-compose.yml` pour capturer les e-mails en développement (card #7).
 - [ ] **Durée d'une intervention** : limites de 15 à 720 minutes à confirmer.
 - [x] **Démarrage d'une intervention** : uniquement le jour de sa tournée, à l'heure de La Réunion ; règle RG24 du cahier des charges (#17).
-- [x] **Swagger** : documentation interactive sur `/api/docs`, désactivée en production. Les corps de requête sont décrits à la main (`@ApiBody`) tant que la validation n'utilise pas de classes DTO.
+- [x] **Swagger** : documentation interactive sur `/api/docs`, désactivée en production. Les corps de requête sont décrits à la main (`@ApiBody`) : la validation est écrite en fonctions (`*.validation.ts`), sans classes DTO dont Swagger pourrait tirer le schéma.

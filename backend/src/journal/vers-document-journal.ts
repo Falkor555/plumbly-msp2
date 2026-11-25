@@ -49,6 +49,11 @@ export function versDocumentJournal(action: ActionJournalisee, date: Date): Docu
         avant: { actif: true },
         apres: { actif: false },
       };
+    case 'ACCES_REFUSE':
+      return {
+        ...enTete(action.type, date, action.auteur, utilisateur(action.auteur.id)),
+        contexte: { methode: action.methode, route: action.route },
+      };
   }
 }
 

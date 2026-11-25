@@ -3,7 +3,7 @@ import { type Collection, type Document, MongoClient } from 'mongodb';
 import { inject } from 'vitest';
 import type { UtilisateurConnecte } from '../src/commun/autorisation/utilisateur-connecte.js';
 import { StatutIntervention, Urgence } from '../src/generated/prisma/client.ts';
-import { DUREE_CONSERVATION_CONNEXIONS_EN_SECONDES } from '../src/journal/journal.repository.js';
+import { DUREE_CONSERVATION_JOURNAUX_D_ACCES_EN_SECONDES } from '../src/journal/journal.repository.js';
 import type { PrismaService } from '../src/prisma/prisma.service.js';
 import {
   type ApplicationDeTest,
@@ -176,6 +176,26 @@ describe('journal des actions dans MongoDB (e2e)', () => {
     return requetesEn(application.app, utilisateur).get(`/interventions/${idIntervention}/history`);
   }
 
+  /**
+   * Documents du journal, dans l'ordre d'écriture, une fois qu'il y en a `nombre`. Le filtre des
+   * 403 écrit sans attendre MongoDB : son document arrive juste après la réponse.
+   */
+  async function documentsUneFoisEcrits(nombre: number): Promise<Document[]> {
+    await vi.waitFor(async () => {
+      expect(await journal.countDocuments()).toBe(nombre);
+    });
+    return journal.find({}).sort({ _id: 1 }).toArray();
+  }
+
+  function creerCollegue(): Promise<UtilisateurConnecte> {
+    return creerCompte(application.prisma, {
+      email: 'mathieu@test.re',
+      nom: 'Rivière',
+      prenom: 'Mathieu',
+      role: 'TECHNICIEN',
+    });
+  }
+
   it('planifier une intervention crée un document STATUT_MODIFIE dans journal_actions', async () => {
     await planifier(donnees.idIntervention).expect(200);
 
@@ -296,7 +316,7 @@ describe('journal des actions dans MongoDB (e2e)', () => {
       expect.objectContaining({ action: 'SIGNATURE_ENREGISTREE', contexte: { empreinte } }),
     );
   });
-  it('crée au démarrage les index du modèle de données, dont le TTL partiel des connexions', async () => {
+  it('crée au démarrage les index du modèle de données, dont le TTL partiel des journaux d’accès', async () => {
     const index = await journal.listIndexes().toArray();
 
     expect(index).toEqual(
@@ -308,15 +328,172 @@ describe('journal des actions dans MongoDB (e2e)', () => {
         expect.objectContaining({ name: 'actions_auteur', key: { 'auteur.id': 1, date: -1 } }),
         expect.objectContaining({ name: 'suivi_actions', key: { action: 1, date: -1 } }),
         expect.objectContaining({
-          name: 'expiration_connexions',
+          name: 'expiration_journaux_d_acces',
           key: { date: 1 },
-          expireAfterSeconds: DUREE_CONSERVATION_CONNEXIONS_EN_SECONDES,
+          expireAfterSeconds: DUREE_CONSERVATION_JOURNAUX_D_ACCES_EN_SECONDES,
           partialFilterExpression: {
-            action: { $in: ['CONNEXION_REUSSIE', 'CONNEXION_ECHOUEE'] },
+            action: { $in: ['CONNEXION_REUSSIE', 'CONNEXION_ECHOUEE', 'ACCES_REFUSE'] },
           },
         }),
       ]),
     );
+  });
+
+  describe('TS-02 : changement de statut fait par un technicien', () => {
+    const AUJOURDHUI = '2026-12-07';
+
+    /** Intervention planifiée dans la tournée du jour du technicien : RG24 permet de la démarrer. */
+    async function interventionDuJour(): Promise<number> {
+      const { prisma } = application;
+      const fiche = await prisma.technicien.findUniqueOrThrow({
+        where: { idUtilisateur: donnees.technicien.id },
+      });
+      const tournee = await prisma.tournee.create({
+        data: {
+          idTechnicien: fiche.id,
+          dateTournee: new Date(`${AUJOURDHUI}T00:00:00Z`),
+          idCreateur: donnees.gestionnaire.id,
+        },
+      });
+      return creerIntervention(prisma, donnees.gestionnaire.id, {
+        idTournee: tournee.id,
+        debutPrevu: `${AUJOURDHUI}T10:00:00+04:00`,
+      });
+    }
+
+    it('TS-02 : le technicien qui démarre son intervention écrit STATUT_MODIFIE, sans donnée personnelle', async () => {
+      const id = await interventionDuJour();
+
+      await requetesEn(application.app, donnees.technicien)
+        .post(`/interventions/${id}/start`)
+        .expect(200);
+
+      const documents = await journal.find({}).toArray();
+      expect(documents).toEqual([
+        {
+          _id: expect.anything(),
+          date: MAINTENANT,
+          action: 'STATUT_MODIFIE',
+          auteur: { id: donnees.technicien.id, role: 'TECHNICIEN' },
+          entite: { type: 'intervention', id },
+          avant: { statut: 'PLANIFIEE' },
+          apres: { statut: 'EN_COURS' },
+        },
+      ]);
+      expect(documents.flatMap(clesDe).filter((cle) => CHAMPS_PERSONNELS.includes(cle))).toEqual(
+        [],
+      );
+    });
+
+    it('TS-02 : l’historique relit l’entrée avec le nom et le prénom du technicien, lus dans PostgreSQL', async () => {
+      const id = await interventionDuJour();
+      await requetesEn(application.app, donnees.technicien)
+        .post(`/interventions/${id}/start`)
+        .expect(200);
+
+      const reponse = await historique(id, donnees.gestionnaire).expect(200);
+
+      expect(reponse.body).toEqual([
+        {
+          date: '2026-12-07T05:00:00.000Z',
+          action: 'STATUT_MODIFIE',
+          auteur: { id: donnees.technicien.id, nom: 'Hoarau', prenom: 'Kévin', role: 'TECHNICIEN' },
+          avant: { statut: 'PLANIFIEE' },
+          apres: { statut: 'EN_COURS' },
+        },
+      ]);
+    });
+
+    it('TS-02 : un collègue refusé en 403 n’ajoute aucun changement de statut, seulement son refus', async () => {
+      const id = await interventionDuJour();
+      const collegue = await creerCollegue();
+
+      await requetesEn(application.app, collegue).post(`/interventions/${id}/start`).expect(403);
+
+      const documents = await documentsUneFoisEcrits(1);
+      expect(documents.map((document) => document.action)).toEqual(['ACCES_REFUSE']);
+      const intervention = await application.prisma.intervention.findUniqueOrThrow({
+        where: { id },
+      });
+      expect(intervention.statut).toBe('PLANIFIEE');
+    });
+
+    it('TS-03 : ce refus est tracé avec le collègue pour auteur et le modèle de route', async () => {
+      const id = await interventionDuJour();
+      const collegue = await creerCollegue();
+
+      await requetesEn(application.app, collegue).post(`/interventions/${id}/start`).expect(403);
+
+      expect(await documentsUneFoisEcrits(1)).toEqual([
+        {
+          _id: expect.anything(),
+          date: MAINTENANT,
+          action: 'ACCES_REFUSE',
+          auteur: { id: collegue.id, role: 'TECHNICIEN' },
+          entite: { type: 'utilisateur', id: collegue.id },
+          contexte: { methode: 'POST', route: '/api/v1/interventions/:id/start' },
+        },
+      ]);
+    });
+  });
+
+  describe('TS-03 : les accès refusés (403) sont journalisés', () => {
+    it('TS-03 : un gestionnaire refusé sur POST /intervention-types laisse ACCES_REFUSE, sans donnée personnelle', async () => {
+      const reponse = await requetesEn(application.app, donnees.gestionnaire)
+        .post('/intervention-types')
+        .send({ libelle: 'Débouchage', dureeDefautMin: 30 })
+        .expect(403);
+
+      // Le corps de la réponse est celui de NestJS, inchangé par le filtre.
+      expect(reponse.body).toEqual({
+        statusCode: 403,
+        message: 'Accès refusé.',
+        error: 'Forbidden',
+      });
+      const documents = await documentsUneFoisEcrits(1);
+      expect(documents).toEqual([
+        {
+          _id: expect.anything(),
+          date: MAINTENANT,
+          action: 'ACCES_REFUSE',
+          auteur: { id: donnees.gestionnaire.id, role: 'GESTIONNAIRE' },
+          entite: { type: 'utilisateur', id: donnees.gestionnaire.id },
+          contexte: { methode: 'POST', route: '/api/v1/intervention-types' },
+        },
+      ]);
+      expect(documents.flatMap(clesDe).filter((cle) => CHAMPS_PERSONNELS.includes(cle))).toEqual(
+        [],
+      );
+    });
+
+    it('TS-03 : un 403 sur une recherche ne laisse pas « Hélène » dans le journal', async () => {
+      await requetesEn(application.app, donnees.technicien)
+        .get('/interventions')
+        .query({ recherche: 'Hélène' })
+        .expect(403);
+
+      const documents = await documentsUneFoisEcrits(1);
+      expect(documents[0].contexte).toEqual({ methode: 'GET', route: '/api/v1/interventions' });
+      const texte = JSON.stringify(documents);
+      for (const fragment of ['Hélène', 'H%C3%A9l%C3%A8ne', 'recherche']) {
+        expect(texte).not.toContain(fragment);
+      }
+    });
+
+    it('TS-03 : un 401 (sans utilisateur) n’est pas journalisé', async () => {
+      await requetesEn(application.app).post('/intervention-types').send({}).expect(401);
+      // Un 403 envoyé juste après sert de repère : une fois son document écrit, une trace du 401
+      // aurait eu le temps d'arriver elle aussi.
+      await requetesEn(application.app, donnees.gestionnaire)
+        .post('/intervention-types')
+        .send({})
+        .expect(403);
+
+      const documents = await documentsUneFoisEcrits(1);
+      expect(documents.map(({ action, auteur }) => ({ action, auteur }))).toEqual([
+        { action: 'ACCES_REFUSE', auteur: { id: donnees.gestionnaire.id, role: 'GESTIONNAIRE' } },
+      ]);
+    });
   });
 
   describe('droits et validation de GET /interventions/:id/history', () => {
@@ -326,6 +503,10 @@ describe('journal des actions dans MongoDB (e2e)', () => {
 
     it('répond 403 à un technicien', async () => {
       await historique(donnees.idIntervention, donnees.technicien).expect(403);
+
+      // Attendu ici : écrit après le test, ce document se mêlerait au suivant.
+      const documents = await documentsUneFoisEcrits(1);
+      expect(documents.map((document) => document.action)).toEqual(['ACCES_REFUSE']);
     });
 
     it('répond 404 pour une intervention inexistante', async () => {

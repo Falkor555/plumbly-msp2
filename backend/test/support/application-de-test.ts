@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { NextFunction, Response } from 'express';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
@@ -25,10 +25,18 @@ export interface ApplicationDeTest {
   prisma: PrismaService;
 }
 
-/** journalReel : seul journal.e2e-spec.ts écrit dans le MongoDB éphémère ; les autres simulent. */
+type JetonDeFournisseur = Parameters<TestingModuleBuilder['overrideProvider']>[0];
+
+export interface OptionsApplication {
+  /** Seul journal.e2e-spec.ts écrit dans le MongoDB éphémère ; les autres simulent. */
+  journalReel?: boolean;
+  /** Fournisseurs remplacés par un double, par exemple un repository qui lève une erreur. */
+  doubles?: ReadonlyArray<[jeton: JetonDeFournisseur, double: unknown]>;
+}
+
 export async function demarrerApplication(
   maintenant: Date,
-  { journalReel = false }: { journalReel?: boolean } = {},
+  { journalReel = false, doubles = [] }: OptionsApplication = {},
 ): Promise<ApplicationDeTest> {
   const constructeur = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(Horloge)
@@ -37,6 +45,9 @@ export async function demarrerApplication(
     constructeur
       .overrideProvider(JournalDesActions)
       .useValue({ enregistrer: () => Promise.resolve() });
+  }
+  for (const [jeton, double] of doubles) {
+    constructeur.overrideProvider(jeton).useValue(double);
   }
   const module = await constructeur.compile();
   const app = module.createNestApplication<INestApplication<App>>();

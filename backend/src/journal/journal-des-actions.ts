@@ -13,7 +13,8 @@ export type { ActionJournalisee } from './journal.types.js';
  * - la date est ajoutée par le journal (Horloge) : ne pas la passer ;
  * - enregistrer() ne lève jamais d'erreur : MongoDB indisponible, l'échec est tracé dans les logs
  *   de l'API et l'action métier reste valide. Aucun try/catch n'est nécessaire chez l'appelant ;
- * - pour CONNEXION_ECHOUEE, passer l'e-mail par masquerEmail() (masquer-email.ts).
+ * - pour CONNEXION_ECHOUEE, passer l'e-mail par masquerEmail() (masquer-email.ts) ;
+ * - ACCES_REFUSE est écrit par FiltreAccesRefuse pour tout 403 : rien à faire dans les modules.
  */
 export abstract class JournalDesActions {
   abstract enregistrer(action: ActionJournalisee): Promise<void>;

@@ -1,7 +1,7 @@
 /** Corps d'erreur renvoyé par NestJS (cahier des charges, 8.3). */
 export interface CorpsErreurApi {
   statusCode: number;
-  // class-validator renvoie un tableau de messages quand plusieurs champs sont invalides.
+  // La validation de l'API renvoie un tableau de messages, un par champ refusé ou invalide.
   message: string | string[];
   error?: string;
 }

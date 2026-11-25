@@ -275,7 +275,7 @@ Les mesures suivent l'[OWASP Top 10 2025](https://owasp.org/www-project-top-ten/
 | Politique de mot de passe | 12 caractères minimum, majuscule, minuscule, chiffre et caractère spécial |
 | Force brute | Limitation du nombre de tentatives de connexion (`@nestjs/throttler`) |
 | Injection SQL | Requêtes Prisma paramétrées ; requêtes SQL manuelles avec `$queryRaw` et paramètres liés, jamais de concaténation |
-| Entrées invalides | Validation de tous les DTO avec `class-validator` ; `whitelist` et `forbidNonWhitelisted` activés |
+| Entrées invalides | Validation de tous les corps et paramètres de requête par des fonctions écrites à la main (`backend/src/commun/validation.ts` et fichiers `*.validation.ts`) ; tout champ inconnu, y compris dans un objet imbriqué (adresse, signature), est refusé en 400 |
 | XSS | Pas de `dangerouslySetInnerHTML` ; React échappe l'affichage ; en-têtes de sécurité avec Helmet |
 | CSRF et vol de session | Access token JWT de 15 minutes ; refresh token de 7 jours en cookie `httpOnly`, `Secure`, `SameSite=Strict` |
 | Révocation de session | Refresh token révocable en base ; déconnexion, changement de mot de passe ou désactivation de compte invalident le refresh token |

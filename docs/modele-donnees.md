@@ -417,12 +417,12 @@ Le journal des actions est stocké dans MongoDB, dans la collection `journal_act
 | --- | --- | --- | --- |
 | `_id` | ObjectId | Oui | Identifiant généré par MongoDB |
 | `date` | Date | Oui | Date et heure de l'action |
-| `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `SIGNATURE_ENREGISTREE` (empreinte dans `contexte`, ni image ni nom du signataire), `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE` |
+| `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `SIGNATURE_ENREGISTREE` (empreinte dans `contexte`, ni image ni nom du signataire), `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE`, `ACCES_REFUSE` (requête refusée en 403 ; méthode et modèle de route dans `contexte`) |
 | `auteur` | Objet | Non | Utilisateur qui a agi : `{ id, role }` ; absent pour une connexion échouée |
-| `entite` | Objet | Oui | Élément concerné : `{ type, id }`, par exemple `{ "type": "intervention", "id": 42 }` ; `id` vaut `null` pour une connexion échouée sur un e-mail qui ne correspond à aucun compte (`{ "type": "utilisateur", "id": null }`) |
+| `entite` | Objet | Oui | Élément concerné : `{ type, id }`, par exemple `{ "type": "intervention", "id": 42 }` ; `id` vaut `null` pour une connexion échouée sur un e-mail qui ne correspond à aucun compte (`{ "type": "utilisateur", "id": null }`) ; pour un accès refusé, l'utilisateur refusé (`{ "type": "utilisateur", "id": 7 }`) |
 | `avant` | Objet | Non | Valeurs modifiées avant l'action |
 | `apres` | Objet | Non | Valeurs modifiées après l'action |
-| `contexte` | Objet | Non | Informations propres à l'action (motif d'annulation, adresse IP tronquée…) |
+| `contexte` | Objet | Non | Informations propres à l'action (motif d'annulation, méthode et modèle de route d'un accès refusé…) |
 
 Exemple de document pour un changement de statut :
 
@@ -438,10 +438,24 @@ Exemple de document pour un changement de statut :
 }
 ```
 
+Exemple de document pour un accès refusé (un technicien qui veut démarrer l'intervention d'un collègue) :
+
+```json
+{
+  "_id": "6741f0c2a1b2c3d4e5f60719",
+  "date": "2026-11-24T10:06:40.000Z",
+  "action": "ACCES_REFUSE",
+  "auteur": { "id": 9, "role": "TECHNICIEN" },
+  "entite": { "type": "utilisateur", "id": 9 },
+  "contexte": { "methode": "POST", "route": "/api/v1/interventions/:id/start" }
+}
+```
+
 ### 8.2 Règles
 
 - Le lien avec PostgreSQL se fait par les identifiants copiés (`auteur.id`, `entite.id`) : il n'y a pas de jointure entre les deux bases.
 - Aucun mot de passe, jeton ni donnée personnelle complète n'est enregistré ; une connexion échouée ne garde que l'e-mail saisi masqué (`k***@exemple.fr`).
+- Un accès refusé (403, par le contrôle des rôles ou par un contrôle de propriété dans un service) est tracé par un filtre d'exception global, sans changer la réponse. Seul le modèle de route est gardé (`/api/v1/interventions/:id/start`), jamais l'URL reçue ni sa chaîne de requête : une recherche peut contenir un nom de client. Un 401 n'est pas tracé : sans utilisateur, il n'y a pas d'auteur.
 - L'écriture dans le journal ne doit pas bloquer l'action métier : une erreur MongoDB est signalée dans les logs de l'API, mais le changement de statut reste enregistré dans PostgreSQL.
 
 ### 8.3 Index
@@ -451,6 +465,8 @@ Exemple de document pour un changement de statut :
 | `{ "entite.type": 1, "entite.id": 1, "date": -1 }` | Historique d'une intervention, du plus récent au plus ancien (US19) |
 | `{ "auteur.id": 1, "date": -1 }` | Actions d'un utilisateur |
 | `{ "action": 1, "date": -1 }` | Suivi des connexions échouées |
-| `{ "date": 1 }`, TTL de 6 mois, partiel sur `action` ∈ { `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE` } | Suppression automatique des journaux de connexion après 6 mois (fourchette de 6 mois à 1 an recommandée par la CNIL) ; l'historique des statuts et des comptes est conservé (US19) |
+| `{ "date": 1 }`, TTL de 6 mois, partiel sur `action` ∈ { `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `ACCES_REFUSE` } (index `expiration_journaux_d_acces`) | Suppression automatique des journaux d'accès (connexions et accès refusés) après 6 mois (fourchette de 6 mois à 1 an recommandée par la CNIL) ; l'historique des statuts et des comptes est conservé (US19) |
 
-Les index sont créés par l'API à son démarrage (`createIndexes`, rejouable), ou à la première écriture si MongoDB était éteint au démarrage. La durée est la constante `DUREE_CONSERVATION_CONNEXIONS_EN_SECONDES` de `backend/src/journal/journal.repository.ts`.
+Les index sont créés par l'API à son démarrage (`createIndexes`, rejouable), ou à la première écriture si MongoDB était éteint au démarrage. La durée est la constante `DUREE_CONSERVATION_JOURNAUX_D_ACCES_EN_SECONDES` de `backend/src/journal/journal.repository.ts`.
+
+Une base créée avant l'ajout de `ACCES_REFUSE` garde l'ancien index `expiration_connexions` à côté du nouveau : il ne gêne pas (même durée), mais il est redondant. Pour le retirer : `db.journal_actions.dropIndex('expiration_connexions')` dans `mongosh`, ou `docker compose down -v` pour repartir d'une base vide.
