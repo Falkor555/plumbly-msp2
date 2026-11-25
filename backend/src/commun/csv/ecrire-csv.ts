@@ -9,7 +9,7 @@ export type CelluleCsv = string | number | null;
 export const SEPARATEUR_CSV = ';';
 const FIN_DE_LIGNE = '\r\n';
 // Sans BOM, Excel lit le fichier en Windows-1252 et les accents sont abîmés.
-const BOM = '﻿';
+const BOM = '\uFEFF';
 
 /*
  * Premiers caractères qui font d'une cellule une formule dans un tableur (OWASP « CSV

@@ -110,7 +110,7 @@ describe('ClientsService', () => {
       const fichier = await service.exporter(CRITERES, GESTIONNAIRE, []);
 
       expect(fichier.nom).toBe('clients-2026-12-07.csv');
-      expect(fichier.contenu.startsWith('﻿id;type_client;nom;')).toBe(true);
+      expect(fichier.contenu.startsWith('\uFEFFid;type_client;nom;')).toBe(true);
       expect(fichier.contenu).toContain('\r\n8;PARTICULIER;Payet;Hélène;;0692123456;');
     });
 

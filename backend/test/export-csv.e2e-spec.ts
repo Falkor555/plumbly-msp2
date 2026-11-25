@@ -16,7 +16,7 @@ import {
 
 // Lundi 7 décembre 2026, 9 h à La Réunion : le temps est figé pour toute la campagne.
 const MAINTENANT = new Date('2026-12-07T09:00:00+04:00');
-const BOM = '﻿';
+const BOM = '\uFEFF';
 
 const EN_TETE_CLIENTS =
   'id;type_client;nom;prenom;raison_sociale;telephone;email;rue;complement;code_postal;ville;' +

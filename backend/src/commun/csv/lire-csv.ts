@@ -26,7 +26,7 @@ export interface CsvLu {
   lignes: LigneCsv[];
 }
 
-const BOM = '﻿';
+const BOM = '\uFEFF';
 const GUILLEMET = '"';
 
 export function lireCsv(texte: string, separateurImpose?: SeparateurCsv): CsvLu {

@@ -1,6 +1,6 @@
 import { ecrireCsv } from './ecrire-csv.js';
 
-const BOM = '﻿';
+const BOM = '\uFEFF';
 
 /** Lignes du fichier, BOM et dernière fin de ligne retirés. */
 function lignesDe(csv: string): string[] {

@@ -95,7 +95,7 @@ describe('lireCsv', () => {
 
   describe('lignes', () => {
     it('retire le BOM de début', () => {
-      expect(lireCsv('﻿nom;ville\nDupont;Saint-Denis').enTetes).toEqual(['nom', 'ville']);
+      expect(lireCsv('\uFEFFnom;ville\nDupont;Saint-Denis').enTetes).toEqual(['nom', 'ville']);
     });
 
     it('lit des fins de ligne LF seules, CRLF et CR seules', () => {
@@ -131,7 +131,7 @@ describe('lireCsv', () => {
 
     it.each([
       ['un texte vide', ''],
-      ['le BOM seul', '﻿'],
+      ['le BOM seul', '\uFEFF'],
       ['des lignes vides', '\r\n\n  \n'],
     ])('refuse %s : le fichier est vide', (_cas, texte) => {
       expect(messagesDe(() => lireCsv(texte))).toEqual(['Le fichier est vide']);
