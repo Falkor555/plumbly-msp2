@@ -85,7 +85,8 @@ async function lireCorps<T>(reponse: Response): Promise<T> {
   return (texte ? JSON.parse(texte) : undefined) as T;
 }
 
-export async function requete<T>(chemin: string, options: OptionsRequete = {}): Promise<T> {
+/** Envoie la requête, renouvelle le jeton sur un 401 et lève une ErreurApi si la réponse échoue. */
+async function envoyerEnSession(chemin: string, options: OptionsRequete): Promise<Response> {
   let reponse = await envoyer(chemin, options);
 
   if (reponse.status === 401 && !options.publique) {
@@ -96,7 +97,62 @@ export async function requete<T>(chemin: string, options: OptionsRequete = {}): 
   }
 
   if (!reponse.ok) throw await creerErreurApi(reponse);
-  return lireCorps<T>(reponse);
+  return reponse;
+}
+
+export async function requete<T>(chemin: string, options: OptionsRequete = {}): Promise<T> {
+  return lireCorps<T>(await envoyerEnSession(chemin, options));
+}
+
+export interface OptionsTelechargement {
+  parametres?: ParametresRequete;
+  signal?: AbortSignal;
+  /** Nom proposé quand la réponse n'en donne pas dans Content-Disposition. */
+  nomParDefaut: string;
+}
+
+/**
+ * Télécharge un fichier (export CSV, US32) et le propose à l'enregistrement. Passe par une requête
+ * authentifiée plutôt que par un lien direct : le jeton ne doit jamais apparaître dans une URL.
+ * Renvoie le nom du fichier proposé.
+ */
+export async function telecharger(chemin: string, options: OptionsTelechargement): Promise<string> {
+  const reponse = await envoyerEnSession(chemin, {
+    methode: 'GET',
+    parametres: options.parametres,
+    signal: options.signal,
+  });
+  // blob() et non text() : le décodage UTF-8 de text() retirerait le BOM, sans lequel Excel
+  // lit mal les accents.
+  const contenu = await reponse.blob();
+  const nomFichier =
+    lireNomDeFichier(reponse.headers.get('Content-Disposition')) ?? options.nomParDefaut;
+  await proposerLEnregistrement(contenu, nomFichier);
+  return nomFichier;
+}
+
+function lireNomDeFichier(disposition: string | null): string | null {
+  const nom = disposition?.match(/filename="?([^";]+)"?/)?.[1]?.trim();
+  return nom || null;
+}
+
+async function proposerLEnregistrement(contenu: Blob, nomFichier: string): Promise<void> {
+  const adresse = URL.createObjectURL(contenu);
+  const lien = document.createElement('a');
+  lien.href = adresse;
+  lien.download = nomFichier;
+  lien.hidden = true;
+  // Firefox ne suit pas le clic d'un lien qui n'est pas dans le document.
+  document.body.append(lien);
+  try {
+    lien.click();
+  } finally {
+    lien.remove();
+    // Libérer l'adresse dans le même tour peut annuler le téléchargement que le navigateur
+    // vient de commencer : on attend le tour suivant.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    URL.revokeObjectURL(adresse);
+  }
 }
 
 type OptionsSansCorps = Omit<OptionsRequete, 'methode' | 'corps'>;

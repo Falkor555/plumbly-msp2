@@ -1,6 +1,11 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
 import viteConfig from './vite.config.ts';
 
+// Fuseau des tests figé sur UTC, avant le lancement des processus de test qui en héritent : un poste
+// réglé sur un fuseau à +04:00 (Dubaï, Maurice) se confondrait avec La Réunion, et un formatage
+// qui oublierait timeZone: 'Indian/Reunion' passerait alors inaperçu.
+process.env.TZ = 'UTC';
+
 // Reprend la configuration de Vite (plugin React) pour que les tests compilent le code comme l'application.
 export default mergeConfig(
   viteConfig,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   ajouterJours,
+  dateHeureMetier,
+  dateMetier,
   heureMetier,
   jourMetier,
   joursOuvres,
@@ -64,5 +66,22 @@ describe('dates du planning (fuseau de La Réunion)', () => {
     expect(
       periodeTouche('2026-11-24', '2026-11-23T04:00:00.000Z', '2026-11-23T20:00:00.000Z'),
     ).toBe(false);
+  });
+});
+
+describe('dates complètes affichées (fuseau de La Réunion)', () => {
+  it('US09 : écrit une date JJ/MM/AAAA et une date-heure JJ/MM/AAAA HH:MM', () => {
+    expect(dateMetier('2026-11-24T04:30:00.000Z')).toBe('24/11/2026');
+    expect(dateHeureMetier('2026-11-24T04:30:00.000Z')).toBe('24/11/2026 08:30');
+  });
+
+  it('US09 : affiche minuit UTC à 04:00, heure de La Réunion', () => {
+    expect(dateHeureMetier('2026-11-24T00:00:00.000Z')).toBe('24/11/2026 04:00');
+  });
+
+  it('US12 : passe au jour, au mois et à l’année suivants quand il est déjà minuit à La Réunion', () => {
+    // 20 h UTC le 31 décembre = minuit le 1er janvier à La Réunion.
+    expect(dateHeureMetier('2026-12-31T20:00:00.000Z')).toBe('01/01/2027 00:00');
+    expect(dateMetier(new Date('2026-12-31T19:59:00.000Z'))).toBe('31/12/2026');
   });
 });

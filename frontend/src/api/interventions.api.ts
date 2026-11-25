@@ -1,8 +1,6 @@
 import { api } from './clientHttp';
+import { TAILLE_PAGE_MAX } from './parametres';
 import type { FinDIntervention, Intervention, ListePaginee, SignatureIntervention } from './types';
-
-/** Le contrat plafonne une page à 100 éléments (docs/api.md, section 4). */
-const TAILLE_PAGE_MAX = 100;
 
 export const interventionsApi = {
   /**
