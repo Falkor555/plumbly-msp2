@@ -18,7 +18,7 @@ import type { ClientExistant } from './import-clients.types.js';
  */
 
 /** Clé du verrou consultatif propre à l'import des clients (aucun autre verrou consultatif). */
-const CLE_DU_VERROU_D_IMPORT = 4_700_001;
+export const CLE_DU_VERROU_D_IMPORT = 4_700_001;
 // Jusqu'à 10 s d'attente du verrou, puis jusqu'à 1 000 créations : la limite de 5 s de Prisma ne suffit pas.
 const DUREE_MAXIMALE_DE_L_IMPORT_MS = 30_000;
 
