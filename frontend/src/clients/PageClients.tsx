@@ -2,21 +2,36 @@ import { useCallback, useState } from 'react';
 import { clientsApi } from '../api/clients.api';
 import type { Client, CriteresClients, ListePaginee } from '../api/types';
 import { AlerteChargement } from '../commun/AlerteChargement';
-import { BOUTON_PRINCIPAL, LIEN } from '../commun/classes';
+import { BOUTON_PRINCIPAL, BOUTON_SECONDAIRE, LIEN } from '../commun/classes';
 import { Pagination } from '../commun/Pagination';
 import { useChargement } from '../commun/useChargement';
 import { useReessai } from '../commun/useReessai';
 import { ZoneAnnonce } from '../commun/ZoneAnnonce';
 import { BarreFiltresClients } from './BarreFiltresClients';
 import { FenetreClient } from './FenetreClient';
+import { FenetreImport } from './FenetreImport';
 import { nombreDeClients } from './presentation';
 import { TableauClients } from './TableauClients';
-import { TAILLE_PAGE_CLIENTS, useFiltresClients } from './useFiltresClients';
+import { useExportClients } from './useExportClients';
+import { type CriteresChoisis, TAILLE_PAGE_CLIENTS, useFiltresClients } from './useFiltresClients';
 
-/** US08 : liste des clients, recherchée à la frappe, filtrée, triée et paginée ; US06 : création. */
+/** Message de succès de la page : client créé (avec le lien vers sa fiche), export ou import. */
+type Annonce = { sorte: 'clientCree'; client: Client } | { sorte: 'texte'; texte: string };
+
+/**
+ * US08 : liste des clients, recherchée à la frappe, filtrée, triée et paginée ; US06 : création ;
+ * US32 : export en CSV de la liste affichée ; US31 : import depuis un fichier CSV.
+ */
 export function PageClients() {
   const [creationOuverte, setCreationOuverte] = useState(false);
-  const [clientCree, setClientCree] = useState<Client | null>(null);
+  const [importOuvert, setImportOuvert] = useState(false);
+  const [annonce, setAnnonce] = useState<Annonce | null>(null);
+  const exportClients = useExportClients((nomFichier) =>
+    setAnnonce({
+      sorte: 'texte',
+      texte: `Export prêt : le téléchargement de « ${nomFichier} » a commencé.`,
+    }),
+  );
   const filtres = useFiltresClients();
   const { recherche, typeClient, archives, tri } = filtres.criteresAppliques;
   const { page } = filtres;
@@ -35,8 +50,40 @@ export function PageClients() {
 
   function clientEnregistre(client: Client) {
     setCreationOuverte(false);
-    setClientCree(client);
+    setAnnonce({ sorte: 'clientCree', client });
     recharger();
+  }
+
+  function importFerme(importEffectue: boolean) {
+    setImportOuvert(false);
+    // Fermer l'assistant sans avoir importé ne change rien en base : la liste reste telle quelle.
+    if (!importEffectue) return;
+    setAnnonce({ sorte: 'texte', texte: 'Import terminé : la liste des clients est relue.' });
+    recharger();
+  }
+
+  function exporter() {
+    if (exportClients.enCours) return;
+    // Vidée d'abord, pour qu'un second export du même fichier soit annoncé de nouveau.
+    setAnnonce(null);
+    exportClients.exporter(filtres.criteresAppliques);
+  }
+
+  function effacerLesMessages() {
+    setAnnonce(null);
+    exportClients.effacerErreur();
+  }
+
+  // Le refus d'un export (au-delà de 5 000 lignes) vaut pour les critères d'alors : il disparaît
+  // dès que l'utilisateur les affine, comme le message l'y invite.
+  function saisirRecherche(saisie: string) {
+    exportClients.effacerErreur();
+    filtres.saisir(saisie);
+  }
+
+  function changerCriteres(changement: Partial<CriteresChoisis>) {
+    exportClients.effacerErreur();
+    filtres.changerCriteres(changement);
   }
 
   return (
@@ -48,28 +95,58 @@ export function PageClients() {
             Particuliers et professionnels, avec leurs adresses d’intervention.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setClientCree(null);
-            setCreationOuverte(true);
-          }}
-          className={BOUTON_PRINCIPAL}
-        >
-          Nouveau client
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              effacerLesMessages();
+              setImportOuvert(true);
+            }}
+            className={BOUTON_SECONDAIRE}
+          >
+            Importer
+          </button>
+          {/* aria-disabled : le bouton garde le focus pendant le téléchargement (RGAA 12.8). */}
+          <button
+            type="button"
+            aria-disabled={exportClients.enCours || undefined}
+            onClick={exporter}
+            className={BOUTON_SECONDAIRE}
+          >
+            {exportClients.enCours ? 'Export en cours…' : 'Exporter en CSV'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              effacerLesMessages();
+              setCreationOuverte(true);
+            }}
+            className={BOUTON_PRINCIPAL}
+          >
+            Nouveau client
+          </button>
+        </div>
       </header>
 
-      <ZoneAnnonce>{clientCree && <AnnonceClientCree client={clientCree} />}</ZoneAnnonce>
+      <ZoneAnnonce>{annonce && <ContenuDeLAnnonce annonce={annonce} />}</ZoneAnnonce>
+      {exportClients.erreur && (
+        <p
+          role="alert"
+          className="rounded border border-erreur/30 bg-erreur-fond px-4 py-3 text-sm whitespace-pre-line text-erreur-texte"
+        >
+          {exportClients.erreur}
+        </p>
+      )}
       {creationOuverte && (
         <FenetreClient onFermer={() => setCreationOuverte(false)} onEnregistre={clientEnregistre} />
       )}
+      {importOuvert && <FenetreImport onFermer={importFerme} />}
 
       <BarreFiltresClients
         saisie={filtres.saisie}
-        saisir={filtres.saisir}
+        saisir={saisirRecherche}
         criteres={filtres.criteres}
-        changerCriteres={filtres.changerCriteres}
+        changerCriteres={changerCriteres}
       />
 
       {/* Repli du focus après « Réessayer » ; ce bloc n'est pas dans l'ordre de tabulation. */}
@@ -127,6 +204,14 @@ function ResultatsClients({ liste, occupe, criteres, onChangerPage }: PropsResul
         onChangerPage={onChangerPage}
       />
     </>
+  );
+}
+
+function ContenuDeLAnnonce({ annonce }: { annonce: Annonce }) {
+  return annonce.sorte === 'clientCree' ? (
+    <AnnonceClientCree client={annonce.client} />
+  ) : (
+    <>{annonce.texte}</>
   );
 }
 
