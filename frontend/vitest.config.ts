@@ -14,6 +14,9 @@ export default mergeConfig(
         // les tests visent donc une URL absolue, interceptée par MSW, jamais un vrai serveur.
         VITE_API_URL: 'http://localhost/api/v1',
       },
+      // Vitest vide les feuilles de style par défaut : le test des contrastes lit les jetons de la
+      // charte dans index.css (import « ?raw »), il lui faut donc son vrai contenu.
+      css: { include: [/\/src\/index\.css/] },
       restoreMocks: true,
       unstubGlobals: true,
     },

@@ -13,8 +13,8 @@ export const LIBELLES_STATUT: Record<StatutIntervention, string> = {
 export const CLASSES_STATUT: Record<StatutIntervention, string> = {
   A_PLANIFIER: 'bg-white text-gris-texte ring-bordure',
   PLANIFIEE: 'bg-sarcelle-claire text-sarcelle-profonde ring-sarcelle/20',
-  EN_COURS: 'bg-blue-50 text-info ring-info/20',
-  TERMINEE: 'bg-green-50 text-succes ring-succes/20',
+  EN_COURS: 'bg-info-fond text-info ring-info/20',
+  TERMINEE: 'bg-succes-fond text-succes-texte ring-succes/20',
   ANNULEE: 'bg-gray-100 text-gris-texte ring-bordure line-through',
 };
 

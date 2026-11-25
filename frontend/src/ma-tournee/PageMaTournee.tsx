@@ -94,7 +94,7 @@ export function PageMaTournee() {
       {etat.statut === 'erreur' && (
         <div
           role="alert"
-          className="space-y-2 rounded border border-erreur/30 bg-red-50 px-4 py-3 text-sm text-erreur"
+          className="space-y-2 rounded border border-erreur/30 bg-erreur-fond px-4 py-3 text-sm text-erreur-texte"
         >
           <p>{etat.message}</p>
           <button type="button" onClick={recharger} className="h-11 font-semibold underline">
@@ -263,7 +263,7 @@ function BoutonDemarrer({
       {erreur && (
         <p
           role="alert"
-          className="rounded border border-erreur/30 bg-red-50 px-3 py-2 whitespace-pre-line text-red-700"
+          className="rounded border border-erreur/30 bg-erreur-fond px-3 py-2 whitespace-pre-line text-erreur-texte"
         >
           {erreur}
         </p>
