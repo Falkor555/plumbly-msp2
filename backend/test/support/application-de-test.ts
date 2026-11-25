@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { NextFunction, Response } from 'express';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
@@ -26,17 +26,35 @@ export interface ApplicationDeTest {
   prisma: PrismaService;
 }
 
-export async function demarrerApplication(maintenant: Date): Promise<ApplicationDeTest> {
-  const module = await Test.createTestingModule({ imports: [AppModule] })
+type JetonDeFournisseur = Parameters<TestingModuleBuilder['overrideProvider']>[0];
+
+export interface OptionsApplication {
+  /** Seul journal.e2e-spec.ts écrit dans le MongoDB éphémère ; les autres simulent. */
+  journalReel?: boolean;
+  /** Fournisseurs remplacés par un double, par exemple un repository qui lève une erreur. */
+  doubles?: ReadonlyArray<[jeton: JetonDeFournisseur, double: unknown]>;
+}
+
+export async function demarrerApplication(
+  maintenant: Date,
+  { journalReel = false, doubles = [] }: OptionsApplication = {},
+): Promise<ApplicationDeTest> {
+  const constructeur = Test.createTestingModule({ imports: [AppModule] })
     // L'authentification est simulée par l'en-tête x-test-utilisateur (plus bas) : le vrai
     // guard est remplacé ici, et testé à part dans authentification.e2e-spec.ts.
     .overrideProvider(AuthentificationGuard)
     .useValue({ canActivate: () => true })
     .overrideProvider(Horloge)
-    .useValue({ maintenant: () => maintenant })
-    .overrideProvider(JournalDesActions)
-    .useValue({ enregistrer: () => Promise.resolve() })
-    .compile();
+    .useValue({ maintenant: () => maintenant });
+  if (!journalReel) {
+    constructeur
+      .overrideProvider(JournalDesActions)
+      .useValue({ enregistrer: () => Promise.resolve() });
+  }
+  for (const [jeton, double] of doubles) {
+    constructeur.overrideProvider(jeton).useValue(double);
+  }
+  const module = await constructeur.compile();
   const app = module.createNestApplication<INestApplication<App>>();
   app.use(authentificationDeTest);
   app.setGlobalPrefix('api/v1');
@@ -65,8 +83,9 @@ export function requetesEn(app: INestApplication<App>, utilisateur?: Utilisateur
 export async function viderLaBase(prisma: PrismaService): Promise<void> {
   await prisma.$executeRaw`
     TRUNCATE TABLE
-      intervention, tournee, indisponibilite, technicien, adresse, client,
-      type_intervention, jeton_rafraichissement, jeton_reinitialisation, utilisateur
+      signature_intervention, intervention, tournee, indisponibilite, technicien,
+      adresse, client, type_intervention, jeton_rafraichissement, jeton_reinitialisation,
+      utilisateur
     RESTART IDENTITY`;
 }
 

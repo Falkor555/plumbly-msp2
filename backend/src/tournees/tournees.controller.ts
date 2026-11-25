@@ -35,8 +35,8 @@ import {
  * Couche HTTP seulement : validation des entrées, droits, codes de retour.
  *
  * Les décorateurs @Api… alimentent la documentation Swagger (/api/docs). Les corps de requête y
- * sont décrits à la main tant que la validation n'utilise pas de classes DTO (class-validator) :
- * avec des classes, Swagger les générerait lui-même.
+ * sont décrits à la main : la validation est écrite en fonctions (tournees.validation.ts), sans
+ * classes DTO dont Swagger pourrait tirer le schéma.
  */
 @ApiTags('Tournées et planning')
 @ApiBearerAuth()

@@ -2,6 +2,8 @@ import { Body, Controller, HttpCode, HttpStatus, Post, Req, Res, UseGuards } fro
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import type { CookieOptions, Request, Response } from 'express';
+import { Roles } from '../commun/autorisation/roles.decorator.js';
+import { RolesGuard } from '../commun/autorisation/roles.guard.js';
 import { AuthentificationService } from './authentification.service.js';
 import type { ReponseConnexion, ReponseRafraichissement } from './authentification.types.js';
 import { lireConnexion } from './authentification.validation.js';
@@ -79,6 +81,9 @@ export class AuthentificationController {
   }
 
   @Post('logout')
+  // Même règle que toutes les routes connectées (test TS-01) : RolesGuard et rôles déclarés.
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'GESTIONNAIRE', 'TECHNICIEN')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
   @ApiOperation({

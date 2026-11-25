@@ -112,6 +112,28 @@ describe('lireTexte', () => {
     expect(lecture(obligatoire, champs).erreurs).toEqual([message]);
   });
 
+  it('refuse un caractère NUL, que PostgreSQL rejetterait en erreur 500', () => {
+    expect(lecture(obligatoire, { nomClient: 'Hoarau\u0000' }).erreurs).toEqual([
+      'nomClient contient un caractère non autorisé',
+    ]);
+  });
+
+  it.each([
+    ['au début d’un emoji', 'Fuite réparée \ud83d'],
+    ['à la fin d’un emoji', '\ude00 Fuite réparée'],
+  ])(
+    'refuse une moitié d’emoji isolée (%s), que la base enregistrerait autrement',
+    (_cas, texte) => {
+      expect(lecture(obligatoire, { nomClient: texte }).erreurs).toEqual([
+        'nomClient contient un caractère non autorisé',
+      ]);
+    },
+  );
+
+  it('accepte un emoji entier', () => {
+    expect(lecture(obligatoire, { nomClient: 'Hoarau 😀' }).valeur).toBe('Hoarau 😀');
+  });
+
   it('accepte null pour effacer un champ effaçable', () => {
     const effacable = lecteur({ obligatoire: false, maximum: 100, effacable: true });
 
@@ -250,6 +272,7 @@ describe('paramètres de liste', () => {
     expect(recherche('a'.repeat(101)).erreurs).toEqual([
       'recherche ne doit pas dépasser 100 caractères',
     ]);
+    expect(recherche('ab\u0000').erreurs).toEqual(['recherche contient un caractère non autorisé']);
   });
 
   it('lit un booléen true ou false et refuse le reste', () => {

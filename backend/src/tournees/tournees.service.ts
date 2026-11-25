@@ -9,6 +9,7 @@ import { depuisColonneDate, jourMetier } from '../commun/fuseau-metier.js';
 import { Horloge } from '../commun/horloge.js';
 import { StatutIntervention } from '../generated/prisma/client.ts';
 import { JournalDesActions } from '../journal/journal-des-actions.js';
+import type { TourneeVerrouillee } from './operations-verrouillees.js';
 import {
   creneauDe,
   nouveauxRangs,
@@ -22,11 +23,7 @@ import {
   verifierRetirable,
 } from './regles-planification.js';
 import { versPlanningApi, versTourneeApi } from './tournees.presentation.js';
-import {
-  type OperationsSurTournee,
-  type TourneeVerrouillee,
-  TourneesRepository,
-} from './tournees.repository.js';
+import { type OperationsSurTournee, TourneesRepository } from './tournees.repository.js';
 import type {
   Affectation,
   Auteur,
@@ -226,15 +223,15 @@ export class TourneesService {
 
   /**
    * RG07, écrit après la validation de la transaction : la planification est enregistrée même
-   * si le journal est indisponible, et l'échec est tracé pour être rattrapé.
+   * si le journal est indisponible, et l'échec est tracé pour être rattrapé. enregistrer() ne
+   * lève déjà jamais d'erreur ; ce try/catch reste une défense si l'implémentation changeait.
    */
   private async journaliser(changement: ChangementDeStatut, auteur: Auteur): Promise<void> {
     try {
       await this.journal.enregistrer({
         type: 'STATUT_MODIFIE',
         ...changement,
-        auteurId: auteur.id,
-        date: this.horloge.maintenant(),
+        auteur: { id: auteur.id, role: auteur.role },
       });
     } catch (erreur) {
       this.logger.error(

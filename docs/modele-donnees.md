@@ -80,6 +80,19 @@ Types indiqués au niveau logique. Les identifiants sont des entiers auto-incré
 
 La fin prévue est une donnée dérivée : elle n'apparaît pas dans le MCD, mais elle est ajoutée au niveau logique comme **colonne générée** (`GENERATED ALWAYS AS … STORED`). PostgreSQL la recalcule à chaque modification : elle ne peut jamais contredire le début et la durée, et elle peut être indexée pour détecter les chevauchements de créneaux (RG09).
 
+### 2.2 bis Signature d'intervention (US33, ADR 0013)
+
+| Code | Libellé | Type | Contraintes | Entité |
+| --- | --- | --- | --- | --- |
+| id_intervention | Intervention signée | Entier | Clé primaire et clé étrangère vers `intervention` | Signature d'intervention |
+| image | Image de la signature | Binaire (`BYTEA`) | Obligatoire, PNG, 48 Ko maximum | Signature d'intervention |
+| nom_signataire | Nom de la personne qui signe | Texte (100) | Obligatoire, non vide | Signature d'intervention |
+| signee_le | Date et heure serveur de la signature | Date-heure | Obligatoire, égale à `terminee_le` | Signature d'intervention |
+| empreinte | Empreinte SHA-256 du contenu signé | Texte (64) | Obligatoire, 64 caractères hexadécimaux | Signature d'intervention |
+| id_auteur | Compte qui a enregistré la signature | Entier | Clé étrangère vers `utilisateur` | Signature d'intervention |
+
+La table est séparée d'`intervention` pour que les listes ne chargent jamais l'image. Une ligne n'est jamais mise à jour (déclencheur `BEFORE UPDATE`).
+
 ### 2.3 Clients, techniciens et tournées (Arnaud, à valider)
 
 | Code | Libellé | Type | Contraintes | Entité |
@@ -202,6 +215,7 @@ Notation : nom de table en italique, clé primaire en **gras**, clé étrangère
 - *type_intervention* (**id_type_intervention**, libelle, duree_defaut_min)
 - *tournee* (**id_tournee**, date_tournee, cree_le, #id_technicien, #id_createur)
 - *intervention* (**id_intervention**, description, urgence, statut, duree_estimee_min, debut_prevu, fin_prevue, ordre_tournee, compte_rendu, motif_annulation, demarree_le, terminee_le, annulee_le, cree_le, maj_le, #id_adresse, #id_type_intervention, #id_createur, #id_tournee)
+- *signature_intervention* (**#id_intervention**, image, nom_signataire, signee_le, empreinte, #id_auteur)
 
 Dans `intervention` et `tournee`, `#id_createur` référence `utilisateur(id_utilisateur)`. Dans `intervention`, `fin_prevue` est une colonne calculée. `#id_tournee` peut être vide (intervention non planifiée).
 
@@ -342,6 +356,8 @@ erDiagram
 | client | PARTICULIER ⇒ `nom_client` renseigné ; PROFESSIONNEL ⇒ `raison_sociale` renseignée | CHECK | Identité du client |
 | toutes | Clés étrangères en `ON DELETE RESTRICT` | FOREIGN KEY | D12 : on archive au lieu de supprimer |
 | jetons | Clé étrangère en `ON DELETE CASCADE` | FOREIGN KEY | Les jetons disparaissent avec le compte |
+| signature_intervention | `octet_length(image) <= 49152` ; `empreinte ~ '^[0-9a-f]{64}$'` ; `btrim(nom_signataire) <> ''` | CHECK | RG35, RG34, RG31 |
+| signature_intervention | Mise à jour refusée | TRIGGER `BEFORE UPDATE` | RG32 : une signature est définitive. La suppression reste permise (anonymisation RGPD) : une suppression suivie d'une nouvelle insertion n'est pas détectée par l'empreinte (ADR 0013) |
 
 Prisma ne gère pas directement les contraintes `CHECK`, les contraintes `DEFERRABLE` ni les colonnes générées : elles seront ajoutées en SQL dans la migration générée par Prisma (card #8).
 
@@ -351,7 +367,7 @@ Certaines règles portent sur plusieurs lignes ou plusieurs tables. Elles sont v
 
 - pas de chevauchement de créneaux entre deux interventions d'un même technicien ;
 - pas d'affectation pendant une indisponibilité du technicien ;
-- transitions de statut autorisées uniquement (à planifier → planifiée → en cours → terminée) ;
+- transitions de statut autorisées uniquement : à planifier → planifiée → en cours → terminée, retour de planifiée à « à planifier » (retrait de la tournée), et annulation depuis « à planifier », « planifiée » ou « en cours » ; « terminée » et « annulée » sont définitives (table unique dans `backend/src/interventions/cycle-de-vie.ts`) ;
 - créneaux entre 7 h et 19 h, du lundi au samedi ;
 - un client garde au moins une adresse non archivée.
 
@@ -401,12 +417,12 @@ Le journal des actions est stocké dans MongoDB, dans la collection `journal_act
 | --- | --- | --- | --- |
 | `_id` | ObjectId | Oui | Identifiant généré par MongoDB |
 | `date` | Date | Oui | Date et heure de l'action |
-| `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE` |
+| `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `SIGNATURE_ENREGISTREE` (empreinte dans `contexte`, ni image ni nom du signataire), `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE`, `ACCES_REFUSE` (requête refusée en 403 ; méthode et modèle de route dans `contexte`) |
 | `auteur` | Objet | Non | Utilisateur qui a agi : `{ id, role }` ; absent pour une connexion échouée |
-| `entite` | Objet | Oui | Élément concerné : `{ type, id }`, par exemple `{ "type": "intervention", "id": 42 }` |
+| `entite` | Objet | Oui | Élément concerné : `{ type, id }`, par exemple `{ "type": "intervention", "id": 42 }` ; `id` vaut `null` pour une connexion échouée sur un e-mail qui ne correspond à aucun compte (`{ "type": "utilisateur", "id": null }`) ; pour un accès refusé, l'utilisateur refusé (`{ "type": "utilisateur", "id": 7 }`) |
 | `avant` | Objet | Non | Valeurs modifiées avant l'action |
 | `apres` | Objet | Non | Valeurs modifiées après l'action |
-| `contexte` | Objet | Non | Informations propres à l'action (motif d'annulation, adresse IP tronquée…) |
+| `contexte` | Objet | Non | Informations propres à l'action (motif d'annulation, méthode et modèle de route d'un accès refusé…) |
 
 Exemple de document pour un changement de statut :
 
@@ -422,10 +438,24 @@ Exemple de document pour un changement de statut :
 }
 ```
 
+Exemple de document pour un accès refusé (un technicien qui veut démarrer l'intervention d'un collègue) :
+
+```json
+{
+  "_id": "6741f0c2a1b2c3d4e5f60719",
+  "date": "2026-11-24T10:06:40.000Z",
+  "action": "ACCES_REFUSE",
+  "auteur": { "id": 9, "role": "TECHNICIEN" },
+  "entite": { "type": "utilisateur", "id": 9 },
+  "contexte": { "methode": "POST", "route": "/api/v1/interventions/:id/start" }
+}
+```
+
 ### 8.2 Règles
 
 - Le lien avec PostgreSQL se fait par les identifiants copiés (`auteur.id`, `entite.id`) : il n'y a pas de jointure entre les deux bases.
 - Aucun mot de passe, jeton ni donnée personnelle complète n'est enregistré ; une connexion échouée ne garde que l'e-mail saisi masqué (`k***@exemple.fr`).
+- Un accès refusé (403, par le contrôle des rôles ou par un contrôle de propriété dans un service) est tracé par un filtre d'exception global, sans changer la réponse. Seul le modèle de route est gardé (`/api/v1/interventions/:id/start`), jamais l'URL reçue ni sa chaîne de requête : une recherche peut contenir un nom de client. Un 401 n'est pas tracé : sans utilisateur, il n'y a pas d'auteur.
 - L'écriture dans le journal ne doit pas bloquer l'action métier : une erreur MongoDB est signalée dans les logs de l'API, mais le changement de statut reste enregistré dans PostgreSQL.
 
 ### 8.3 Index
@@ -435,3 +465,8 @@ Exemple de document pour un changement de statut :
 | `{ "entite.type": 1, "entite.id": 1, "date": -1 }` | Historique d'une intervention, du plus récent au plus ancien (US19) |
 | `{ "auteur.id": 1, "date": -1 }` | Actions d'un utilisateur |
 | `{ "action": 1, "date": -1 }` | Suivi des connexions échouées |
+| `{ "date": 1 }`, TTL de 6 mois, partiel sur `action` ∈ { `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `ACCES_REFUSE` } (index `expiration_journaux_d_acces`) | Suppression automatique des journaux d'accès (connexions et accès refusés) après 6 mois (fourchette de 6 mois à 1 an recommandée par la CNIL) ; l'historique des statuts et des comptes est conservé (US19) |
+
+Les index sont créés par l'API à son démarrage (`createIndexes`, rejouable), ou à la première écriture si MongoDB était éteint au démarrage. La durée est la constante `DUREE_CONSERVATION_JOURNAUX_D_ACCES_EN_SECONDES` de `backend/src/journal/journal.repository.ts`.
+
+Une base créée avant l'ajout de `ACCES_REFUSE` garde l'ancien index `expiration_connexions` à côté du nouveau : il ne gêne pas (même durée), mais il est redondant. Pour le retirer : `db.journal_actions.dropIndex('expiration_connexions')` dans `mongosh`, ou `docker compose down -v` pour repartir d'une base vide.

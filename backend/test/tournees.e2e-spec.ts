@@ -70,7 +70,7 @@ describe('planification des tournées (e2e)', () => {
 
   beforeEach(async () => {
     journal.enregistrer.mockClear();
-    await prisma.$executeRaw`TRUNCATE TABLE intervention, tournee, indisponibilite RESTART IDENTITY`;
+    await prisma.$executeRaw`TRUNCATE TABLE signature_intervention, intervention, tournee, indisponibilite RESTART IDENTITY`;
   });
 
   afterAll(async () => {
@@ -262,7 +262,7 @@ describe('planification des tournées (e2e)', () => {
           interventionId: idIntervention,
           ancienStatut: 'A_PLANIFIER',
           nouveauStatut: 'PLANIFIEE',
-          auteurId: fixtures.gestionnaire.id,
+          auteur: fixtures.gestionnaire,
         }),
       );
     });
@@ -390,7 +390,7 @@ describe('planification des tournées (e2e)', () => {
       // Plusieurs essais : sans verrou commun sur le technicien, l'entrelacement qui laisse
       // passer les deux requêtes ne se produit pas à chaque fois.
       for (let essai = 0; essai < 10; essai += 1) {
-        await prisma.$executeRaw`TRUNCATE TABLE intervention, tournee, indisponibilite RESTART IDENTITY`;
+        await prisma.$executeRaw`TRUNCATE TABLE signature_intervention, intervention, tournee, indisponibilite RESTART IDENTITY`;
         const idTournee = await creerTournee(fixtures.kevin.idTechnicien);
         const interventionId = await creerIntervention();
 
@@ -706,8 +706,9 @@ function authentificationDeTest(
 async function viderLaBase(prisma: PrismaService): Promise<void> {
   await prisma.$executeRaw`
     TRUNCATE TABLE
-      intervention, tournee, indisponibilite, technicien, adresse, client,
-      type_intervention, jeton_rafraichissement, jeton_reinitialisation, utilisateur
+      signature_intervention, intervention, tournee, indisponibilite, technicien,
+      adresse, client, type_intervention, jeton_rafraichissement, jeton_reinitialisation,
+      utilisateur
     RESTART IDENTITY`;
 }
 

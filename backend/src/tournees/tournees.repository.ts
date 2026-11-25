@@ -1,7 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { debutDuJourMetier, versColonneDate, ajouterJours } from '../commun/fuseau-metier.js';
 import { Prisma, StatutIntervention } from '../generated/prisma/client.ts';
+import { INTERVENTION_DETAILLEE } from '../interventions/intervention-detaillee.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import {
+  decalerRangs,
+  listerIndisponibilites,
+  listerInterventionsDuTechnicien,
+  type TourneeVerrouillee,
+  verrouillerLigneIntervention,
+  verrouillerTechnicienDeLaTournee,
+  verrouillerTournee,
+} from './operations-verrouillees.js';
 import type {
   Creneau,
   Indisponibilite,
@@ -16,16 +26,6 @@ const TECHNICIEN_RESUME = {
   include: { utilisateur: NOM_UTILISATEUR },
 } as const satisfies Prisma.TechnicienDefaultArgs;
 
-// Exportée pour l'historique d'un client (#15) : même forme que celle attendue par versInterventionApi.
-export const INTERVENTION_DETAILLEE = {
-  include: {
-    typeIntervention: true,
-    adresse: { include: { client: true } },
-    createur: { select: { id: true, nom: true, prenom: true } },
-    tournee: { include: { technicien: TECHNICIEN_RESUME } },
-  },
-} as const satisfies Prisma.InterventionDefaultArgs;
-
 const TOURNEE_DETAILLEE = {
   include: {
     technicien: TECHNICIEN_RESUME,
@@ -33,7 +33,6 @@ const TOURNEE_DETAILLEE = {
   },
 } as const satisfies Prisma.TourneeDefaultArgs;
 
-export type InterventionDetaillee = Prisma.InterventionGetPayload<typeof INTERVENTION_DETAILLEE>;
 export type TourneeDetaillee = Prisma.TourneeGetPayload<typeof TOURNEE_DETAILLEE>;
 export type TechnicienAvecNom = Prisma.TechnicienGetPayload<typeof TECHNICIEN_RESUME>;
 
@@ -49,12 +48,6 @@ export interface TechnicienPlanifiable {
   id: number;
   archive: boolean;
   actif: boolean;
-}
-
-export interface TourneeVerrouillee {
-  id: number;
-  dateTournee: Date;
-  idTechnicien: number;
 }
 
 export interface InterventionVerrouillee {
@@ -92,13 +85,6 @@ export interface OperationsSurTournee {
   decalerRangs(idTournee: number, aPartirDuRang: number, decalage: 1 | -1): Promise<void>;
   enregistrerRangs(rangs: Map<number, number>): Promise<void>;
 }
-
-// Statuts qui occupent un créneau dans l'agenda du technicien (RG09).
-const STATUTS_OCCUPANT_UN_CRENEAU = [
-  StatutIntervention.PLANIFIEE,
-  StatutIntervention.EN_COURS,
-  StatutIntervention.TERMINEE,
-];
 
 const CODE_PRISMA_UNICITE = 'P2002';
 
@@ -200,40 +186,14 @@ export class TourneesRepository {
 
 function creerOperations(tx: Prisma.TransactionClient): OperationsSurTournee {
   return {
-    async verrouillerTechnicienDeLaTournee(idTournee) {
-      // Le technicien d'une tournée ne change jamais : le lire sans verrou est sans risque.
-      const tournee = await tx.tournee.findUnique({
-        where: { id: idTournee },
-        select: { idTechnicien: true },
-      });
-      if (tournee === null) {
-        return null;
-      }
-      await tx.$queryRaw`
-        SELECT 1 FROM technicien WHERE id_technicien = ${tournee.idTechnicien} FOR UPDATE`;
-      return tournee.idTechnicien;
-    },
-
-    async verrouillerTournee(idTournee) {
-      // Prisma ne sait pas écrire FOR UPDATE : verrou posé par une requête paramétrée écrite à la main,
-      // puis lecture typée par Prisma. Le verrou dure jusqu'à la fin de la transaction.
-      const verrou = await tx.$queryRaw<unknown[]>`
-        SELECT 1 FROM tournee WHERE id_tournee = ${idTournee} FOR UPDATE`;
-      if (verrou.length === 0) {
-        return null;
-      }
-      return tx.tournee.findUniqueOrThrow({
-        where: { id: idTournee },
-        select: { id: true, dateTournee: true, idTechnicien: true },
-      });
-    },
+    verrouillerTechnicienDeLaTournee: (idTournee) =>
+      verrouillerTechnicienDeLaTournee(tx, idTournee),
+    verrouillerTournee: (idTournee) => verrouillerTournee(tx, idTournee),
 
     async verrouillerIntervention(idIntervention) {
       // Verrouillée aussi : sans cela, deux gestionnaires pourraient affecter la même
       // intervention à deux tournées différentes au même moment.
-      const verrou = await tx.$queryRaw<unknown[]>`
-        SELECT 1 FROM intervention WHERE id_intervention = ${idIntervention} FOR UPDATE`;
-      if (verrou.length === 0) {
+      if (!(await verrouillerLigneIntervention(tx, idIntervention))) {
         return null;
       }
       return tx.intervention.findUniqueOrThrow({
@@ -256,33 +216,10 @@ function creerOperations(tx: Prisma.TransactionClient): OperationsSurTournee {
       }));
     },
 
-    async listerInterventionsDuTechnicien(idTechnicien, { debut, fin }, idInterventionExclue) {
-      const interventions = await tx.intervention.findMany({
-        where: {
-          id: { not: idInterventionExclue },
-          statut: { in: STATUTS_OCCUPANT_UN_CRENEAU },
-          tournee: { idTechnicien },
-          debutPrevu: { lt: fin },
-          finPrevue: { gt: debut },
-        },
-        select: { id: true, debutPrevu: true, finPrevue: true },
-        orderBy: { debutPrevu: 'asc' },
-      });
-      // Filtrées sur debutPrevu et finPrevue : les deux sont renseignées.
-      return interventions.map(({ id, debutPrevu, finPrevue }) => ({
-        id,
-        debut: debutPrevu as Date,
-        fin: finPrevue as Date,
-      }));
-    },
-
-    listerIndisponibilites(idTechnicien, { debut, fin }) {
-      return tx.indisponibilite.findMany({
-        where: { idTechnicien, debut: { lt: fin }, fin: { gt: debut } },
-        select: { debut: true, fin: true, motif: true },
-        orderBy: { debut: 'asc' },
-      });
-    },
+    listerInterventionsDuTechnicien: (idTechnicien, creneau, idInterventionExclue) =>
+      listerInterventionsDuTechnicien(tx, idTechnicien, creneau, idInterventionExclue),
+    listerIndisponibilites: (idTechnicien, creneau) =>
+      listerIndisponibilites(tx, idTechnicien, creneau),
 
     async planifier(idIntervention, { idTournee, debutPrevu, ordreTournee }) {
       await tx.intervention.update({
@@ -303,14 +240,8 @@ function creerOperations(tx: Prisma.TransactionClient): OperationsSurTournee {
       });
     },
 
-    async decalerRangs(idTournee, aPartirDuRang, decalage) {
-      // La contrainte UNIQUE (tournée, rang) est différée à la fin de la transaction (RG14) :
-      // les rangs peuvent se croiser le temps du décalage.
-      await tx.intervention.updateMany({
-        where: { idTournee, ordreTournee: { gte: aPartirDuRang } },
-        data: { ordreTournee: { increment: decalage } },
-      });
-    },
+    decalerRangs: (idTournee, aPartirDuRang, decalage) =>
+      decalerRangs(tx, idTournee, aPartirDuRang, decalage),
 
     async enregistrerRangs(rangs) {
       for (const [idIntervention, ordreTournee] of rangs) {

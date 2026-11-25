@@ -1,11 +1,16 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { interventionsApi } from '../api/interventions.api';
 import { tourneesApi } from '../api/tournees.api';
 import type { Intervention, StatutIntervention, Tournee } from '../api/types';
-import { jourMetier, libelleJourLong } from '../commun/dates';
+import { heureMetier, jourMetier, libelleJourLong } from '../commun/dates';
 import { lienItineraire, lienTelephone } from '../commun/liens';
+import { messageErreur } from '../commun/messageErreur';
+import { statutAtteintMalgreLEchec } from '../commun/statutApresEchec';
 import { useChargement } from '../commun/useChargement';
 import { BadgesIntervention } from '../planning/BadgesIntervention';
 import { creneau, nombreDInterventions } from '../planning/presentation';
+import { FenetreCloture, type IssueCloture } from '../signature/FenetreCloture';
+import { FenetreCompteRendu } from './FenetreCompteRendu';
 
 /** L'étape en cours est mise en avant ; celles qui sont finies passent au second plan. */
 const CLASSES_ETAPE: Record<StatutIntervention, string> = {
@@ -16,15 +21,62 @@ const CLASSES_ETAPE: Record<StatutIntervention, string> = {
   ANNULEE: 'bg-gray-50 text-gris-texte',
 };
 
-/** US24 : la tournée du jour du technicien connecté, pensée pour le téléphone. */
+const BOUTON_PRINCIPAL =
+  'flex h-11 w-full items-center justify-center rounded bg-sarcelle px-4 font-semibold text-white hover:bg-sarcelle-profonde focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle disabled:cursor-not-allowed disabled:opacity-50';
+const BOUTON_SECONDAIRE =
+  'flex h-11 w-full items-center justify-center rounded border border-gray-300 bg-white px-4 font-semibold text-sarcelle-profonde hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle';
+
+type FenetreOuverte = { type: 'cloture' | 'compte rendu'; intervention: Intervention };
+
+/**
+ * US24 : la tournée du jour du technicien connecté, pensée pour le téléphone. US17, US18 et
+ * US33 : chaque étape propose l'action de son statut ; la tournée est relue après chacune.
+ * Pendant la relecture, la tournée affichée reste celle d'avant : la page ne se vide pas, le
+ * défilement est gardé, puis le focus va sur l'étape modifiée et le résultat est annoncé.
+ */
 export function PageMaTournee() {
+  const prefixeEtape = useId();
+  const [fenetre, setFenetre] = useState<FenetreOuverte | null>(null);
+  const [annonce, setAnnonce] = useState('');
+  const etapeAFocaliser = useRef<number | null>(null);
   const charger = useCallback(
     (signal: AbortSignal) => tourneesApi.consulterMaTourneeDuJour(signal),
     [],
   );
-  const { etat, recharger } = useChargement<Tournee | null>(charger);
-  const jour =
-    etat.statut === 'pret' && etat.donnees ? etat.donnees.dateTournee : jourMetier(new Date());
+  const { etat, recharger, dernieresDonnees } = useChargement<Tournee | null>(charger);
+  const tournee =
+    etat.statut === 'pret'
+      ? etat.donnees
+      : etat.statut === 'chargement'
+        ? dernieresDonnees
+        : undefined;
+  const jour = tournee ? tournee.dateTournee : jourMetier(new Date());
+  const idEtape = (idIntervention: number) => `${prefixeEtape}-etape-${idIntervention}`;
+
+  useEffect(() => {
+    if (etat.statut !== 'pret' || etapeAFocaliser.current === null) return;
+    document.getElementById(idEtape(etapeAFocaliser.current))?.focus();
+    etapeAFocaliser.current = null;
+  });
+
+  function apresAction(idIntervention: number, message: string) {
+    etapeAFocaliser.current = idIntervention;
+    setAnnonce(message);
+    recharger();
+  }
+
+  function fermerCloture(issue: IssueCloture) {
+    const { id } = (fenetre as FenetreOuverte).intervention;
+    setFenetre(null);
+    if (issue === 'terminee') apresAction(id, 'Intervention terminée.');
+    if (issue === 'incertaine') apresAction(id, 'Tournée mise à jour.');
+  }
+
+  function fermerCompteRendu(enregistre: boolean) {
+    const { id } = (fenetre as FenetreOuverte).intervention;
+    setFenetre(null);
+    if (enregistre) apresAction(id, 'Compte rendu enregistré.');
+  }
 
   return (
     <main className="mx-auto min-h-dvh max-w-md bg-fond px-4 pt-4 pb-8">
@@ -32,8 +84,11 @@ export function PageMaTournee() {
         <h1 className="text-[1.75rem] leading-9 font-bold tracking-tight">Ma tournée du jour</h1>
         <p className="text-sm text-gris-texte first-letter:uppercase">{libelleJourLong(jour)}</p>
       </header>
+      <p role="status" className="sr-only">
+        {annonce}
+      </p>
 
-      {etat.statut === 'chargement' && (
+      {etat.statut === 'chargement' && tournee === undefined && (
         <p className="text-sm text-gris-texte">Chargement de votre tournée…</p>
       )}
       {etat.statut === 'erreur' && (
@@ -47,33 +102,59 @@ export function PageMaTournee() {
           </button>
         </div>
       )}
-      {etat.statut === 'pret' && etat.donnees === null && (
+      {tournee === null && (
         <p className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
           Vous n'avez pas de tournée aujourd'hui.
         </p>
       )}
-      {etat.statut === 'pret' && etat.donnees !== null && (
+      {tournee && (
         <>
           <p className="mb-3 text-sm font-medium">
-            {etat.donnees.interventions.length === 0
+            {tournee.interventions.length === 0
               ? 'Aucune intervention prévue pour le moment.'
-              : `${nombreDInterventions(etat.donnees.interventions.length)}, dans l'ordre de passage`}
+              : `${nombreDInterventions(tournee.interventions.length)}, dans l'ordre de passage`}
           </p>
-          <ol className="space-y-3">
-            {etat.donnees.interventions.map((intervention, rang) => (
-              <EtapeTournee key={intervention.id} intervention={intervention} numero={rang + 1} />
+          <ol className="space-y-3" aria-busy={etat.statut === 'chargement'}>
+            {tournee.interventions.map((intervention, rang) => (
+              <EtapeTournee
+                key={intervention.id}
+                id={idEtape(intervention.id)}
+                intervention={intervention}
+                numero={rang + 1}
+                onDemarree={() => apresAction(intervention.id, 'Intervention démarrée.')}
+                onOuvrir={(type) => setFenetre({ type, intervention })}
+              />
             ))}
           </ol>
         </>
       )}
+
+      {fenetre?.type === 'cloture' && (
+        <FenetreCloture intervention={fenetre.intervention} onFermer={fermerCloture} />
+      )}
+      {fenetre?.type === 'compte rendu' && (
+        <FenetreCompteRendu intervention={fenetre.intervention} onFermer={fermerCompteRendu} />
+      )}
     </main>
   );
 }
+interface PropsEtape {
+  id: string;
+  intervention: Intervention;
+  numero: number;
+  onDemarree: () => void;
+  onOuvrir: (fenetre: FenetreOuverte['type']) => void;
+}
 
-function EtapeTournee({ intervention, numero }: { intervention: Intervention; numero: number }) {
+function EtapeTournee({ id, intervention, numero, onDemarree, onOuvrir }: PropsEtape) {
   const { adresse, client } = intervention;
   return (
-    <li className={`rounded-lg border border-bordure ${CLASSES_ETAPE[intervention.statut]}`}>
+    <li
+      id={id}
+      // Reçoit le focus après une action, pour que la lecture reprenne sur l'étape modifiée.
+      tabIndex={-1}
+      className={`rounded-lg border border-bordure focus:outline-2 focus:outline-offset-2 focus:outline-sarcelle ${CLASSES_ETAPE[intervention.statut]}`}
+    >
       <div className="flex items-start gap-3 border-b border-bordure px-4 py-3">
         <span
           aria-hidden="true"
@@ -126,7 +207,96 @@ function EtapeTournee({ intervention, numero }: { intervention: Intervention; nu
         >
           Appeler le client · {client.telephone}
         </a>
+        <ActionsEtape intervention={intervention} onDemarree={onDemarree} onOuvrir={onOuvrir} />
       </div>
     </li>
+  );
+}
+
+/** L'action que permet le statut de l'étape (cycle de vie, cahier des charges 5.1). */
+function ActionsEtape({ intervention, onDemarree, onOuvrir }: Omit<PropsEtape, 'id' | 'numero'>) {
+  switch (intervention.statut) {
+    case 'PLANIFIEE':
+      return <BoutonDemarrer intervention={intervention} onDemarree={onDemarree} />;
+    case 'EN_COURS':
+      return (
+        <button type="button" onClick={() => onOuvrir('cloture')} className={BOUTON_PRINCIPAL}>
+          Terminer l'intervention
+        </button>
+      );
+    case 'TERMINEE':
+      return <EtapeTerminee intervention={intervention} onOuvrir={onOuvrir} />;
+    default:
+      return null;
+  }
+}
+
+/** US17 et RG24 : le refus de l'API (tournée qui n'est pas celle du jour) s'affiche à côté. */
+function BoutonDemarrer({
+  intervention,
+  onDemarree,
+}: Pick<PropsEtape, 'intervention' | 'onDemarree'>) {
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+
+  async function demarrer() {
+    setErreur(null);
+    setEnvoiEnCours(true);
+    try {
+      await interventionsApi.demarrer(intervention.id);
+      onDemarree();
+    } catch (cause) {
+      if (await statutAtteintMalgreLEchec(intervention.id, 'EN_COURS')) {
+        onDemarree();
+        return;
+      }
+      setErreur(messageErreur(cause, 'Démarrage impossible'));
+      setEnvoiEnCours(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <button type="button" onClick={demarrer} disabled={envoiEnCours} className={BOUTON_PRINCIPAL}>
+        {envoiEnCours ? 'Démarrage en cours…' : 'Démarrer'}
+      </button>
+      {erreur && (
+        <p
+          role="alert"
+          className="rounded border border-erreur/30 bg-red-50 px-3 py-2 whitespace-pre-line text-red-700"
+        >
+          {erreur}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** US18 et RG33 : compte rendu modifiable tant que le client n'a pas signé, définitif ensuite. */
+function EtapeTerminee({ intervention, onOuvrir }: Pick<PropsEtape, 'intervention' | 'onOuvrir'>) {
+  const { signature, compteRendu } = intervention;
+  return (
+    <div className="space-y-2">
+      <div className="rounded border border-bordure bg-white px-3 py-2">
+        <p className="font-semibold text-anthracite">Compte rendu</p>
+        <p className="whitespace-pre-line">{compteRendu ?? 'Aucun compte rendu.'}</p>
+      </div>
+      {signature ? (
+        <p className="flex items-center gap-2 font-semibold text-anthracite">
+          <span aria-hidden="true" className="text-succes">
+            ✓
+          </span>
+          Signée par {signature.nomSignataire} à {heureMetier(signature.signeeLe)}
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onOuvrir('compte rendu')}
+          className={BOUTON_SECONDAIRE}
+        >
+          Compléter le compte rendu
+        </button>
+      )}
+    </div>
   );
 }

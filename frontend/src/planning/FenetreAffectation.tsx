@@ -1,16 +1,15 @@
 import { type FormEvent, useCallback, useEffect, useId, useState } from 'react';
-import { ErreurApi } from '../api/erreurs';
 import { interventionsApi } from '../api/interventions.api';
 import { tourneesApi } from '../api/tournees.api';
 import type { Intervention } from '../api/types';
 import { HEURE_FERMETURE, HEURE_OUVERTURE, libelleJourLong, versInstant } from '../commun/dates';
+import { messageErreur } from '../commun/messageErreur';
 import { useChargement } from '../commun/useChargement';
 import type { CaseAAffecter } from './modele';
 import { LIBELLES_URGENCE, nomComplet } from './presentation';
 
 const HEURE_PROPOSEE = '08:00';
 const PAS_DE_QUINZE_MINUTES_EN_SECONDES = 900;
-const MESSAGE_ERREUR_INATTENDUE = 'Une erreur est survenue. Réessayez plus tard.';
 
 function deuxChiffres(nombre: number): string {
   return String(nombre).padStart(2, '0');
@@ -20,12 +19,6 @@ function libelleOption(intervention: Intervention): string {
   const urgence =
     intervention.urgence === 'NORMALE' ? '' : ` · ${LIBELLES_URGENCE[intervention.urgence]}`;
   return `${intervention.client.nomAffiche} · ${intervention.type.libelle} · ${intervention.adresse.ville} · ${intervention.dureeEstimeeMin} min${urgence}`;
-}
-
-function messageErreur(erreur: unknown): string {
-  if (erreur instanceof ErreurApi) return erreur.messagePourUtilisateur();
-  console.error('Affectation impossible', erreur);
-  return MESSAGE_ERREUR_INATTENDUE;
 }
 
 interface Props {
@@ -86,7 +79,7 @@ export function FenetreAffectation({ caseAAffecter, onFermer }: Props) {
       });
       onFermer(true);
     } catch (cause) {
-      setErreur(messageErreur(cause));
+      setErreur(messageErreur(cause, 'Affectation impossible'));
       setEnvoiEnCours(false);
     }
   }

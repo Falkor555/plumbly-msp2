@@ -1,11 +1,13 @@
 import { setupWorker } from 'msw/browser';
-import { jourMetier, lundiDeLaSemaine } from '../commun/dates';
+import type { Intervention } from '../api/types';
+import { jourMetier, lundiDeLaSemaine, versInstant } from '../commun/dates';
 import {
   creerJeuDeDemonstration,
   fabriquerIntervention,
   type JeuDeDemonstration,
   planifier,
 } from './donneesDemonstration';
+import { creerHandlersInterventions } from './handlersInterventions';
 import { creerHandlersPlanning } from './handlersPlanning';
 
 const URL_API = (import.meta.env.VITE_API_URL ?? '/api/v1').replace(/\/$/, '');
@@ -19,30 +21,80 @@ export async function demarrerSimulation(): Promise<void> {
   const aujourdhui = (): string => jourMetier(new Date());
   const jeu = creerJeuDeDemonstration(lundiDeLaSemaine(aujourdhui()));
   ajouterTourneeDuJour(jeu, aujourdhui());
-  const handlers = creerHandlersPlanning(jeu, {
-    urlApi: (chemin) => `${URL_API}${chemin}`,
-    aujourdhui,
-  });
+  const options = { urlApi: (chemin: string) => `${URL_API}${chemin}`, aujourdhui };
+  const handlers = [
+    ...creerHandlersPlanning(jeu, options),
+    ...creerHandlersInterventions(jeu, options),
+  ];
   await setupWorker(...handlers).start({ onUnhandledFrame: 'bypass' });
   console.info('[Plumbly] API simulée par MSW : données de démonstration.');
 }
 
-/** Pour que « Ma tournée du jour » (/ma-tournee) ait toujours quelque chose à montrer. */
+/**
+ * Pour que « Ma tournée du jour » (/ma-tournee) ait toujours quelque chose à montrer : une
+ * étape de chaque état (terminée et signée, terminée sans signature, en cours, planifiée).
+ */
 function ajouterTourneeDuJour(jeu: JeuDeDemonstration, jour: string): void {
   const technicien = jeu.techniciens[0];
-  if (technicien.tournees.some(({ dateTournee }) => dateTournee === jour)) return;
-  const visite = planifier(
-    fabriquerIntervention({
-      id: 6,
-      client: 'Mme Baret',
-      type: 'Entretien chaudière',
-      ville: 'Saint-Pierre',
-      dureeEstimeeMin: 60,
-    }),
+  // Le lundi, la démonstration du planning a déjà une tournée ce jour-là : elle est remplacée,
+  // pour que les quatre états restent visibles quel que soit le jour.
+  technicien.tournees = technicien.tournees.filter(({ dateTournee }) => dateTournee !== jour);
+  const signee = terminee(
+    planifier(
+      fabriquerIntervention({
+        id: 6,
+        client: 'Mme Baret',
+        type: 'Entretien chaudière',
+        ville: 'Saint-Pierre',
+        dureeEstimeeMin: 60,
+      }),
+      jour,
+      '07:30',
+      1,
+    ),
     jour,
-    '08:30',
-    1,
+    'Chaudière nettoyée, joint du brûleur remplacé.',
   );
+  signee.signature = { nomSignataire: 'Josiane Baret', signeeLe: signee.termineeLe as string };
+  jeu.signatures[signee.id] = {
+    ...signee.signature,
+    auteur: { id: technicien.id, nom: technicien.nom, prenom: technicien.prenom },
+    empreinte: '3f8a'.repeat(16),
+    integre: true,
+    image: dessinerSignatureDeDemonstration(),
+  };
+  const sansSignature = terminee(
+    planifier(
+      fabriquerIntervention({
+        id: 8,
+        client: 'M. Payet',
+        type: 'Débouchage',
+        ville: 'Saint-Louis',
+        dureeEstimeeMin: 45,
+      }),
+      jour,
+      '09:00',
+      2,
+    ),
+    jour,
+    'Évier débouché. Client absent à la fin : pas de signature.',
+  );
+  const enCours: Intervention = {
+    ...planifier(
+      fabriquerIntervention({
+        id: 9,
+        client: 'Mme Grondin',
+        type: 'Remplacement de robinet',
+        ville: 'Saint-Pierre',
+        dureeEstimeeMin: 60,
+      }),
+      jour,
+      '10:30',
+      3,
+    ),
+    statut: 'EN_COURS',
+    demarreeLe: versInstant(jour, '10:35'),
+  };
   const fuite = planifier(
     fabriquerIntervention({
       id: 7,
@@ -54,13 +106,51 @@ function ajouterTourneeDuJour(jeu: JeuDeDemonstration, jour: string): void {
       urgence: 'URGENTE',
     }),
     jour,
-    '10:30',
-    2,
+    '14:00',
+    4,
   );
   fuite.adresse = {
     ...fuite.adresse,
     complement: 'Atelier au fond de la cour',
     infosAcces: 'Sonner au portail bleu',
   };
-  technicien.tournees.push({ id: 11, dateTournee: jour, interventions: [visite, fuite] });
+  technicien.tournees.push({
+    id: 11,
+    dateTournee: jour,
+    interventions: [signee, sansSignature, enCours, fuite],
+  });
+}
+
+function terminee(intervention: Intervention, jour: string, compteRendu: string): Intervention {
+  const debut = intervention.debutPrevu as string;
+  return {
+    ...intervention,
+    statut: 'TERMINEE',
+    demarreeLe: debut,
+    termineeLe: intervention.finPrevue ?? versInstant(jour, '12:00'),
+    compteRendu,
+  };
+}
+
+/** Signature tracée à la volée dans un canvas : aucune image n'est versionnée. */
+function dessinerSignatureDeDemonstration(): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 600;
+  canvas.height = 200;
+  const contexte = canvas.getContext('2d');
+  if (!contexte) return '';
+  contexte.strokeStyle = '#27313F';
+  contexte.lineWidth = 3.5;
+  contexte.lineCap = 'round';
+  contexte.lineJoin = 'round';
+  contexte.beginPath();
+  contexte.moveTo(60, 130);
+  contexte.bezierCurveTo(110, 20, 150, 180, 200, 100);
+  contexte.bezierCurveTo(240, 40, 260, 160, 310, 110);
+  contexte.bezierCurveTo(350, 70, 380, 150, 430, 95);
+  contexte.quadraticCurveTo(480, 60, 540, 120);
+  contexte.moveTo(90, 160);
+  contexte.lineTo(500, 150);
+  contexte.stroke();
+  return canvas.toDataURL('image/png');
 }

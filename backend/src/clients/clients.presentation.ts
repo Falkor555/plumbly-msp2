@@ -1,5 +1,5 @@
 import type { Adresse } from '../generated/prisma/client.ts';
-import { nomAffiche } from '../tournees/tournees.presentation.js';
+import { nomAffiche } from '../interventions/interventions.presentation.js';
 import type { ClientAvecAdresses } from './clients.repository.js';
 import type { AdresseApi, ClientApi } from './clients.types.js';
 

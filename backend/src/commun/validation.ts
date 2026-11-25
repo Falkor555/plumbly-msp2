@@ -67,10 +67,11 @@ export function lireIdentifiant(texte: string): number {
 }
 
 /*
- * Lecture des corps et des paramètres de requête, écrite à la main en attendant le
- * ValidationPipe et class-validator prévus par le contrat d'API (section 6) : mêmes règles,
- * même format d'erreur (400, message = liste des champs en erreur), champs inconnus refusés.
- * Chaque lecteur ajoute ses erreurs à la liste reçue, pour les renvoyer toutes en une fois.
+ * Lecture des corps et des paramètres de requête, écrite à la main par choix : aucune
+ * dépendance à ajouter, des messages en français, et tout champ inconnu refusé d'emblée (400
+ * qui ne nomme que les champs refusés). Pour les champs connus, chaque lecteur ajoute ses
+ * erreurs à la liste reçue : elles repartent toutes en un seul 400 (message = liste des champs
+ * en erreur).
  */
 
 export type Champs = Record<string, unknown>;
@@ -82,6 +83,7 @@ const FORMAT_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FORMAT_TELEPHONE = /^0\d{9}$/;
 const FORMAT_CODE_POSTAL = /^\d{5}$/;
 const FORMAT_COULEUR = /^#[0-9A-F]{6}$/;
+const DEMI_PAIRE_ISOLEE = /[\uD800-\uDFFF]/u;
 const LONGUEUR_EMAIL_MAXIMUM = 255;
 // Au-delà, ce n'est plus un numéro saisi avec des espaces : inutile de le nettoyer.
 const LONGUEUR_TELEPHONE_SAISI_MAXIMUM = 20;
@@ -182,6 +184,10 @@ export function lireTexte(
     erreurs.push(`${nom} doit être un texte`);
     return undefined;
   }
+  if (contientUnCaractereNul(valeur) || contientUneDemiPaireIsolee(valeur)) {
+    erreurs.push(`${nom} contient un caractère non autorisé`);
+    return undefined;
+  }
   const texte = valeur.trim();
   if (texte === '') {
     erreurs.push(`${nom} ne peut pas être vide`);
@@ -192,6 +198,25 @@ export function lireTexte(
     return undefined;
   }
   return texte;
+}
+
+/**
+ * PostgreSQL refuse le caractère NUL dans un texte (erreur 22021) : accepté ici, il produirait
+ * une erreur 500 au lieu d'un 400 lisible.
+ */
+function contientUnCaractereNul(texte: string): boolean {
+  return texte.includes('\u0000');
+}
+
+/**
+ * Moitié d'emoji (demi-paire de substitution UTF-16 sans sa jumelle), par exemple un texte coupé
+ * au milieu d'un emoji. Elle n'a pas d'équivalent en UTF-8 : le pilote PostgreSQL la remplace
+ * sans le dire par U+FFFD, et la base ne garde pas le texte reçu. Pour une signature (US33),
+ * l'empreinte calculée sur le texte reçu ne correspondrait plus jamais au texte enregistré.
+ * Avec le drapeau u, l'expression ne reconnaît que les demi-paires isolées, pas les emojis entiers.
+ */
+function contientUneDemiPaireIsolee(texte: string): boolean {
+  return DEMI_PAIRE_ISOLEE.test(texte);
 }
 
 /** Valeur d'une énumération, par exemple typeClient. */
@@ -357,6 +382,10 @@ export function lireRecherche(requete: Champs, erreurs: string[]): string | unde
     return undefined;
   }
   const recherche = typeof valeur === 'string' ? valeur.trim() : '';
+  if (contientUnCaractereNul(recherche)) {
+    erreurs.push('recherche contient un caractère non autorisé');
+    return undefined;
+  }
   if (recherche.length < LONGUEUR_RECHERCHE_MINIMUM) {
     erreurs.push(`recherche doit contenir au moins ${LONGUEUR_RECHERCHE_MINIMUM} caractères`);
     return undefined;

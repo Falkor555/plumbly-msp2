@@ -83,6 +83,7 @@ Le MVP livré en deux semaines couvre l'authentification, la gestion des clients
 - Planification des tournées : affectation et ordre des interventions
 - Vue planning jour / semaine par technicien
 - Vue « ma tournée du jour » sur mobile pour le technicien
+- Signature du client sur le mobile du technicien à la clôture d'une intervention (Should, US33)
 - Tableau de bord : indicateurs d'activité calculés en SQL
 - Journal des actions dans MongoDB, incluant l'historique des changements de statut
 
@@ -90,7 +91,8 @@ Le MVP livré en deux semaines couvre l'authentification, la gestion des clients
 
 - Carte des interventions et optimisation automatique de l'ordre de tournée (API de géolocalisation)
 - Notifications par e-mail ou SMS au client (rappel, arrivée du technicien)
-- Rapport d'intervention avec photos et signature du client
+- Rapport d'intervention avec photos, export PDF du bon d'intervention signé
+- Signature électronique avancée ou qualifiée, par un prestataire de confiance
 - Gestion des devis et des factures
 - Gestion du stock de pièces dans les camionnettes
 - Application mobile installable (PWA) avec mode hors ligne
@@ -145,6 +147,7 @@ Les besoins sont exprimés en user stories, priorisées selon la méthode MoSCoW
 | US17 | En tant que technicien, je veux passer une intervention à « en cours » puis « terminée » afin d'informer le gestionnaire. | M | Seules les transitions autorisées sont possibles (voir 5.1) |
 | US18 | En tant que technicien, je veux ajouter un compte rendu à une intervention terminée afin de tracer ce qui a été fait. | S | Texte libre, 2 000 caractères maximum |
 | US19 | En tant que gestionnaire, je veux voir l'historique des changements de statut afin de savoir qui a fait quoi et quand. | S | Date, auteur, ancien et nouveau statut, lus dans le journal des actions |
+| US33 | En tant que technicien, je veux faire signer le client sur mon mobile à la clôture d'une intervention afin que la gestionnaire ait une confirmation de réalisation. | S | Signature enregistrée en même temps que le passage à « terminée » ; compte rendu obligatoire ; signature et compte rendu définitifs (RG30 à RG35) |
 
 ### 4.5 Tournées et planning
 
@@ -183,7 +186,7 @@ stateDiagram-v2
 
     APlanifier --> Planifiee: affectée à une tournée (gestionnaire)
     Planifiee --> APlanifier: retirée de la tournée avant démarrage
-    Planifiee --> EnCours: démarre (technicien affecté)
+    Planifiee --> EnCours: démarre (technicien affecté, le jour de la tournée)
     EnCours --> Terminee: termine (technicien affecté)
     APlanifier --> Annulee: annulation + motif (gestionnaire)
     Planifiee --> Annulee: annulation + motif
@@ -203,6 +206,13 @@ stateDiagram-v2
 | RG05 | Une intervention peut être « annulée » par un gestionnaire tant qu'elle n'est pas « terminée » ; le motif est obligatoire. |
 | RG06 | Une intervention « terminée » ou « annulée » n'est plus modifiable. |
 | RG07 | Chaque changement de statut est historisé dans MongoDB : date, auteur, ancien et nouveau statut. |
+| RG24 | Une intervention ne peut être démarrée que le jour de sa tournée, à l'heure de La Réunion. |
+| RG30 | La signature du client s'enregistre uniquement lors du passage de « en cours » à « terminée », par le technicien affecté (RG03), dans la même transaction. Terminer sans signature reste possible (client absent ou refus). |
+| RG31 | Une signature exige un compte rendu (1 à 2 000 caractères) et le nom du signataire (1 à 100 caractères). |
+| RG32 | Une intervention a au plus une signature. Une signature enregistrée n'est jamais modifiée ni remplacée. |
+| RG33 | Le compte rendu d'une intervention signée n'est plus modifiable (limite l'exception de l'US18). |
+| RG34 | La signature est horodatée par le serveur et accompagnée d'une empreinte SHA-256 du contenu signé (intervention, compte rendu, signataire, date, auteur, image). L'empreinte est recalculée à chaque lecture ; un écart est signalé. |
+| RG35 | L'image est un PNG d'au plus 48 Ko, de 100 à 1 200 px de large et de 50 à 600 px de haut. Seuls l'administrateur, le gestionnaire et le technicien affecté la consultent. |
 
 ### 5.2 Planification
 
@@ -246,6 +256,8 @@ stateDiagram-v2
 | Voir le planning de tous | Oui | Oui | Non |
 | Voir sa propre tournée | — | — | Oui |
 | Changer le statut de ses interventions | Non | Non | Oui |
+| Faire signer le client à la clôture | Non | Non | Oui |
+| Consulter la signature d'une intervention | Oui | Oui | Les siennes |
 | Consulter le tableau de bord | Oui | Oui (partiel) | Non |
 
 ## 6. Besoins non fonctionnels
@@ -263,11 +275,13 @@ Les mesures suivent l'[OWASP Top 10 2025](https://owasp.org/www-project-top-ten/
 | Politique de mot de passe | 12 caractères minimum, majuscule, minuscule, chiffre et caractère spécial |
 | Force brute | Limitation du nombre de tentatives de connexion (`@nestjs/throttler`) |
 | Injection SQL | Requêtes Prisma paramétrées ; requêtes SQL manuelles avec `$queryRaw` et paramètres liés, jamais de concaténation |
-| Entrées invalides | Validation de tous les DTO avec `class-validator` ; `whitelist` et `forbidNonWhitelisted` activés |
+| Entrées invalides | Validation de tous les corps et paramètres de requête par des fonctions écrites à la main (`backend/src/commun/validation.ts` et fichiers `*.validation.ts`) ; tout champ inconnu, y compris dans un objet imbriqué (adresse, signature), est refusé en 400 |
 | XSS | Pas de `dangerouslySetInnerHTML` ; React échappe l'affichage ; en-têtes de sécurité avec Helmet |
 | CSRF et vol de session | Access token JWT de 15 minutes ; refresh token de 7 jours en cookie `httpOnly`, `Secure`, `SameSite=Strict` |
 | Révocation de session | Refresh token révocable en base ; déconnexion, changement de mot de passe ou désactivation de compte invalident le refresh token |
 | Configuration | CORS limité à l'origine du front ; secrets dans des variables d'environnement, jamais dans le dépôt |
+| Fichier déguisé en image | Signature acceptée seulement en PNG : préfixe `data:image/png;base64,`, en-tête PNG et dimensions vérifiés côté serveur, taille plafonnée (RG35) ; renvoyée en data URL affichée par `<img>`, jamais interprétée comme du HTML |
+| Preuve modifiée après coup | Signature et compte rendu signé définitifs (RG32, RG33) ; déclencheur PostgreSQL qui refuse la mise à jour ; empreinte SHA-256 vérifiée à la lecture (RG34) |
 | Dépendances vulnérables | `npm audit` et Dependabot sur le dépôt GitHub |
 
 ### 6.2 RGPD
@@ -279,6 +293,7 @@ Les mesures suivent l'[OWASP Top 10 2025](https://owasp.org/www-project-top-ten/
 - **Droits des personnes** : export et anonymisation d'un client sur demande (droit d'accès et d'effacement).
 - **Registre des traitements** et mentions légales accessibles depuis l'application.
 - **Données de test** : uniquement des données fictives (seed), jamais de vraies données clients.
+- **Signature du client (US33)** : image de la signature et nom du signataire, avec l'horodatage et le technicien. Finalité : prouver la réalisation de l'intervention ; base légale : exécution du contrat de prestation. Le client est informé par la mention affichée au-dessus de la zone de signature. Seule l'image finale est gardée (pas la pression ni la vitesse du tracé) : ce n'est pas une donnée biométrique. Pas de géolocalisation. Conservation et anonymisation alignées sur celles du client ; l'anonymisation supprime l'image et le nom du signataire.
 
 ### 6.3 Accessibilité et ergonomie
 
@@ -321,6 +336,7 @@ Les maquettes sont réalisées dans Figma par Arnaud, et par Loïc pour les écr
 | Planning jour / semaine | Administrateur, gestionnaire | Ordinateur | US20 à US23, US25 |
 | Ma tournée du jour | Technicien | Mobile | US24 |
 | Détail d'intervention (terrain) | Technicien | Mobile | US17, US18 |
+| Clôture et signature du client | Technicien (le client signe) | Mobile | US17, US18, US33 |
 | Gestion des comptes | Administrateur | Ordinateur | US03 |
 | Mon profil | Tous | Mobile et ordinateur | US05 |
 
@@ -412,7 +428,7 @@ Chaque base est utilisée pour ce qu'elle fait le mieux (voir [ADR 0005](adr/000
 
 ## 9. Modèle de données
 
-Le modèle relationnel comporte 10 tables PostgreSQL, complétées par une collection MongoDB pour le journal des actions. Le détail (règles de gestion des données, dictionnaire, MCD, MLD, contraintes et index) est dans [modele-donnees.md](modele-donnees.md) ; cette section en donne la synthèse.
+Le modèle relationnel comporte 11 tables PostgreSQL, complétées par une collection MongoDB pour le journal des actions. Le détail (règles de gestion des données, dictionnaire, MCD, MLD, contraintes et index) est dans [modele-donnees.md](modele-donnees.md) ; cette section en donne la synthèse.
 
 ### 9.1 Entités principales
 
@@ -426,6 +442,7 @@ Le modèle relationnel comporte 10 tables PostgreSQL, complétées par une colle
 | Client | id, type (particulier / professionnel), nom, prénom, raison sociale, téléphone, e-mail, archivé, archivé le | 1 à n adresses |
 | Adresse | id, rue, complément, code postal, ville, informations d'accès (code, étage), archivée, archivée le | 1 client ; 0 à n interventions |
 | Intervention | id, description, urgence, statut, durée estimée (minutes), début prévu, fin prévue (colonne calculée), ordre dans la tournée, compte rendu, motif d'annulation, démarrée le, terminée le, annulée le, créée le | 1 adresse (et donc 1 client) ; 1 type ; 0 ou 1 tournée ; 1 créateur |
+| Signature d'intervention | intervention (clé), image PNG, nom du signataire, signée le, empreinte SHA-256 | 1 intervention ; 1 auteur (le technicien) |
 | Tournée | id, date, créée le | 1 technicien ; 1 créateur ; 0 à n interventions ; unique par (technicien, date) |
 | Type d'intervention | id, libellé, durée par défaut modifiable | 0 à n interventions |
 | Journal des actions (MongoDB) | date, action, auteur, entité concernée, valeurs avant / après | Référence les identifiants PostgreSQL, sans jointure |

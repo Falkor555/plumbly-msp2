@@ -19,7 +19,7 @@ Ce document définit le contrat de l'API REST de Plumbly : les routes, les donn�
 | Dates et heures | ISO 8601 **avec fuseau obligatoire** (`Z` ou `+04:00`) ; renvoyées en UTC ; affichées à l'heure de La Réunion (UTC+4, sans heure d'été) par le front | `"2026-11-24T08:00:00.000Z"` |
 | Dates seules | ISO 8601 ; un jour s'entend à l'heure de La Réunion | `"2026-11-24"` |
 | Énumérations | Majuscules, séparées par `_` | `"A_PLANIFIER"`, `"GESTIONNAIRE"` |
-| Champs inconnus | Refusés (`whitelist` et `forbidNonWhitelisted`) | `400` |
+| Champs inconnus | Refusés par `lireObjet()` (validation écrite à la main) | `400` |
 
 Les noms de champs reprennent ceux du [modèle de données](modele-donnees.md) : `debut_prevu` en base devient `debutPrevu` dans l'API. Prisma fait la correspondance avec `@map`.
 
@@ -67,6 +67,7 @@ Pour une erreur de validation, `message` contient la liste des champs en erreur 
 | `403` | Authentifié mais non autorisé | Un technicien appelle `GET /clients`, ou modifie l'intervention d'un collègue |
 | `404` | Ressource introuvable | Intervention inexistante |
 | `409` | Conflit avec l'état existant | Créneau déjà occupé, e-mail déjà utilisé, deuxième tournée le même jour |
+| `413` | Corps de requête de plus de 100 Ko | Signature trop lourde ; le serveur répond `{ "statusCode": 413, "message": "request entity too large" }`, sans liste de champs |
 | `429` | Trop de requêtes | Plus de 5 tentatives de connexion en 15 minutes |
 | `500` | Erreur interne | Message générique, sans détail technique |
 
@@ -128,9 +129,10 @@ Chaque route est rattachée à une user story ([user-stories.md](user-stories.md
 | PATCH | `/interventions/:id` | ADMIN, GEST | Modifier une intervention non terminée | US16 |
 | POST | `/interventions/:id/cancel` | ADMIN, GEST | Annuler avec un motif | US16 |
 | POST | `/interventions/:id/start` | TECH (affecté) | Passer à « en cours » | US17 |
-| POST | `/interventions/:id/complete` | TECH (affecté) | Passer à « terminée », avec compte rendu facultatif | US17, US18 |
+| POST | `/interventions/:id/complete` | TECH (affecté) | Passer à « terminée », avec compte rendu facultatif et signature du client facultative | US17, US18, US33 |
 | PATCH | `/interventions/:id/report` | TECH (affecté) | Compléter le compte rendu d'une intervention terminée | US18 |
 | GET | `/interventions/:id/history` | ADMIN, GEST | Historique des statuts, lu dans le journal MongoDB | US19 |
+| GET | `/interventions/:id/signature` | ADMIN, GEST, TECH (affecté) | Consulter la signature du client et vérifier son empreinte | US33 |
 
 ### 5.4 Types d'intervention — Loïc
 
@@ -190,7 +192,7 @@ Chaque route est rattachée à une user story ([user-stories.md](user-stories.md
 
 ## 6. Détail des routes
 
-Pour chaque route : les données envoyées (DTO) et leurs règles de validation, la réponse en cas de succès, les erreurs possibles et les effets. La validation utilise les fonctions communes de `backend/src/commun/validation.ts` (voir les points ouverts) ; les erreurs listées servent de base aux tests d'intégration (card #12).
+Pour chaque route : les données envoyées (DTO) et leurs règles de validation, la réponse en cas de succès, les erreurs possibles et les effets. Les corps et les paramètres de requête sont lus par les fonctions de `backend/src/commun/validation.ts` et des fichiers `*.validation.ts` de chaque module, écrites à la main ; les erreurs listées servent de base aux tests d'intégration (card #12).
 
 **Politique de mot de passe** (cahier des charges, 6.1) : 12 caractères minimum, avec au moins une majuscule, une minuscule, un chiffre et un caractère spécial.
 
@@ -447,11 +449,11 @@ Le statut ne se modifie jamais directement : il change uniquement par les routes
 | `POST /interventions` | — | `A_PLANIFIER` | ADMIN, GEST | RG01 |
 | `POST /tours/:id/interventions` (Arnaud) | `A_PLANIFIER` | `PLANIFIEE` | ADMIN, GEST | RG02, RG09, RG10, RG11 |
 | `DELETE /tours/:id/interventions/:interventionId` (Arnaud) | `PLANIFIEE` | `A_PLANIFIER` | ADMIN, GEST | RG04 |
-| `POST /interventions/:id/start` | `PLANIFIEE` | `EN_COURS` | TECH affecté | RG03 |
-| `POST /interventions/:id/complete` | `EN_COURS` | `TERMINEE` | TECH affecté | RG03 |
+| `POST /interventions/:id/start` | `PLANIFIEE` | `EN_COURS` | TECH affecté | RG03, RG24 |
+| `POST /interventions/:id/complete` | `EN_COURS` | `TERMINEE` | TECH affecté | RG03, RG30 à RG35 si signature |
 | `POST /interventions/:id/cancel` | `A_PLANIFIER`, `PLANIFIEE`, `EN_COURS` | `ANNULEE` | ADMIN, GEST | RG05 |
 
-Toute autre transition est refusée (`400`). Chaque changement de statut est enregistré dans le journal des actions (`STATUT_MODIFIE` ou `INTERVENTION_ANNULEE`, RG07). Un technicien « affecté » est celui de la tournée qui contient l'intervention.
+Toute autre transition est refusée (`400`). Chaque changement de statut est enregistré dans le journal des actions (`STATUT_MODIFIE` ou `INTERVENTION_ANNULEE`, RG07). Un technicien « affecté » est celui de la tournée qui contient l'intervention. La table de ces transitions est écrite à un seul endroit du code, `backend/src/interventions/cycle-de-vie.ts`, que les routes des interventions et des tournées appellent avant toute écriture.
 
 L'objet **Intervention** renvoyé par l'API contient des résumés des éléments liés, pour que les écrans s'affichent en un seul appel :
 
@@ -471,6 +473,7 @@ L'objet **Intervention** renvoyé par l'API contient des résumés des élément
   "demarreeLe": null,
   "termineeLe": null,
   "annuleeLe": null,
+  "signature": null,
   "creeLe": "2026-11-24T09:12:00.000Z",
   "majLe": "2026-11-24T09:30:00.000Z",
   "type": { "id": 1, "libelle": "Fuite" },
@@ -481,7 +484,7 @@ L'objet **Intervention** renvoyé par l'API contient des résumés des élément
 }
 ```
 
-`finPrevue` est calculée par la base (début + durée) et `enRetard` par l'API : une intervention planifiée non démarrée 15 minutes après son début prévu est en retard (RG20). `tournee` vaut `null` tant que l'intervention n'est pas planifiée. `nomAffiche` est le nom et le prénom pour un particulier, la raison sociale pour un professionnel.
+`finPrevue` est calculée par la base (début + durée) et `enRetard` par l'API : une intervention planifiée non démarrée 15 minutes après son début prévu est en retard (RG20). `tournee` vaut `null` tant que l'intervention n'est pas planifiée. `nomAffiche` est le nom et le prénom pour un particulier, la raison sociale pour un professionnel. `signature` vaut `null` tant que le client n'a pas signé ; sinon c'est un résumé sans l'image, `{ "nomSignataire": "Jean Dupont", "signeeLe": "2026-11-25T08:58:40.000Z" }` (l'image se lit avec `GET /interventions/:id/signature`).
 
 #### `GET /interventions` — lister et filtrer (US15)
 
@@ -543,7 +546,7 @@ Réponse `200` : l'objet Intervention.
 | `typeInterventionId` | entier | Facultatif ; type existant |
 | `adresseId` | entier | Facultatif, uniquement si l'intervention est « à planifier » |
 
-Le statut, la tournée et l'ordre ne se modifient pas ici (routes d'action et routes des tournées).
+Le statut, la tournée et l'ordre ne se modifient pas ici (routes d'action et routes des tournées). Après « terminée », seul le compte rendu se modifie encore, par `PATCH /interventions/:id/report` : c'est l'unique exception à RG06.
 
 Réponse `200` : l'objet Intervention mis à jour.
 
@@ -578,7 +581,7 @@ Aucun corps. Réponse `200` : l'objet Intervention au statut `EN_COURS`.
 
 | Erreur | Cas |
 | --- | --- |
-| `400` | Intervention qui n'est pas « planifiée » ; tournée qui n'est pas celle du jour |
+| `400` | Intervention qui n'est pas « planifiée » ; tournée qui n'est pas celle du jour (RG24) |
 | `401` | Non connecté |
 | `403` | Utilisateur qui n'est pas le technicien affecté (RG03) |
 | `404` | Intervention inexistante |
@@ -589,18 +592,33 @@ Effets : `demarreeLe` renseigné ; journal `STATUT_MODIFIE`.
 
 | Champ envoyé | Type | Validation |
 | --- | --- | --- |
-| `compteRendu` | texte | Facultatif, 2 000 caractères maximum |
+| `compteRendu` | texte | Facultatif, 2 000 caractères maximum ; **obligatoire (1 à 2 000) si `signature` est envoyé** (RG31) |
+| `signature` | objet | Facultatif (US33). Absent : clôture sans signature, comme avant. `null` est refusé (`400`), comme pour les autres champs |
+| `signature.image` | texte | Obligatoire dans `signature` : data URL `data:image/png;base64,…` en base64 standard (alphabet `A-Z a-z 0-9 + /`, remplissage `=`, sans espace ni saut de ligne), PNG de 48 Ko au plus une fois décodé, 100 à 1 200 px de large, 50 à 600 px de haut (RG35). Le serveur vérifie la structure du fichier (en-tête PNG, bloc IHDR, dimensions, bloc IEND final), pas les pixels : c'est l'écran qui refuse une zone de signature vide |
+| `signature.nomSignataire` | texte | Obligatoire dans `signature`, 1 à 100 caractères (RG31) |
 
-Réponse `200` : l'objet Intervention au statut `TERMINEE`.
+Exemple avec signature :
+
+```json
+{
+  "compteRendu": "Joint du siphon remplacé, plus de fuite.",
+  "signature": { "nomSignataire": "Jean Dupont", "image": "data:image/png;base64,iVBORw0KGgo…" }
+}
+```
+
+Réponse `200` : l'objet Intervention au statut `TERMINEE`, avec `signature` renseigné si le client a signé.
 
 | Erreur | Cas |
 | --- | --- |
-| `400` | Intervention qui n'est pas « en cours » ; compte rendu trop long |
+| `400` | Intervention qui n'est pas « en cours », y compris une seconde clôture ; compte rendu trop long ; signature sans compte rendu ; nom du signataire manquant ou trop long ; image qui n'est pas un PNG, trop lourde ou aux dimensions hors limites |
 | `401` | Non connecté |
 | `403` | Utilisateur qui n'est pas le technicien affecté (RG03) |
 | `404` | Intervention inexistante |
+| `413` | Corps de plus de 100 Ko (limite du serveur, voir section 3) |
 
-Effets : `termineeLe` renseigné ; journal `STATUT_MODIFIE`.
+Les erreurs du corps (`400` de validation, image comprise) sont signalées d'abord, puis l'existence de l'intervention (`404`), le droit (`403`) et la transition (`400`). Deux clôtures simultanées passent l'une après l'autre, car la ligne de l'intervention est verrouillée : la seconde reçoit `400` « Impossible de terminer une intervention terminée. », jamais `409`. Après une réponse perdue, l'écran relit `GET /interventions/:id` (`statut`, `signature`) avant d'afficher un échec.
+
+Effets : `termineeLe` renseigné ; si signature : ligne `signature_intervention` créée dans la même transaction, `signeeLe` égal à `termineeLe` (horloge du serveur), empreinte calculée (RG34). Journal `STATUT_MODIFIE`, puis `SIGNATURE_ENREGISTREE` (identifiant de l'intervention et empreinte, sans l'image ni le nom du signataire).
 
 #### `PATCH /interventions/:id/report` — compléter le compte rendu (US18)
 
@@ -612,7 +630,7 @@ Réponse `200` : l'objet Intervention mis à jour.
 
 | Erreur | Cas |
 | --- | --- |
-| `400` | Intervention qui n'est pas « terminée » ; texte vide ou trop long |
+| `400` | Intervention qui n'est pas « terminée » ; intervention signée, dont le compte rendu est définitif (RG33) ; texte vide ou trop long |
 | `401` | Non connecté |
 | `403` | Utilisateur qui n'est pas le technicien affecté |
 | `404` | Intervention inexistante |
@@ -633,11 +651,42 @@ Réponse `200` : les entrées du journal MongoDB concernant l'intervention, de l
 ]
 ```
 
+Une clôture signée ajoute une entrée `SIGNATURE_ENREGISTREE` (US33), sans `avant` ni `apres`, avec `"contexte": { "empreinte": "3f8a…c21e" }`.
+
 | Erreur | Cas |
 | --- | --- |
 | `401` | Non connecté |
 | `403` | Technicien |
 | `404` | Intervention inexistante |
+
+#### `GET /interventions/:id/signature` — consulter la signature du client (US33)
+
+Réponse `200` :
+
+```json
+{
+  "nomSignataire": "Jean Dupont",
+  "signeeLe": "2026-11-25T08:58:40.000Z",
+  "auteur": { "id": 7, "nom": "Benali", "prenom": "Karim" },
+  "empreinte": "3f8a…c21e",
+  "integre": true,
+  "image": "data:image/png;base64,iVBORw0KGgo…"
+}
+```
+
+`integre` vaut `false` si l'empreinte recalculée avec les données actuelles (dont le compte rendu) ne correspond plus à celle enregistrée (RG34). Elle détecte une modification faite par l'application ou par erreur, pas une falsification par quelqu'un qui a un accès direct à la base. En particulier, supprimer la ligne puis en insérer une autre avec une empreinte recalculée n'est pas détecté : la suppression reste permise pour l'anonymisation (ADR 0013, Conséquences).
+
+L'image est renvoyée en data URL pour être affichée par une balise `<img>` : une adresse d'image classique n'enverrait pas le jeton d'accès. Elle est identique, caractère pour caractère, à celle envoyée à la clôture.
+
+`auteur.id` est l'identifiant du **compte** qui a enregistré la signature, comme dans l'historique, et non celui de la fiche technicien (`tournee.technicien.id` de l'objet Intervention). `nom` et `prenom` sont lus au moment de la consultation.
+
+| Erreur | Cas |
+| --- | --- |
+| `401` | Non connecté |
+| `403` | Technicien qui n'est pas celui de la tournée |
+| `404` | Intervention inexistante ; intervention sans signature |
+
+Ordre des refus : `404` (intervention inexistante), puis `403`, puis `404` (sans signature). Un autre technicien n'apprend donc pas si l'intervention est signée.
 
 ### 6.4 Types d'intervention — Loïc
 
@@ -1184,18 +1233,41 @@ Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'i
 | `POST /technicians/:id/archive` | Une intervention `EN_COURS` bloque l'archivage (`409`) **quelle que soit sa date**, même d'un jour passé ; une intervention `PLANIFIEE` ne le bloque que si sa tournée a lieu aujourd'hui ou plus tard |
 | `DELETE /technicians/:id/unavailabilities/:unavailabilityId` | `400` seulement si l'indisponibilité est terminée (sa fin est passée) ; une indisponibilité en cours peut encore être supprimée |
 
+### 6.10 Écarts de la mise en œuvre de l'historique des statuts (#27)
+
+| Route | Écart |
+| --- | --- |
+| `GET /interventions/:id/history` | `503` si le journal MongoDB est injoignable, au lieu d'une liste vide qui ferait croire à une intervention sans historique |
+| `GET /interventions/:id/history` | 100 entrées au plus, les plus récentes (liste non paginée) |
+| `GET /interventions/:id/history` | `contexte` est présent quand l'entrée en a un, par exemple `{ "motif": "…" }` pour `INTERVENTION_ANNULEE` |
+| `GET /interventions/:id/history` | `nom` et `prenom` de l'auteur valent `null` si son compte n'existe plus dans PostgreSQL |
+| `GET /interventions/:id/history` | Route portée par le module `journal` (`backend/src/journal/historique.controller.ts`) et non par le module interventions : elle ne lit que le journal et vérifie l'existence de l'intervention. Elle n'entre pas en conflit avec `GET /interventions/:id`, dont le paramètre ne capte pas de `/` |
+
+### 6.11 Écarts de la mise en œuvre des interventions (#17)
+
+| Route | Écart |
+| --- | --- |
+| `GET /interventions` | `tri` accepte `-urgence` (par défaut : urgentes, puis prioritaires, puis normales, puis la demande la plus ancienne, RG18), `creeLe`, `-creeLe`, `debutPrevu` et `-debutPrevu` (les interventions sans créneau en dernier) ; toute autre valeur répond `400` |
+| `GET /interventions` | `du` et `au` s'utilisent ensemble ou seuls ; ce sont des jours à La Réunion, appliqués au début prévu, bornes incluses. Une intervention sans début prévu n'apparaît pas quand l'un des deux est fourni. Un statut inconnu dans `statut` répond `400` en le nommant |
+| `GET /interventions/:id` | Pour un technicien, l'existence est vérifiée d'abord (`404`), puis l'affectation (`403`), y compris pour une intervention à planifier. Les identifiants se suivent : savoir qu'un numéro existe n'apprend rien |
+| `POST /interventions/:id/start`, `POST /interventions/:id/complete`, `PATCH /interventions/:id/report` | Ordre des refus : `404`, puis `403` si l'intervention est dans la tournée d'un autre technicien, puis `400` pour la transition. Une intervention sans tournée (à planifier, annulée) n'a pas de technicien affecté : elle répond `400`, pas `403`. Un ADMIN ou un GESTIONNAIRE reçoit `403` sur ces trois routes (cahier des charges, 5.5) |
+| `PATCH /interventions/:id` | Une nouvelle durée d'intervention planifiée repasse les vérifications de l'affectation : `400` si le créneau finit après 19 h (RG11), `409` s'il chevauche une autre intervention (RG09) ou une indisponibilité (RG10). Un corps sans aucun champ répond `400` |
+| `PATCH /interventions/:id`, `POST /interventions/:id/cancel` | `409` « L'intervention a été modifiée entre-temps, rechargez la page. » si l'intervention a changé de tournée (retrait, affectation) pendant la requête |
+| `POST /interventions/:id/cancel` | L'intervention perd sa tournée, son rang et son début prévu ; `demarreeLe` est gardé pour une intervention en cours, `annuleeLe` et `motifAnnulation` sont renseignés. Une intervention en cours puis annulée perd en base le lien avec son technicien : il ne reste que dans le journal, comme auteur de ses changements de statut |
+| `POST /interventions/:id/complete`, `PATCH /interventions/:id/report` | Un compte rendu vide ou fait d'espaces répond `400`. `report` remplace le texte précédent |
+| `POST /intervention-types`, `PATCH /intervention-types/:id` | L'unicité du libellé tient compte de la casse, comme la contrainte en base : « Fuite » et « fuite » sont deux types |
+
 ## 7. Points ouverts
 
 - [x] **Routes d'Arnaud** : routes des sections 5.5 à 5.8 validées par le binôme.
 - [x] **Détail des routes** : sections 6.1 à 6.8 rédigées.
-- [ ] **Compteurs du tableau de bord** : la requête de `GET /dashboard/activity` ne compte que les interventions rattachées à une tournée ; `aPlanifier` et `annulees` restent donc à 0 (une intervention à planifier n'a pas de tournée, une intervention annulée en est retirée). Compter ces deux statuts à part, ou les retirer de la réponse.
+- [ ] **Compteurs du tableau de bord** : la requête de `GET /dashboard/activity` ne compte que les interventions rattachées à une tournée ; `aPlanifier` et `annulees` restent donc à 0 (une intervention à planifier n'a pas de tournée, une intervention annulée en est retirée). Depuis #17, l'annulation retire aussi une intervention en cours de sa tournée : `annulees` ne peut plus être calculé par technicien à partir de PostgreSQL. Compter ces deux statuts à part, ou les retirer de la réponse.
 - [ ] **Délai de traitement (US27)** : la user story parle du délai entre la demande et la fin d'intervention, la requête mesure le temps passé sur place. Choisir l'indicateur, ou garder les deux.
 - [ ] **E-mail de réinitialisation** (US04) : ajouter Mailpit au `docker-compose.yml` pour capturer les e-mails en développement (card #7).
 - [ ] **Durée d'une intervention** : limites de 15 à 720 minutes à confirmer.
-- [ ] **Démarrage d'une intervention** : uniquement le jour de sa tournée ; à ajouter aux règles de gestion si la règle est retenue.
-- [x] **Swagger** : documentation interactive sur `/api/docs`, désactivée en production. Les corps de requête sont décrits à la main (`@ApiBody`) tant que la validation n'utilise pas de classes DTO.
+- [x] **Démarrage d'une intervention** : uniquement le jour de sa tournée, à l'heure de La Réunion ; règle RG24 du cahier des charges (#17).
+- [x] **Swagger** : documentation interactive sur `/api/docs`, désactivée en production. Les corps de requête sont décrits à la main (`@ApiBody`) : la validation est écrite en fonctions (`*.validation.ts`), sans classes DTO dont Swagger pourrait tirer le schéma.
 - [x] **Authentification** (card #13) : connexion, rafraîchissement avec rotation, déconnexion, profil, changement de mot de passe et gestion des comptes ; en-têtes de sécurité posés par Helmet.
-- [ ] **Validation par classes DTO** : comme dans tous les modules, la validation est écrite à la main (`commun/validation.ts`) au lieu de `class-validator`, avec les mêmes règles et le même format d'erreur. Passer aux classes DTO pour tous les modules à la fois permettrait à Swagger de générer les schémas lui-même.
-- [ ] **Journal des connexions et des comptes** : `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE` et `COMPTE_DESACTIVE` à enregistrer avec la card #27.
+- [ ] **Journal des connexions et des comptes** : `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE` et `COMPTE_DESACTIVE` à enregistrer dans le journal des actions (card #27).
 - [ ] **Mot de passe oublié** (US04, Should) : `POST /auth/forgot-password` et `POST /auth/reset-password` ne sont pas développées ; elles dépendent de Mailpit.
 - [ ] **Mot de passe provisoire** : `mdpAChanger` n'est imposé que par le front ; l'API pourrait refuser les autres routes tant qu'il vaut `true`.

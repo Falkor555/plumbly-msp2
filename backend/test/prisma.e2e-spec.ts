@@ -8,6 +8,7 @@ const TABLES_DU_MLD = [
   'intervention',
   'jeton_rafraichissement',
   'jeton_reinitialisation',
+  'signature_intervention',
   'technicien',
   'tournee',
   'type_intervention',
