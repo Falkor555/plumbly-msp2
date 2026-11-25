@@ -8,6 +8,11 @@ export interface Chargement<T> {
   etat: EtatChargement<T>;
   /** Relance la lecture, par exemple après une affectation. */
   recharger: () => void;
+  /**
+   * Données de la dernière lecture réussie, gardées pendant une relecture : un écran peut les
+   * laisser affichées plutôt que de vider la page (focus et défilement conservés).
+   */
+  dernieresDonnees: T | undefined;
 }
 
 interface ResultatLecture<T> {
@@ -52,6 +57,7 @@ export function useChargement<T>(charger: (signal: AbortSignal) => Promise<T>): 
       ? resultat.etat
       : { statut: 'chargement' };
   const recharger = useCallback(() => setVersion((courante) => courante + 1), []);
+  const dernieresDonnees = resultat?.etat.statut === 'pret' ? resultat.etat.donnees : undefined;
 
-  return { etat, recharger };
+  return { etat, recharger, dernieresDonnees };
 }

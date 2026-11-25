@@ -2,6 +2,7 @@ import type {
   DateIso,
   Indisponibilite,
   Intervention,
+  SignatureIntervention,
   TechnicienDuPlanning,
   TypeClient,
   Urgence,
@@ -61,6 +62,7 @@ export function fabriquerIntervention(description: DescriptionIntervention): Int
     },
     tournee: null,
     createur: { id: 1, nom: 'Payet', prenom: 'Sophie' },
+    signature: null,
   };
 }
 
@@ -81,6 +83,8 @@ export function planifier(
 export interface JeuDeDemonstration {
   techniciens: TechnicienDuPlanning[];
   interventionsAPlanifier: Intervention[];
+  /** Signatures du client par identifiant d'intervention (GET /interventions/:id/signature). */
+  signatures: Record<number, SignatureIntervention>;
 }
 
 export function creerJeuDeDemonstration(lundi: DateIso): JeuDeDemonstration {
@@ -184,5 +188,6 @@ export function creerJeuDeDemonstration(lundi: DateIso): JeuDeDemonstration {
         dureeEstimeeMin: 120,
       }),
     ],
+    signatures: {},
   };
 }

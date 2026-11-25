@@ -54,6 +54,34 @@ export interface Intervention {
   client: { id: number; typeClient: TypeClient; nomAffiche: string; telephone: string };
   tournee: { id: number; dateTournee: DateIso; technicien: PersonneResume } | null;
   createur: PersonneResume;
+  /** null tant que le client n'a pas signé ; l'image se lit avec GET /interventions/:id/signature. */
+  signature: ResumeSignature | null;
+}
+
+/** Résumé de la signature du client dans l'objet Intervention (US33), sans l'image. */
+export interface ResumeSignature {
+  nomSignataire: string;
+  signeeLe: DateHeureIso;
+}
+
+/** GET /interventions/:id/signature (US33). */
+export interface SignatureIntervention extends ResumeSignature {
+  /** Compte qui a enregistré la signature (le technicien), et non sa fiche technicien. */
+  auteur: PersonneResume;
+  empreinte: string;
+  /** Faux si le contenu signé (dont le compte rendu) a changé depuis la signature (RG34). */
+  integre: boolean;
+  /** « data:image/png;base64,… » */
+  image: string;
+}
+
+/**
+ * Corps de POST /interventions/:id/complete. Avec une signature, le compte rendu est obligatoire
+ * (RG31) ; sans, il est facultatif.
+ */
+export interface FinDIntervention {
+  compteRendu?: string;
+  signature?: { image: string; nomSignataire: string };
 }
 
 export interface TechnicienResume extends PersonneResume {
