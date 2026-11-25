@@ -12,12 +12,17 @@ import {
 const NOM_COLLECTION = 'journal_actions';
 
 /*
- * Durée de conservation des journaux de connexion : 6 mois, le bas de la fourchette de 6 mois à
- * 1 an recommandée par la CNIL. MongoDB supprime lui-même les documents expirés (index TTL).
- * L'historique des statuts et des comptes n'expire pas : il répond à US19 et RG07.
+ * Durée de conservation des journaux d'accès (connexions et accès refusés) : 6 mois, le bas de
+ * la fourchette de 6 mois à 1 an recommandée par la CNIL. MongoDB supprime lui-même les
+ * documents expirés (index TTL). L'historique des statuts et des comptes n'expire pas : il
+ * répond à US19 et RG07.
  */
-export const DUREE_CONSERVATION_CONNEXIONS_EN_SECONDES = 183 * 24 * 60 * 60;
-const ACTIONS_DE_CONNEXION: TypeAction[] = ['CONNEXION_REUSSIE', 'CONNEXION_ECHOUEE'];
+export const DUREE_CONSERVATION_JOURNAUX_D_ACCES_EN_SECONDES = 183 * 24 * 60 * 60;
+const ACTIONS_JOURNAUX_D_ACCES: TypeAction[] = [
+  'CONNEXION_REUSSIE',
+  'CONNEXION_ECHOUEE',
+  'ACCES_REFUSE',
+];
 
 /** Index de docs/modele-donnees.md, section 8.3. Nommés : createIndexes est rejouable. */
 export const INDEX_DU_JOURNAL: IndexDescription[] = [
@@ -25,10 +30,10 @@ export const INDEX_DU_JOURNAL: IndexDescription[] = [
   { name: 'actions_auteur', key: { 'auteur.id': 1, date: -1 } },
   { name: 'suivi_actions', key: { action: 1, date: -1 } },
   {
-    name: 'expiration_connexions',
+    name: 'expiration_journaux_d_acces',
     key: { date: 1 },
-    expireAfterSeconds: DUREE_CONSERVATION_CONNEXIONS_EN_SECONDES,
-    partialFilterExpression: { action: { $in: ACTIONS_DE_CONNEXION } },
+    expireAfterSeconds: DUREE_CONSERVATION_JOURNAUX_D_ACCES_EN_SECONDES,
+    partialFilterExpression: { action: { $in: ACTIONS_JOURNAUX_D_ACCES } },
   },
 ];
 

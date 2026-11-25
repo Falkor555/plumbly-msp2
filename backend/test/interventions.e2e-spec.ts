@@ -1,6 +1,6 @@
 import type { UtilisateurConnecte } from '../src/commun/autorisation/utilisateur-connecte.js';
 import { StatutIntervention, Urgence } from '../src/generated/prisma/client.ts';
-import { JournalDesActions } from '../src/journal/journal-des-actions.js';
+import { type ActionJournalisee, JournalDesActions } from '../src/journal/journal-des-actions.js';
 import {
   type ApplicationDeTest,
   creerCompte,
@@ -71,6 +71,11 @@ describe('interventions (e2e)', () => {
   });
 
   const en = (utilisateur?: UtilisateurConnecte) => requetesEn(application.app, utilisateur);
+
+  /** Types des actions envoyées au journal simulé depuis le début du test. */
+  function actionsJournalisees(): ActionJournalisee['type'][] {
+    return journal.enregistrer.mock.calls.map(([action]) => (action as ActionJournalisee).type);
+  }
 
   async function creerTournee(technicien: Technicien, jour = AUJOURDHUI): Promise<number> {
     const tournee = await application.prisma.tournee.create({
@@ -620,7 +625,13 @@ describe('interventions (e2e)', () => {
       const apres = await lireEnBase(id);
       expect(apres).toEqual(avant);
       expect(apres).toMatchObject({ statut: 'PLANIFIEE', demarreeLe: null });
-      expect(journal.enregistrer).not.toHaveBeenCalled();
+      // Seule trace : le refus lui-même (TS-03), avec le modèle de route et non l'URL réelle.
+      expect(journal.enregistrer).toHaveBeenCalledExactlyOnceWith({
+        type: 'ACCES_REFUSE',
+        auteur: fixtures.kevin.compte,
+        methode: 'POST',
+        route: '/api/v1/interventions/:id/start',
+      });
     });
 
     it('TI07 : répond 403 au technicien qui termine l’intervention d’un collègue, sans rien changer en base', async () => {
@@ -644,7 +655,7 @@ describe('interventions (e2e)', () => {
       const apres = await lireEnBase(id);
       expect(apres).toEqual(avant);
       expect(apres).toMatchObject({ statut: 'EN_COURS', termineeLe: null, compteRendu: null });
-      expect(journal.enregistrer).not.toHaveBeenCalled();
+      expect(actionsJournalisees()).toEqual(['ACCES_REFUSE']);
     });
 
     it('TI11 : un technicien ne lit pas la tournée d’un collègue, car GET /tours/:id est réservé à ADMIN et GESTIONNAIRE (403 du rôle)', async () => {
@@ -702,7 +713,7 @@ describe('interventions (e2e)', () => {
       const apres = await lireEnBase(id);
       expect(apres).toEqual(avant);
       expect(apres).toMatchObject({ statut: 'TERMINEE', compteRendu: null });
-      expect(journal.enregistrer).not.toHaveBeenCalled();
+      expect(actionsJournalisees()).toEqual(['ACCES_REFUSE']);
     });
 
     it('répond 401 sans utilisateur', async () => {
@@ -1085,14 +1096,20 @@ describe('interventions (e2e)', () => {
       return application.prisma.signatureIntervention.findMany();
     }
 
-    /** Aucune trace d'une clôture refusée : ni signature, ni changement, ni journal. */
-    async function verifierRienDEcrit(id: number): Promise<void> {
+    /**
+     * Aucune trace d'une clôture refusée : ni signature, ni changement, ni journal métier. Un
+     * refus en 403 laisse seulement sa propre trace, ACCES_REFUSE (TS-03).
+     */
+    async function verifierRienDEcrit(
+      id: number,
+      journalAttendu: ActionJournalisee['type'][] = [],
+    ): Promise<void> {
       expect(await signaturesEnBase()).toEqual([]);
       const intervention = await application.prisma.intervention.findUniqueOrThrow({
         where: { id },
       });
       expect(intervention).toMatchObject({ statut: 'EN_COURS', termineeLe: null });
-      expect(journal.enregistrer).not.toHaveBeenCalled();
+      expect(actionsJournalisees()).toEqual(journalAttendu);
     }
 
     describe('POST /interventions/:id/complete avec signature', () => {
@@ -1183,7 +1200,7 @@ describe('interventions (e2e)', () => {
 
         await terminer(id, CORPS_SIGNE, utilisateur()).expect(403);
 
-        await verifierRienDEcrit(id);
+        await verifierRienDEcrit(id, ['ACCES_REFUSE']);
       });
 
       it('RG32 : une deuxième clôture signée est refusée et la première signature reste', async () => {

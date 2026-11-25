@@ -73,6 +73,18 @@ export interface CompteDesactive {
   utilisateurId: number;
 }
 
+/**
+ * Requête refusée en 403 (TS-03), par RolesGuard ou par un contrôle de propriété. route est le
+ * modèle de la route (/api/v1/interventions/:id/start), jamais l'URL reçue : une recherche ou
+ * un identifiant dans l'URL feraient entrer une donnée personnelle dans le journal.
+ */
+export interface AccesRefuse {
+  type: 'ACCES_REFUSE';
+  auteur: AuteurJournal;
+  methode: string;
+  route: string;
+}
+
 export type ActionJournalisee =
   | StatutModifie
   | InterventionAnnulee
@@ -80,7 +92,8 @@ export type ActionJournalisee =
   | ConnexionReussie
   | ConnexionEchouee
   | CompteCree
-  | CompteDesactive;
+  | CompteDesactive
+  | AccesRefuse;
 
 export type TypeAction = ActionJournalisee['type'];
 

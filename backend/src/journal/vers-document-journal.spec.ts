@@ -149,6 +149,27 @@ describe('versDocumentJournal', () => {
     });
   });
 
+  it('ACCES_REFUSE : l’entité est l’utilisateur refusé, méthode et modèle de route dans le contexte', () => {
+    const action = {
+      type: 'ACCES_REFUSE' as const,
+      auteur: TECHNICIEN,
+      methode: 'POST',
+      route: '/api/v1/interventions/:id/start',
+      // Surplus qu'un appelant pourrait passer par erreur : l'URL réelle ne doit pas entrer.
+      url: '/api/v1/interventions?recherche=Hélène',
+    };
+
+    const document = versDocumentJournal(action, DATE);
+
+    expect(document).toEqual({
+      date: DATE,
+      action: 'ACCES_REFUSE',
+      auteur: { id: 7, role: 'TECHNICIEN' },
+      entite: { type: 'utilisateur', id: 7 },
+      contexte: { methode: 'POST', route: '/api/v1/interventions/:id/start' },
+    });
+  });
+
   it('ne recopie de l’auteur que son identifiant et son rôle', () => {
     const utilisateurComplet = { id: 7, role: 'TECHNICIEN', email: 'k@exemple.fr', nom: 'Benali' };
 
