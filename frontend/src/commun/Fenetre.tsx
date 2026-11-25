@@ -3,11 +3,15 @@ import { type ReactNode, type RefObject, useEffect, useRef } from 'react';
 interface Props {
   /** Identifiant (useId) du titre de la fenêtre, qui la nomme pour les lecteurs d'écran. */
   idTitre: string;
+  /** Identifiant du texte qui explique la fenêtre, lu avec son titre (confirmation). */
+  idDescription?: string;
   onFermer: () => void;
   /** Élément qui reçoit le focus à l'ouverture, en général le bouton « Fermer ». */
   focusInitial: RefObject<HTMLElement | null>;
   /** Faux quand Échap ferait perdre une saisie : seul le bouton « Fermer » ferme alors. */
   fermableParEchap?: boolean;
+  /** Vrai pour un contenu en deux colonnes (formulaire long, assistant) : la fenêtre s'élargit. */
+  large?: boolean;
   children: ReactNode;
 }
 
@@ -23,9 +27,11 @@ const FOCALISABLES =
  */
 export function Fenetre({
   idTitre,
+  idDescription,
   onFermer,
   focusInitial,
   fermableParEchap = true,
+  large = false,
   children,
 }: Props) {
   const fenetre = useRef<HTMLDivElement>(null);
@@ -55,7 +61,10 @@ export function Fenetre({
         role="dialog"
         aria-modal="true"
         aria-labelledby={idTitre}
-        className={`max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-bordure bg-white ${OMBRE}`}
+        aria-describedby={idDescription}
+        // Repli du focus quand tous les contrôles sont désactivés (envoi en cours), hors tabulation.
+        tabIndex={-1}
+        className={`max-h-[calc(100dvh-2rem)] w-full ${large ? 'max-w-3xl' : 'max-w-lg'} overflow-y-auto rounded-xl border border-bordure bg-white focus:outline-none ${OMBRE}`}
       >
         {children}
       </div>
@@ -66,7 +75,13 @@ export function Fenetre({
 /** Tab sur le dernier élément revient au premier, Maj+Tab sur le premier va au dernier. */
 function garderLeFocus(evenement: KeyboardEvent, fenetre: HTMLElement): void {
   const elements = [...fenetre.querySelectorAll<HTMLElement>(FOCALISABLES)];
-  if (elements.length === 0) return;
+  if (elements.length === 0) {
+    // Pendant un envoi, tout est désactivé et le navigateur a renvoyé le focus sur le document :
+    // sans cela, Tab atteindrait la page derrière le voile malgré aria-modal.
+    evenement.preventDefault();
+    fenetre.focus();
+    return;
+  }
   const premier = elements[0];
   const dernier = elements[elements.length - 1];
   const actif = document.activeElement;

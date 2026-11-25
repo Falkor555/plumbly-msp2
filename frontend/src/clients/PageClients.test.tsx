@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import type { Client } from '../api/types';
 import { clientsDeTest, fabriquerClient, servirLesClients } from '../test/clientsDeTest';
+import { enregistrerLesRequetes } from '../test/msw/requetesRecues';
 import { serveurApi, urlApi } from '../test/msw/serveur';
 import { PageClients } from './PageClients';
 
@@ -391,5 +392,309 @@ describe('liste des clients (US08)', () => {
     const alerte = await screen.findByRole('alert');
     expect(alerte).toHaveTextContent('Une erreur est survenue. Réessayez plus tard.');
     expect(alerte).not.toHaveTextContent('stack trace');
+  });
+});
+
+type Utilisateur = ReturnType<typeof userEvent.setup>;
+
+function champ(fenetre: HTMLElement, nom: string): HTMLElement {
+  return within(fenetre).getByRole('textbox', { name: nom });
+}
+
+async function ouvrirLaCreation(utilisateur: Utilisateur): Promise<HTMLElement> {
+  await utilisateur.click(screen.getByRole('button', { name: 'Nouveau client' }));
+  return screen.getByRole('dialog', { name: 'Nouveau client' });
+}
+
+/** Téléphone et adresse valides, sans nom : le seul manque d'un particulier. */
+async function remplirSansLeNom(utilisateur: Utilisateur, fenetre: HTMLElement): Promise<void> {
+  await utilisateur.type(champ(fenetre, 'Téléphone (obligatoire)'), '0692 11 22 33');
+  await utilisateur.type(champ(fenetre, 'Rue (obligatoire)'), '5 rue de Paris');
+  await utilisateur.type(champ(fenetre, 'Code postal (obligatoire)'), '97400');
+  await utilisateur.type(champ(fenetre, 'Ville (obligatoire)'), 'Saint-Denis');
+}
+
+function marieTecher(): Client {
+  return fabriquerClient({
+    id: 42,
+    nomClient: 'Técher',
+    prenomClient: 'Marie',
+    nomAffiche: 'Marie Técher',
+    telephone: '0692112233',
+  });
+}
+
+/** Libellés des champs marqués en erreur, dans l'ordre de la fenêtre. */
+function champsEnErreur(fenetre: HTMLElement): string[] {
+  return within(fenetre)
+    .getAllByRole('textbox')
+    .filter((element) => element.getAttribute('aria-invalid') === 'true')
+    .map((element) => (element as HTMLInputElement).labels?.[0]?.textContent ?? '');
+}
+
+describe('création d’un client (US06, US07)', () => {
+  it('US06 : un particulier sans nom est signalé sur le champ sans appel à l’API, puis créé une fois le nom saisi', async () => {
+    const utilisateur = userEvent.setup();
+    const clients = clientsDeTest();
+    const lectures = servirLesClients(clients);
+    const creations = enregistrerLesRequetes('post', '/clients', () => {
+      clients.push(marieTecher());
+      return HttpResponse.json(marieTecher(), { status: 201 });
+    });
+    const { container } = render(<PageClients />);
+    await attendreLaListe();
+    // La région live doit exister, vide, avant le message : sinon il risque de ne pas être lu.
+    const zoneDAnnonce = container.querySelector('main > [aria-live="polite"]');
+    expect(zoneDAnnonce).toBeEmptyDOMElement();
+    expect(zoneDAnnonce).toHaveAttribute('aria-atomic', 'true');
+    const fenetre = await ouvrirLaCreation(utilisateur);
+    expect(within(fenetre).getByRole('radio', { name: 'Particulier' })).toBeChecked();
+    expect(within(fenetre).getByRole('radio', { name: 'Particulier' })).toHaveFocus();
+    await utilisateur.type(champ(fenetre, 'Prénom'), 'Marie');
+    await remplirSansLeNom(utilisateur, fenetre);
+
+    await utilisateur.click(within(fenetre).getByRole('button', { name: 'Créer le client' }));
+
+    const nom = champ(fenetre, 'Nom (obligatoire)');
+    expect(nom).toHaveAttribute('aria-invalid', 'true');
+    expect(nom).toHaveAccessibleDescription(
+      'Saisissez le nom : il est obligatoire pour un particulier.',
+    );
+    await waitFor(() => expect(nom).toHaveFocus());
+    expect(within(fenetre).getByRole('alert')).toHaveTextContent(
+      'Un champ est à corriger : son message est affiché sous lui.',
+    );
+    expect(creations).toHaveLength(0);
+
+    await utilisateur.type(nom, 'Técher');
+    expect(nom).not.toHaveAttribute('aria-invalid');
+    expect(within(fenetre).queryByRole('alert')).not.toBeInTheDocument();
+    await utilisateur.click(within(fenetre).getByRole('button', { name: 'Créer le client' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(creations).toHaveLength(1);
+    // Ni e-mail, ni complément, ni accès : l'API refuse une chaîne vide (400).
+    expect(JSON.parse(creations[0].corps)).toEqual({
+      typeClient: 'PARTICULIER',
+      nomClient: 'Técher',
+      prenomClient: 'Marie',
+      telephone: '0692112233',
+      adresse: { rue: '5 rue de Paris', codePostal: '97400', ville: 'Saint-Denis' },
+    });
+    const annonce = screen.getByText(/^Client « Marie Técher » créé\./);
+    expect(zoneDAnnonce).toContainElement(annonce);
+    expect(within(annonce).getByRole('link', { name: 'Ouvrir sa fiche' })).toHaveAttribute(
+      'href',
+      '/clients/42',
+    );
+    expect(await screen.findByRole('link', { name: 'Marie Técher' })).toHaveAttribute(
+      'href',
+      '/clients/42',
+    );
+    expect(lectures).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Nouveau client' })).toHaveFocus();
+  });
+
+  it('US07 : un professionnel exige la raison sociale ; le nom devient celui du contact, facultatif', async () => {
+    const utilisateur = userEvent.setup();
+    servirLesClients(clientsDeTest());
+    const creations = enregistrerLesRequetes('post', '/clients', () =>
+      HttpResponse.json(marieTecher(), { status: 201 }),
+    );
+    render(<PageClients />);
+    await attendreLaListe();
+    const fenetre = await ouvrirLaCreation(utilisateur);
+    expect(within(fenetre).queryByRole('textbox', { name: /^Raison sociale/ })).toBeNull();
+
+    await utilisateur.click(within(fenetre).getByRole('radio', { name: 'Professionnel' }));
+    await remplirSansLeNom(utilisateur, fenetre);
+    await utilisateur.click(within(fenetre).getByRole('button', { name: 'Créer le client' }));
+
+    const raisonSociale = champ(fenetre, 'Raison sociale (obligatoire)');
+    expect(raisonSociale).toHaveAttribute('aria-invalid', 'true');
+    expect(raisonSociale).toHaveAccessibleDescription(
+      'Saisissez la raison sociale : elle est obligatoire pour un professionnel.',
+    );
+    await waitFor(() => expect(raisonSociale).toHaveFocus());
+    expect(champsEnErreur(fenetre)).toEqual(['Raison sociale (obligatoire)']);
+    expect(champ(fenetre, 'Nom du contact')).toBeInTheDocument();
+    expect(within(fenetre).getByRole('group', { name: 'Type de client' })).toBeInTheDocument();
+    expect(creations).toHaveLength(0);
+  });
+
+  it('US06 : plusieurs champs en erreur sont tous signalés, le focus allant au premier', async () => {
+    const utilisateur = userEvent.setup();
+    servirLesClients(clientsDeTest());
+    render(<PageClients />);
+    await attendreLaListe();
+    const fenetre = await ouvrirLaCreation(utilisateur);
+    await utilisateur.type(champ(fenetre, 'Téléphone (obligatoire)'), '0692-11');
+    await utilisateur.type(champ(fenetre, 'E-mail'), 'marie@exemple');
+
+    await utilisateur.click(within(fenetre).getByRole('button', { name: 'Créer le client' }));
+
+    expect(champsEnErreur(fenetre)).toEqual([
+      'Nom (obligatoire)',
+      'Téléphone (obligatoire)',
+      'E-mail',
+      'Rue (obligatoire)',
+      'Code postal (obligatoire)',
+      'Ville (obligatoire)',
+    ]);
+    expect(champ(fenetre, 'Téléphone (obligatoire)')).toHaveAccessibleDescription(
+      '10 chiffres commençant par 0 ; espaces et points acceptés. Le téléphone doit contenir 10 chiffres commençant par 0 (espaces et points acceptés), par exemple 0692 12 34 56.',
+    );
+    await waitFor(() => expect(champ(fenetre, 'Nom (obligatoire)')).toHaveFocus());
+    expect(within(fenetre).getByRole('alert')).toHaveTextContent(
+      '6 champs sont à corriger : chaque message est affiché sous son champ.',
+    );
+  });
+
+  it('US06 : un refus de l’API à plusieurs messages s’affiche tel quel, ligne par ligne, et la fenêtre reste ouverte', async () => {
+    const utilisateur = userEvent.setup();
+    const lectures = servirLesClients(clientsDeTest());
+    const messages = [
+      'nomClient contient un caractère non autorisé',
+      'adresse.rue contient un caractère non autorisé',
+    ];
+    serveurApi.use(
+      http.post(urlApi('/clients'), () =>
+        HttpResponse.json(
+          { statusCode: 400, message: messages, error: 'Bad Request' },
+          { status: 400 },
+        ),
+      ),
+    );
+    render(<PageClients />);
+    await attendreLaListe();
+    const fenetre = await ouvrirLaCreation(utilisateur);
+    await utilisateur.type(champ(fenetre, 'Nom (obligatoire)'), 'Técher');
+    await remplirSansLeNom(utilisateur, fenetre);
+
+    await utilisateur.click(within(fenetre).getByRole('button', { name: 'Créer le client' }));
+
+    const alerte = await within(fenetre).findByRole('alert');
+    expect(alerte.textContent).toBe(messages.join('\n'));
+    expect(alerte).toHaveClass('whitespace-pre-line');
+    expect(screen.getByRole('dialog', { name: 'Nouveau client' })).toBeInTheDocument();
+    expect(within(fenetre).getByRole('button', { name: 'Créer le client' })).toBeEnabled();
+    expect(within(fenetre).getByRole('button', { name: 'Créer le client' })).toHaveFocus();
+    expect(champ(fenetre, 'Nom (obligatoire)')).toHaveValue('Técher');
+    expect(lectures).toHaveLength(1);
+  });
+
+  it('US06 : après un refus de l’API, le focus revient sur « Créer le client » une fois l’envoi terminé', async () => {
+    const utilisateur = userEvent.setup();
+    servirLesClients(clientsDeTest());
+    let liberer: () => void = () => undefined;
+    const reponseRetenue = new Promise<void>((resolve) => (liberer = resolve));
+    serveurApi.use(
+      http.post(urlApi('/clients'), async () => {
+        await reponseRetenue;
+        return HttpResponse.json(
+          { statusCode: 400, message: 'telephone doit être unique', error: 'Bad Request' },
+          { status: 400 },
+        );
+      }),
+    );
+    render(<PageClients />);
+    await attendreLaListe();
+    const fenetre = await ouvrirLaCreation(utilisateur);
+    await utilisateur.type(champ(fenetre, 'Nom (obligatoire)'), 'Técher');
+    await remplirSansLeNom(utilisateur, fenetre);
+    await utilisateur.click(within(fenetre).getByRole('button', { name: 'Créer le client' }));
+    // Un navigateur retire le focus d'un bouton qui devient désactivé ; jsdom ne le fait pas.
+    (document.activeElement as HTMLElement).blur();
+
+    await utilisateur.tab();
+    expect(fenetre).toHaveFocus();
+    liberer();
+
+    expect(await within(fenetre).findByRole('alert')).toHaveTextContent(
+      'telephone doit être unique',
+    );
+    await waitFor(() =>
+      expect(within(fenetre).getByRole('button', { name: 'Créer le client' })).toHaveFocus(),
+    );
+  });
+
+  it('US06 : le résumé garde le nombre de champs refusés pendant la saisie et se réannonce à chaque envoi refusé', async () => {
+    const utilisateur = userEvent.setup();
+    servirLesClients(clientsDeTest());
+    render(<PageClients />);
+    await attendreLaListe();
+    const fenetre = await ouvrirLaCreation(utilisateur);
+    await utilisateur.type(champ(fenetre, 'Rue (obligatoire)'), '5 rue de Paris');
+    await utilisateur.type(champ(fenetre, 'Ville (obligatoire)'), 'Saint-Denis');
+    await utilisateur.click(within(fenetre).getByRole('button', { name: 'Créer le client' }));
+    const premiereAlerte = within(fenetre).getByRole('alert');
+    expect(premiereAlerte).toHaveTextContent('3 champs sont à corriger');
+
+    await utilisateur.type(champ(fenetre, 'Nom (obligatoire)'), 'Técher');
+
+    // Le texte ne change pas à chaque correction : l'alerte n'interrompt pas la saisie.
+    expect(within(fenetre).getByRole('alert')).toBe(premiereAlerte);
+    expect(premiereAlerte).toHaveTextContent('3 champs sont à corriger');
+    await utilisateur.clear(champ(fenetre, 'Nom (obligatoire)'));
+    await utilisateur.click(within(fenetre).getByRole('button', { name: 'Créer le client' }));
+    // Même nombre au second refus : une nouvelle alerte, pour qu'il soit de nouveau annoncé.
+    const secondeAlerte = within(fenetre).getByRole('alert');
+    expect(secondeAlerte).not.toBe(premiereAlerte);
+    expect(secondeAlerte).toHaveTextContent('3 champs sont à corriger');
+  });
+
+  it('US06 : pendant l’envoi, le bouton est désactivé et dit que la création est en cours', async () => {
+    const utilisateur = userEvent.setup();
+    servirLesClients(clientsDeTest());
+    let liberer: () => void = () => undefined;
+    const reponseRetenue = new Promise<void>((resolve) => (liberer = resolve));
+    const envoi = vi.fn();
+    serveurApi.use(
+      http.post(urlApi('/clients'), async () => {
+        envoi();
+        await reponseRetenue;
+        return HttpResponse.json(marieTecher(), { status: 201 });
+      }),
+    );
+    render(<PageClients />);
+    await attendreLaListe();
+    const fenetre = await ouvrirLaCreation(utilisateur);
+    await utilisateur.type(champ(fenetre, 'Nom (obligatoire)'), 'Técher');
+    await remplirSansLeNom(utilisateur, fenetre);
+
+    await utilisateur.click(within(fenetre).getByRole('button', { name: 'Créer le client' }));
+
+    expect(within(fenetre).getByRole('button', { name: 'Création en cours…' })).toBeDisabled();
+    expect(within(fenetre).getByRole('button', { name: 'Annuler' })).toBeDisabled();
+    expect(champ(fenetre, 'Nom (obligatoire)')).toBeDisabled();
+    await utilisateur.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Nouveau client' })).toBeInTheDocument();
+
+    liberer();
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(envoi).toHaveBeenCalledTimes(1);
+  });
+
+  it('US06 : « Annuler » ferme la fenêtre sans rien envoyer et rend le focus au bouton', async () => {
+    const utilisateur = userEvent.setup();
+    const lectures = servirLesClients(clientsDeTest());
+    const creations = enregistrerLesRequetes('post', '/clients', () =>
+      HttpResponse.json(marieTecher(), { status: 201 }),
+    );
+    render(<PageClients />);
+    await attendreLaListe();
+    const fenetre = await ouvrirLaCreation(utilisateur);
+    // Identité et adresse côte à côte : la fenêtre de création est la large.
+    expect(fenetre).toHaveClass('max-w-3xl');
+    await utilisateur.type(champ(fenetre, 'Nom (obligatoire)'), 'Técher');
+
+    await utilisateur.click(within(fenetre).getByRole('button', { name: 'Annuler' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nouveau client' })).toHaveFocus();
+    expect(creations).toHaveLength(0);
+    expect(lectures).toHaveLength(1);
+    expect(screen.queryByText(/créé\./)).not.toBeInTheDocument();
   });
 });
