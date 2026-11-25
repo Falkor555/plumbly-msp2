@@ -46,10 +46,11 @@ function detecterSeparateur(contenu: string): SeparateurCsv {
   let virgules = 0;
   let entreGuillemets = false;
   let ligneCommencee = false;
+  // Comme au découpage, seul un guillemet en début de cellule ouvre un champ entre guillemets.
+  let debutDeCellule = true;
   for (const caractere of contenu) {
-    if (caractere === GUILLEMET) {
+    if (caractere === GUILLEMET && (entreGuillemets || debutDeCellule)) {
       entreGuillemets = !entreGuillemets;
-      ligneCommencee = true;
     } else if (!entreGuillemets && (caractere === '\n' || caractere === '\r')) {
       // Fin de la ligne d'en-têtes ; les lignes vides qui la précèdent sont sautées.
       if (ligneCommencee) {
@@ -60,6 +61,7 @@ function detecterSeparateur(contenu: string): SeparateurCsv {
     } else if (!entreGuillemets && caractere === ',') {
       virgules += 1;
     }
+    debutDeCellule = !entreGuillemets && [';', ',', '\n', '\r'].includes(caractere);
     if (caractere.trim() !== '') {
       ligneCommencee = true;
     }
@@ -73,6 +75,8 @@ interface Decoupage {
   debutDeLEnregistrement: number;
   cellules: string[];
   cellule: string;
+  /** Faux tant que la cellule n'a reçu aucun caractère : seul un guillemet à ce moment l'ouvre. */
+  celluleCommencee: boolean;
   entreGuillemets: boolean;
 }
 
@@ -83,6 +87,7 @@ function decouper(contenu: string, separateur: SeparateurCsv): LigneCsv[] {
     debutDeLEnregistrement: 1,
     cellules: [],
     cellule: '',
+    celluleCommencee: false,
     entreGuillemets: false,
   };
   for (let rang = 0; rang < contenu.length; rang += 1) {
@@ -90,11 +95,13 @@ function decouper(contenu: string, separateur: SeparateurCsv): LigneCsv[] {
     const suivant = contenu[rang + 1];
     if (etat.entreGuillemets) {
       rang += lireEntreGuillemets(etat, caractere, suivant);
-    } else if (caractere === GUILLEMET) {
+    } else if (caractere === GUILLEMET && !etat.celluleCommencee) {
       etat.entreGuillemets = true;
+      etat.celluleCommencee = true;
     } else if (caractere === separateur) {
       etat.cellules.push(etat.cellule);
       etat.cellule = '';
+      etat.celluleCommencee = false;
     } else if (caractere === '\r' || caractere === '\n') {
       enregistrements.push(terminerEnregistrement(etat));
       // CRLF est une seule fin de ligne.
@@ -102,7 +109,9 @@ function decouper(contenu: string, separateur: SeparateurCsv): LigneCsv[] {
       etat.ligneCourante += 1;
       etat.debutDeLEnregistrement = etat.ligneCourante;
     } else {
+      // Un guillemet au milieu d'une cellule (« 3" ») est un caractère comme un autre.
       etat.cellule += caractere;
+      etat.celluleCommencee = true;
     }
   }
   if (etat.entreGuillemets) {
@@ -143,6 +152,7 @@ function terminerEnregistrement(etat: Decoupage): LigneCsv {
   };
   etat.cellules = [];
   etat.cellule = '';
+  etat.celluleCommencee = false;
   return enregistrement;
 }
 

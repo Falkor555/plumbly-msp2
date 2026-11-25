@@ -80,6 +80,38 @@ describe('lireCsv', () => {
       ]);
     });
 
+    it('garde un guillemet placé au milieu d’une cellule, sans avaler les lignes suivantes', () => {
+      const csv = lireCsv(
+        'nom;rue\nHoarau;12 rue A 3"\nPayet;1 rue C\nGrondin;Bât 2"\nRivière;5 rue D',
+      );
+
+      expect(csv.lignes).toEqual([
+        { numero: 2, cellules: ['Hoarau', '12 rue A 3"'] },
+        { numero: 3, cellules: ['Payet', '1 rue C'] },
+        { numero: 4, cellules: ['Grondin', 'Bât 2"'] },
+        { numero: 5, cellules: ['Rivière', '5 rue D'] },
+      ]);
+    });
+
+    it('n’échoue pas sur un seul guillemet au milieu d’une cellule', () => {
+      expect(lireCsv('nom;rue\nA;3"\nB;x').lignes).toHaveLength(2);
+    });
+
+    it('garde tels quels les caractères qui suivent un champ entre guillemets', () => {
+      expect(lireCsv('nom;rue\n"Dupont" fils;"1 rue"bis').lignes[0].cellules).toEqual([
+        'Dupont fils',
+        '1 ruebis',
+      ]);
+    });
+
+    it('ne compte pas un guillemet au milieu d’un en-tête pour détecter le séparateur', () => {
+      // Pris pour un début de guillemets, le " cacherait les trois « ; » qui suivent.
+      const csv = lireCsv('nom,taille 3";poids;ville;commune\nA,1;2;3;4');
+
+      expect(csv.separateur).toBe(';');
+      expect(csv.enTetes).toEqual(['nom,taille 3"', 'poids', 'ville', 'commune']);
+    });
+
     it('refuse des guillemets non fermés en donnant la ligne où ils s’ouvrent', () => {
       expect(
         messagesDe(() => lireCsv('nom;ville\nDupont;Saint-Denis\n"Payet;Saint-Pierre')),

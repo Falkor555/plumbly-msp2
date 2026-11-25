@@ -128,6 +128,7 @@ Les colonnes non reconnues (par exemple `id`, `archive` ou `cree_le` d'un export
 - Si deux colonnes se proposent pour le même champ (« Tel » et « Mobile »), la première le prend ; la seconde est proposée `null` et listée dans `colonnesIgnorees`. Un choix envoyé dans `correspondance` l'emporte sur la proposition d'une autre colonne ; seul un même champ choisi deux fois dans `correspondance` est refusé.
 - Deux colonnes au même en-tête (y compris deux en-têtes vides) sont refusées : le message donne leurs numéros, pas l'en-tête.
 - Une ligne faite seulement de séparateurs (`;;;`) est une ligne vide : elle est ignorée et ne compte pas dans la limite de 1 000 lignes.
+- Un guillemet n'ouvre un champ entre guillemets qu'en début de cellule : au milieu d'une cellule (`3"` pour trois pouces), il est gardé tel quel.
 - Un motif de rejet nomme le champ de la correspondance (`codePostal`), jamais la valeur de la cellule.
 
 ## 5. Parcours utilisateur
@@ -149,7 +150,7 @@ L'export est un bouton « Exporter en CSV » au-dessus de la liste des clients e
 - Une ligne dont le téléphone désigne un client et l'e-mail un autre est rejetée : « correspond à deux clients différents ».
 - Dans le fichier, plusieurs lignes peuvent désigner le même client **existant** : chacune est un doublon de ce client (c'est le cas d'un export réimporté, une ligne par adresse). Pour un client **absent** de la base, la première ligne gagne et les suivantes sont rejetées : « doublon de la ligne N » ; sa deuxième adresse s'ajoute ensuite depuis la fiche du client.
 - Mise à jour : seuls les champs d'identité non vides de la ligne remplacent ceux du client ; une cellule vide ne vide rien. Le type de client n'est changé que si la colonne de type est renseignée, et la règle nom / raison sociale (`verifierIdentite`) est vérifiée sur le client mis à jour. Si l'adresse de la ligne (rue, code postal et ville, sans tenir compte de la casse ni des espaces en trop) n'existe pas parmi ses adresses non archivées, elle est ajoutée. Aucune adresse n'est modifiée ni archivée.
-- Seules les lignes valides comptent pour les doublons du fichier : une ligne invalide reste `INVALIDE` même si elle désigne un client existant, et ne réserve ni son téléphone ni son e-mail. L'aller-retour d'un export vaut donc pour les lignes qui ont une adresse, ce qui est toujours le cas d'un client créé par l'application.
+- Une ligne invalide reste `INVALIDE` même si elle désigne un client existant, et ne réserve ni son téléphone ni son e-mail. Une ligne doublon réserve les siens pour son client : une ligne suivante qui reprend l'e-mail ou le téléphone nouveau qu'elle apporte devient doublon du même client, pour que deux clients ne finissent pas avec le même e-mail. L'aller-retour d'un export vaut donc pour les lignes qui ont une adresse, ce qui est toujours le cas d'un client créé par l'application.
 - Une ligne dont le téléphone désigne un client existant et l'e-mail une ligne précédente du fichier est rejetée de la même façon : « correspond à deux clients différents ».
 - Les doublons sont relus sous le verrou de l'import : l'aperçu ne décide de rien. Un client archivé entre-temps est ignoré.
 - Une ligne mise à jour sort `MIS_A_JOUR` même si aucune valeur ne change ; seuls les champs qui diffèrent sont écrits.

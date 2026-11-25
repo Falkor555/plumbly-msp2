@@ -88,26 +88,23 @@ export function clesDeRecherche(fichier: FichierPrepare): {
  * est celui d'un client existant (archivé compris) en est le doublon ; plusieurs lignes peuvent
  * désigner le même client existant (export réimporté, une ligne par adresse). Pour un client
  * absent de la base, la première ligne valide gagne et les suivantes sont rejetées.
+ *
+ * Chaque ligne valide ou doublon réserve son téléphone et son e-mail pour les lignes suivantes :
+ * une ligne qui reprend l'e-mail nouveau apporté par le doublon d'un client existant devient à son
+ * tour le doublon de ce client, sinon deux clients finiraient avec le même e-mail.
  */
 export function analyserLignes(
   lignes: readonly LignePreparee[],
   existants: readonly ClientExistant[],
 ): LigneAnalysee[] {
-  const lignesNouvelles = {
-    telephones: new Map<string, number>(),
-    emails: new Map<string, number>(),
-  };
+  const reservations: Reservations = new Map();
   return lignes.map((ligne) => {
     if ('erreurs' in ligne) {
       return { numero: ligne.numero, resultat: 'INVALIDE', erreurs: ligne.erreurs };
     }
-    const analysee = chercherDoublon(ligne, existants, lignesNouvelles);
-    if (analysee.resultat === 'VALIDE') {
-      lignesNouvelles.telephones.set(ligne.client.telephone, ligne.numero);
-      const email = ligne.client.emailClient?.toLowerCase();
-      if (email !== undefined) {
-        lignesNouvelles.emails.set(email, ligne.numero);
-      }
+    const analysee = chercherDoublon(ligne, existants, reservations);
+    if (analysee.resultat !== 'INVALIDE') {
+      reserver(reservations, ligne, analysee);
     }
     return analysee;
   });
@@ -223,39 +220,101 @@ function messagesDe(erreur: BadRequestException): string[] {
 
 type LigneValide = Extract<LignePreparee, { client: unknown }>;
 
-interface LignesNouvelles {
-  telephones: Map<string, number>;
-  emails: Map<string, number>;
+/** Téléphone ou e-mail déjà porté par une ligne précédente, et le client qu'il désigne. */
+interface Reservation {
+  numero: number;
+  champ: 'téléphone' | 'e-mail';
+  /** null : nouveau client créé par la ligne ; sinon le client existant dont elle est le doublon. */
+  client: Pick<ClientExistant, 'id' | 'archive'> | null;
 }
+
+/** Clés « telephone:0692123456 » et « email:marie@exemple.re ». */
+type Reservations = Map<string, Reservation>;
 
 function chercherDoublon(
   ligne: LigneValide,
   existants: readonly ClientExistant[],
-  lignesNouvelles: LignesNouvelles,
+  reservations: Reservations,
 ): LigneAnalysee {
   const { clients, parTelephone, parEmail } = clientsDesignes(ligne, existants);
-  const precedentes = lignesDesignees(ligne, lignesNouvelles);
-  if (clients.length + precedentes.length > 1) {
+  const reservees = reservationsDesignees(ligne, reservations);
+  const cibles = new Set([
+    ...clients.map(({ id }) => `client ${id}`),
+    ...reservees.map(({ numero, client }) =>
+      client === null ? `ligne ${numero}` : `client ${client.id}`,
+    ),
+  ]);
+  if (cibles.size > 1) {
     return { numero: ligne.numero, resultat: 'INVALIDE', erreurs: [MOTIF_DEUX_CLIENTS] };
   }
   const [existant] = clients;
   if (existant !== undefined) {
-    return {
-      numero: ligne.numero,
-      resultat: 'DOUBLON',
-      clientId: existant.id,
-      motif: motifDuDoublon(existant, parTelephone.includes(existant), parEmail.includes(existant)),
-      clientArchive: existant.archive,
-      client: ligne.client,
-      typeRenseigne: ligne.typeRenseigne,
-    };
+    const motif = motifDuDoublon(
+      existant,
+      parTelephone.includes(existant),
+      parEmail.includes(existant),
+    );
+    return versDoublon(ligne, existant, motif);
   }
-  const [precedente] = precedentes;
-  if (precedente !== undefined) {
-    const erreurs = [`Doublon de la ligne ${precedente}`];
+  const [reservee] = reservees;
+  if (reservee?.client) {
+    const motif = reservee.client.archive
+      ? MOTIF_CLIENT_ARCHIVE
+      : `Même ${reservee.champ} que la ligne ${reservee.numero}, doublon du client ${reservee.client.id}`;
+    return versDoublon(ligne, reservee.client, motif);
+  }
+  if (reservee !== undefined) {
+    const erreurs = [`Doublon de la ligne ${reservee.numero}`];
     return { numero: ligne.numero, resultat: 'INVALIDE', erreurs };
   }
   return { numero: ligne.numero, resultat: 'VALIDE', client: ligne.client };
+}
+
+function versDoublon(
+  ligne: LigneValide,
+  client: Pick<ClientExistant, 'id' | 'archive'>,
+  motif: string,
+): LigneAnalysee {
+  return {
+    numero: ligne.numero,
+    resultat: 'DOUBLON',
+    clientId: client.id,
+    motif,
+    clientArchive: client.archive,
+    client: ligne.client,
+    typeRenseigne: ligne.typeRenseigne,
+  };
+}
+
+/** La première ligne qui porte un téléphone ou un e-mail le garde pour la suite du fichier. */
+function reserver(reservations: Reservations, ligne: LigneValide, analysee: LigneAnalysee): void {
+  const client =
+    analysee.resultat === 'DOUBLON'
+      ? { id: analysee.clientId, archive: analysee.clientArchive }
+      : null;
+  for (const [cle, champ] of clesDeLaLigne(ligne)) {
+    if (!reservations.has(cle)) {
+      reservations.set(cle, { numero: ligne.numero, champ, client });
+    }
+  }
+}
+
+function clesDeLaLigne(ligne: LigneValide): [string, Reservation['champ']][] {
+  const email = ligne.client.emailClient?.toLowerCase();
+  const cles: [string, Reservation['champ']][] = [
+    [`telephone:${ligne.client.telephone}`, 'téléphone'],
+  ];
+  if (email !== undefined) {
+    cles.push([`email:${email}`, 'e-mail']);
+  }
+  return cles;
+}
+
+/** Réservations des lignes précédentes que le téléphone ou l'e-mail de la ligne retrouve. */
+function reservationsDesignees(ligne: LigneValide, reservations: Reservations): Reservation[] {
+  return clesDeLaLigne(ligne)
+    .map(([cle]) => reservations.get(cle))
+    .filter((reservation) => reservation !== undefined);
 }
 
 /** Clients existants désignés par le téléphone ou l'e-mail (sans casse) de la ligne. */
@@ -268,16 +327,6 @@ function clientsDesignes(ligne: LigneValide, existants: readonly ClientExistant[
       : existants.filter((client) => client.emailClient?.toLowerCase() === email);
   const clients = [...new Set([...parTelephone, ...parEmail])];
   return { clients, parTelephone, parEmail };
-}
-
-/** Lignes précédentes du fichier (nouveaux clients) au même téléphone ou au même e-mail. */
-function lignesDesignees(ligne: LigneValide, lignesNouvelles: LignesNouvelles): number[] {
-  const email = ligne.client.emailClient?.toLowerCase();
-  const numeros = [
-    lignesNouvelles.telephones.get(ligne.client.telephone),
-    email === undefined ? undefined : lignesNouvelles.emails.get(email),
-  ];
-  return [...new Set(numeros.filter((numero) => numero !== undefined))];
 }
 
 function motifDuDoublon(client: ClientExistant, telephone: boolean, email: boolean): string {

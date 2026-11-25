@@ -306,6 +306,52 @@ describe('analyse d’un fichier de clients', () => {
       });
     });
 
+    it('fait d’une ligne qui reprend l’e-mail nouveau d’un doublon un doublon du même client', () => {
+      // Client 8 trouvé par son téléphone ; sa ligne apporte un e-mail que la base ne connaît pas.
+      const sansEmail = existant({ emailClient: null });
+      const memeEmail = HOARAU.replace('jean.hoarau', 'marie.dupont');
+
+      const lignes = analyser(fichier(DUPONT, memeEmail), [sansEmail]);
+
+      expect(lignes.map(({ resultat }) => resultat)).toEqual(['DOUBLON', 'DOUBLON']);
+      expect(lignes[1]).toMatchObject({
+        clientId: 8,
+        motif: 'Même e-mail que la ligne 2, doublon du client 8',
+      });
+    });
+
+    it('fait d’une ligne qui reprend le téléphone nouveau d’un doublon un doublon du même client', () => {
+      // Client 8 trouvé par son e-mail ; sa ligne apporte un téléphone que la base ne connaît pas.
+      const parEmail = existant({
+        telephone: '0262000000',
+        emailClient: 'marie.dupont@exemple.re',
+      });
+      const memeTelephone = HOARAU.replace('0692 98 76 54', '0692.12.34.56');
+
+      const lignes = analyser(fichier(DUPONT, memeTelephone), [parEmail]);
+
+      expect(lignes[1]).toMatchObject({
+        resultat: 'DOUBLON',
+        clientId: 8,
+        motif: 'Même téléphone que la ligne 2, doublon du client 8',
+      });
+    });
+
+    it('rejette une ligne qui reprend la clé d’un doublon et désigne un autre client', () => {
+      const client8 = existant({ id: 8, emailClient: null });
+      const client9 = existant({ id: 9, telephone: '0692987654' });
+      // Ligne 3 : e-mail apporté par le doublon du client 8, téléphone du client 9.
+      const melange = HOARAU.replace('jean.hoarau', 'marie.dupont');
+
+      const lignes = analyser(fichier(DUPONT, melange), [client8, client9]);
+
+      expect(lignes[1]).toEqual({
+        numero: 3,
+        resultat: 'INVALIDE',
+        erreurs: ['Correspond à deux clients différents'],
+      });
+    });
+
     it('signale un client archivé comme doublon qui ne sera pas mis à jour', () => {
       expect(analyser(fichier(DUPONT), [existant({ archive: true })])[0]).toMatchObject({
         resultat: 'DOUBLON',
