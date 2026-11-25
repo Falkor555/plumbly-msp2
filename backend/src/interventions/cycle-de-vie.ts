@@ -85,11 +85,20 @@ export function verifierModifiable(
   }
 }
 
-/** US18 : seule modification permise après « terminée » (exception à RG06). */
-export function verifierCompteRenduModifiable(statut: StatutIntervention): void {
+/**
+ * US18 : seule modification permise après « terminée » (exception à RG06). RG33 : le compte
+ * rendu signé par le client est définitif, sinon la signature confirmerait un autre texte.
+ */
+export function verifierCompteRenduModifiable(
+  statut: StatutIntervention,
+  { signee }: { signee: boolean },
+): void {
   if (statut !== TERMINEE) {
     throw new BadRequestException(
       `Le compte rendu se complète sur une intervention terminée (statut actuel : ${LIBELLES_STATUT[statut]}).`,
     );
+  }
+  if (signee) {
+    throw new BadRequestException('Le compte rendu d’une intervention signée ne se modifie plus.');
   }
 }

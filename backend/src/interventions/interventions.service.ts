@@ -11,6 +11,7 @@ import { Horloge } from '../commun/horloge.js';
 import { type PageApi, paginer } from '../commun/validation.js';
 import { Role, type StatutIntervention } from '../generated/prisma/client.ts';
 import { JournalDesActions } from '../journal/journal-des-actions.js';
+import type { ActionJournalisee, SignatureEnregistree } from '../journal/journal.types.js';
 import type { TourneeVerrouillee } from '../tournees/operations-verrouillees.js';
 import {
   creneauDe,
@@ -24,8 +25,9 @@ import {
   verifierCompteRenduModifiable,
   verifierModifiable,
 } from './cycle-de-vie.js';
+import { calculerEmpreinte } from './empreinte-signature.js';
 import type { InterventionDetaillee } from './intervention-detaillee.js';
-import { versInterventionApi } from './interventions.presentation.js';
+import { versInterventionApi, versSignatureApi } from './interventions.presentation.js';
 import {
   type AdresseUtilisable,
   type Affectation,
@@ -39,9 +41,11 @@ import type {
   CompteRendu,
   FiltresInterventions,
   FinDIntervention,
+  FinSignee,
   InterventionApi,
   ModificationIntervention,
   NouvelleIntervention,
+  SignatureApi,
 } from './interventions.types.js';
 
 interface ChangementDeStatut {
@@ -175,25 +179,43 @@ export class InterventionsService {
       idIntervention,
       'demarrer',
       auteur,
-      (operations, etat) => {
+      async (operations, etat) => {
         verifierJourDeLaTournee(etat.affectation, this.horloge.maintenant());
-        return operations.demarrer(idIntervention, this.horloge.maintenant());
+        await operations.demarrer(idIntervention, this.horloge.maintenant());
+        return [];
       },
     );
   }
 
-  /** US17, US18 et RG03 : le technicien de la tournée termine, avec un compte rendu facultatif. */
+  /**
+   * US17, US18 et RG03 : le technicien de la tournée termine, avec un compte rendu facultatif.
+   * US33 (RG30 à RG34) : avec une signature, elle est enregistrée dans la même transaction que
+   * le passage à « terminée », horodatée par la même lecture de l'horloge.
+   */
   async terminer(
     idIntervention: number,
-    { compteRendu }: FinDIntervention,
+    fin: FinDIntervention,
     auteur: UtilisateurConnecte,
   ): Promise<InterventionApi> {
-    return this.changerStatutSurLeTerrain(idIntervention, 'terminer', auteur, (operations) =>
-      operations.terminer(idIntervention, { le: this.horloge.maintenant(), compteRendu }),
+    return this.changerStatutSurLeTerrain(
+      idIntervention,
+      'terminer',
+      auteur,
+      async (operations) => {
+        const le = this.horloge.maintenant();
+        await operations.terminer(idIntervention, { le, compteRendu: fin.compteRendu });
+        if (fin.signature === undefined) {
+          return [];
+        }
+        return [await enregistrerLaSignature(operations, idIntervention, fin, le, auteur)];
+      },
     );
   }
 
-  /** US18 : seule modification permise après « terminée » ; le texte remplace le précédent. */
+  /**
+   * US18 : seule modification permise après « terminée » ; le texte remplace le précédent.
+   * RG33 : refusée une fois l'intervention signée.
+   */
   async completerCompteRendu(
     idIntervention: number,
     { compteRendu }: CompteRendu,
@@ -202,10 +224,32 @@ export class InterventionsService {
     await this.depot.modifierIntervention(async (operations) => {
       const intervention = await verrouillerSeule(operations, idIntervention);
       await verifierTechnicienAffecte(operations, intervention, auteur);
-      verifierCompteRenduModifiable(intervention.statut);
+      verifierCompteRenduModifiable(intervention.statut, {
+        signee: await operations.estSignee(intervention.id),
+      });
       await operations.enregistrerCompteRendu(intervention.id, compteRendu);
     });
     return this.relire(idIntervention);
+  }
+
+  /**
+   * US33 et RG35 : signature du client, lisible par l'administrateur, le gestionnaire et le
+   * technicien de la tournée. Ordre des refus : 404 (intervention), 403, puis 404 (pas de
+   * signature), pour qu'un autre technicien n'apprenne pas si l'intervention est signée.
+   */
+  async consulterSignature(
+    idIntervention: number,
+    lecteur: UtilisateurConnecte,
+  ): Promise<SignatureApi> {
+    const intervention = await this.trouver(idIntervention);
+    if (lecteur.role === Role.TECHNICIEN && !estAffecteA(intervention, lecteur)) {
+      throw new ForbiddenException('Cette intervention ne fait pas partie de vos tournées.');
+    }
+    const signature = await this.depot.trouverSignature(idIntervention);
+    if (signature === null) {
+      throw new NotFoundException('Cette intervention n’a pas été signée.');
+    }
+    return versSignatureApi(idIntervention, signature);
   }
 
   /**
@@ -216,6 +260,8 @@ export class InterventionsService {
    * n'écrit que les rangs, quand le démarrage fait l'inverse ; le résultat est celui de
    * « réordonner, puis démarrer ».
    * Ordre des refus : 404, puis 403 (pas le technicien de la tournée), puis 400 (transition).
+   * ecrire renvoie les actions à journaliser après STATUT_MODIFIE (la signature, US33) : elles
+   * ne sont écrites qu'une fois la transaction validée.
    */
   private async changerStatutSurLeTerrain(
     idIntervention: number,
@@ -224,23 +270,28 @@ export class InterventionsService {
     ecrire: (
       operations: OperationsSurIntervention,
       etat: { affectation: Affectation | null },
-    ) => Promise<void>,
+    ) => Promise<readonly ActionJournalisee[]>,
   ): Promise<InterventionApi> {
-    const changement = await this.depot.modifierIntervention(
-      async (operations): Promise<ChangementDeStatut> => {
-        const intervention = await verrouillerSeule(operations, idIntervention);
-        const affectation = await verifierTechnicienAffecte(operations, intervention, auteur);
-        const nouveauStatut = statutApres(intervention.statut, action);
-        await ecrire(operations, { affectation });
-        return { ancienStatut: intervention.statut, nouveauStatut };
-      },
-    );
+    const { changement, suite } = await this.depot.modifierIntervention(async (operations) => {
+      const intervention = await verrouillerSeule(operations, idIntervention);
+      const affectation = await verifierTechnicienAffecte(operations, intervention, auteur);
+      const nouveauStatut = statutApres(intervention.statut, action);
+      const actionsSuivantes = await ecrire(operations, { affectation });
+      const changementDeStatut: ChangementDeStatut = {
+        ancienStatut: intervention.statut,
+        nouveauStatut,
+      };
+      return { changement: changementDeStatut, suite: actionsSuivantes };
+    });
     await this.journal.enregistrer({
       type: 'STATUT_MODIFIE',
       auteur: { id: auteur.id, role: auteur.role },
       interventionId: idIntervention,
       ...changement,
     });
+    for (const actionSuivante of suite) {
+      await this.journal.enregistrer(actionSuivante);
+    }
     return this.relire(idIntervention);
   }
 
@@ -314,6 +365,41 @@ async function verifierTechnicienAffecte(
     );
   }
   return affectation;
+}
+
+/**
+ * US33 : enregistre la signature dans la transaction de la clôture. L'empreinte porte sur les
+ * valeurs telles qu'elles sont écrites en base, pour pouvoir être recalculée à la lecture.
+ */
+async function enregistrerLaSignature(
+  operations: OperationsSurIntervention,
+  idIntervention: number,
+  { compteRendu, signature }: FinSignee,
+  signeeLe: Date,
+  auteur: UtilisateurConnecte,
+): Promise<SignatureEnregistree> {
+  const empreinte = calculerEmpreinte({
+    idIntervention,
+    compteRendu,
+    nomSignataire: signature.nomSignataire,
+    signeeLe,
+    idAuteur: auteur.id,
+    image: signature.image,
+  });
+  await operations.enregistrerSignature({
+    idIntervention,
+    image: signature.image,
+    nomSignataire: signature.nomSignataire,
+    signeeLe,
+    empreinte,
+    idAuteur: auteur.id,
+  });
+  return {
+    type: 'SIGNATURE_ENREGISTREE',
+    auteur: { id: auteur.id, role: auteur.role },
+    interventionId: idIntervention,
+    empreinte,
+  };
 }
 
 /** RG24 : une intervention se démarre le jour de sa tournée, à l'heure de La Réunion. */

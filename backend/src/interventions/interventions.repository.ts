@@ -19,6 +19,7 @@ import type {
 } from '../tournees/regles-planification.js';
 import { INTERVENTION_DETAILLEE, type InterventionDetaillee } from './intervention-detaillee.js';
 import type { FiltresInterventions, TriInterventions } from './interventions.types.js';
+import type { ImagePng } from './signature-png.js';
 
 /** Adresse choisie pour une intervention, lue sous verrou partagé de son client. */
 export interface AdresseUtilisable {
@@ -69,6 +70,26 @@ export interface Affectation {
   idCompteDuTechnicien: number;
 }
 
+/** Ligne de signature_intervention écrite à la clôture (US33). */
+export interface SignatureAEnregistrer {
+  idIntervention: number;
+  image: ImagePng;
+  nomSignataire: string;
+  signeeLe: Date;
+  empreinte: string;
+  idAuteur: number;
+}
+
+/** Signature relue pour GET /interventions/:id/signature, avec le compte rendu actuel. */
+export interface SignatureLue {
+  image: Uint8Array;
+  nomSignataire: string;
+  signeeLe: Date;
+  empreinte: string;
+  auteur: { id: number; nom: string; prenom: string };
+  compteRendu: string | null;
+}
+
 /** Champs modifiables par PATCH /interventions/:id, sous leur nom en base. */
 export interface ChampsModifiables {
   idAdresse?: number;
@@ -105,6 +126,9 @@ export interface OperationsSurIntervention extends Omit<OperationsDeCreation, 'c
   /** Le compte rendu existant est gardé s'il n'en est pas envoyé de nouveau. */
   terminer(idIntervention: number, fin: { le: Date; compteRendu?: string }): Promise<void>;
   enregistrerCompteRendu(idIntervention: number, compteRendu: string): Promise<void>;
+  /** Lu sous le verrou de l'intervention : une signature n'est insérée que sous ce verrou. */
+  estSignee(idIntervention: number): Promise<boolean>;
+  enregistrerSignature(signature: SignatureAEnregistrer): Promise<void>;
 }
 
 /*
@@ -164,6 +188,26 @@ export class InterventionsRepository {
       where: { id: idIntervention },
       ...INTERVENTION_DETAILLEE,
     });
+  }
+
+  /** Seule lecture de l'image : les autres lectures n'en prennent que le résumé. */
+  async trouverSignature(idIntervention: number): Promise<SignatureLue | null> {
+    const signature = await this.prisma.signatureIntervention.findUnique({
+      where: { idIntervention },
+      select: {
+        image: true,
+        nomSignataire: true,
+        signeeLe: true,
+        empreinte: true,
+        auteur: { select: { id: true, nom: true, prenom: true } },
+        intervention: { select: { compteRendu: true } },
+      },
+    });
+    if (signature === null) {
+      return null;
+    }
+    const { intervention, ...champs } = signature;
+    return { ...champs, compteRendu: intervention.compteRendu };
   }
 
   creerIntervention(
@@ -353,6 +397,18 @@ function creerOperationsSurIntervention(tx: Prisma.TransactionClient): Operation
 
     async enregistrerCompteRendu(idIntervention, compteRendu) {
       await tx.intervention.update({ where: { id: idIntervention }, data: { compteRendu } });
+    },
+
+    async estSignee(idIntervention) {
+      const signature = await tx.signatureIntervention.findUnique({
+        where: { idIntervention },
+        select: { idIntervention: true },
+      });
+      return signature !== null;
+    },
+
+    async enregistrerSignature(signature) {
+      await tx.signatureIntervention.create({ data: signature });
     },
   };
 }

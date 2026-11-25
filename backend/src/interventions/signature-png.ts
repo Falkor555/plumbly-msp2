@@ -34,7 +34,7 @@ const BASE64_STANDARD = /^[A-Za-z0-9+/]+={0,2}$/;
  * Octets d'une image PNG déjà vérifiée. Le type marqué empêche d'enregistrer des octets reçus
  * tels quels : seul lireImagePng() fabrique une valeur de ce type.
  */
-export type ImagePng = Buffer & { readonly __marque: 'ImagePng' };
+export type ImagePng = Buffer<ArrayBuffer> & { readonly __marque: 'ImagePng' };
 
 /** Refus d'une image : le message est destiné à l'utilisateur, sans détail sur le contenu. */
 export class ImagePngRefusee extends Error {
@@ -73,7 +73,7 @@ function retirerPrefixe(dataUrl: string): string {
  * et le réencodage doit redonner exactement le même texte (ce qui refuse aussi des bits de
  * remplissage non nuls). L'image renvoyée à la lecture est ainsi identique à celle reçue.
  */
-function decoderBase64Strict(base64: string): Buffer {
+function decoderBase64Strict(base64: string): Buffer<ArrayBuffer> {
   if (base64.length % 4 !== 0 || !BASE64_STANDARD.test(base64)) {
     throw new ImagePngRefusee(MESSAGE_PNG_INVALIDE);
   }

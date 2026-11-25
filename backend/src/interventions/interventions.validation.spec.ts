@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { enDataUrl, fabriquerPng } from '../../test/support/fabriquer-png.js';
 import {
   lireAnnulation,
   lireCompteRendu,
@@ -8,6 +9,7 @@ import {
   lireModificationIntervention,
   lireNouvelleIntervention,
 } from './interventions.validation.js';
+import { MESSAGE_PNG_INVALIDE } from './signature-png.js';
 
 function erreursDe(lecture: () => unknown): string[] {
   try {
@@ -255,6 +257,117 @@ describe('validation des interventions', () => {
     it('refuse un champ inconnu', () => {
       expect(erreursDe(() => lireCompteRendu({ compteRendu: 'Ok', statut: 'TERMINEE' }))).toEqual([
         'Le champ statut n’est pas autorisé',
+      ]);
+    });
+  });
+
+  describe('signature du client (complete, US33)', () => {
+    const PNG = fabriquerPng();
+    const IMAGE = enDataUrl(PNG);
+    const SIGNATURE = { image: IMAGE, nomSignataire: ' Jean Dupont ' };
+
+    it('lit la signature avec son compte rendu, espaces des extrémités retirés', () => {
+      const fin = lireFinDIntervention({ compteRendu: ' Joint changé ', signature: SIGNATURE });
+
+      expect(fin).toEqual({
+        compteRendu: 'Joint changé',
+        signature: { nomSignataire: 'Jean Dupont', image: expect.any(Buffer) },
+      });
+      expect(Buffer.compare(fin.signature?.image as Buffer, PNG)).toBe(0);
+    });
+
+    it('accepte un nom de 100 caractères et refuse 101', () => {
+      const avec = (nomSignataire: string) => () =>
+        lireFinDIntervention({ compteRendu: 'Ok', signature: { image: IMAGE, nomSignataire } });
+
+      expect(avec('a'.repeat(100))().signature?.nomSignataire).toHaveLength(100);
+      expect(erreursDe(avec('a'.repeat(101)))).toEqual([
+        'signature.nomSignataire ne doit pas dépasser 100 caractères',
+      ]);
+    });
+
+    it('RG31 : refuse une signature sans compte rendu', () => {
+      expect(erreursDe(() => lireFinDIntervention({ signature: SIGNATURE }))).toEqual([
+        'compteRendu est obligatoire',
+      ]);
+      expect(
+        erreursDe(() => lireFinDIntervention({ compteRendu: '  ', signature: SIGNATURE })),
+      ).toEqual(['compteRendu ne peut pas être vide']);
+    });
+
+    it('RG31 : refuse une signature sans nom ou avec un nom vide', () => {
+      expect(
+        erreursDe(() => lireFinDIntervention({ compteRendu: 'Ok', signature: { image: IMAGE } })),
+      ).toEqual(['signature.nomSignataire est obligatoire']);
+      expect(
+        erreursDe(() =>
+          lireFinDIntervention({
+            compteRendu: 'Ok',
+            signature: { image: IMAGE, nomSignataire: '   ' },
+          }),
+        ),
+      ).toEqual(['signature.nomSignataire ne peut pas être vide']);
+    });
+
+    it('refuse un nom contenant le caractère NUL', () => {
+      const signature = { image: IMAGE, nomSignataire: 'Jean\u0000Dupont' };
+
+      expect(erreursDe(() => lireFinDIntervention({ compteRendu: 'Ok', signature }))).toEqual([
+        'signature.nomSignataire contient un caractère non autorisé',
+      ]);
+    });
+
+    it('refuse une signature sans image, ou dont l’image n’est pas un texte', () => {
+      expect(
+        erreursDe(() =>
+          lireFinDIntervention({ compteRendu: 'Ok', signature: { nomSignataire: 'Jean' } }),
+        ),
+      ).toEqual(['signature.image est obligatoire']);
+      expect(
+        erreursDe(() =>
+          lireFinDIntervention({
+            compteRendu: 'Ok',
+            signature: { image: 3, nomSignataire: 'Jean' },
+          }),
+        ),
+      ).toEqual(['signature.image doit être un texte']);
+    });
+
+    it('refuse une image qui n’est pas un PNG valide', () => {
+      const signature = { image: enDataUrl(PNG, 'data:image/jpeg;base64,'), nomSignataire: 'Jean' };
+
+      expect(erreursDe(() => lireFinDIntervention({ compteRendu: 'Ok', signature }))).toEqual([
+        MESSAGE_PNG_INVALIDE,
+      ]);
+    });
+
+    it('refuse un champ inconnu dans la signature', () => {
+      const signature = { ...SIGNATURE, signeeLe: '2026-11-25T08:00:00Z', empreinte: 'abc' };
+
+      expect(erreursDe(() => lireFinDIntervention({ compteRendu: 'Ok', signature }))).toEqual([
+        'Le champ signature.signeeLe n’est pas autorisé',
+        'Le champ signature.empreinte n’est pas autorisé',
+      ]);
+    });
+
+    it.each([
+      ['null', null, ['signature ne peut pas être null']],
+      ['un texte', IMAGE, ['signature doit être un objet']],
+      ['un tableau', [IMAGE], ['signature doit être un objet']],
+    ])('refuse une signature qui vaut %s', (_cas, signature, erreurs) => {
+      expect(erreursDe(() => lireFinDIntervention({ signature }))).toEqual(erreurs);
+    });
+
+    it('réunit toutes les erreurs du corps dans un seul 400', () => {
+      const corps = {
+        compteRendu: 'a'.repeat(2001),
+        signature: { image: 'data:image/svg+xml;base64,PHN2Zy8+', nomSignataire: '' },
+      };
+
+      expect(erreursDe(() => lireFinDIntervention(corps))).toEqual([
+        'compteRendu ne doit pas dépasser 2000 caractères',
+        'signature.nomSignataire ne peut pas être vide',
+        MESSAGE_PNG_INVALIDE,
       ]);
     });
   });

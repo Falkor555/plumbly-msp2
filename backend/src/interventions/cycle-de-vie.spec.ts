@@ -143,14 +143,28 @@ describe('cycle de vie d’une intervention (cahier des charges, 5.1)', () => {
   });
 
   describe('US18 : compte rendu', () => {
-    it.each(STATUTS)('intervention %s', (statut) => {
-      const completer = () => verifierCompteRenduModifiable(statut);
+    it.each(STATUTS)('intervention %s non signée', (statut) => {
+      const completer = () => verifierCompteRenduModifiable(statut, { signee: false });
 
       if (statut === 'TERMINEE') {
         expect(completer).not.toThrow();
       } else {
         expect(completer).toThrow(BadRequestException);
       }
+    });
+  });
+
+  describe('RG33 : compte rendu signé', () => {
+    it('refuse de modifier le compte rendu d’une intervention terminée et signée', () => {
+      expect(() => verifierCompteRenduModifiable('TERMINEE', { signee: true })).toThrow(
+        new BadRequestException('Le compte rendu d’une intervention signée ne se modifie plus.'),
+      );
+    });
+
+    it('signale d’abord le statut quand l’intervention n’est pas terminée', () => {
+      expect(() => verifierCompteRenduModifiable('EN_COURS', { signee: true })).toThrow(
+        /statut actuel : en cours/,
+      );
     });
   });
 });

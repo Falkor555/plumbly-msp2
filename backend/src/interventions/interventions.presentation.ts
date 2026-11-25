@@ -1,7 +1,10 @@
 import { depuisColonneDate } from '../commun/fuseau-metier.js';
 import { StatutIntervention, TypeClient } from '../generated/prisma/client.ts';
+import { calculerEmpreinte } from './empreinte-signature.js';
 import type { InterventionDetaillee } from './intervention-detaillee.js';
-import type { InterventionApi } from './interventions.types.js';
+import type { SignatureLue } from './interventions.repository.js';
+import type { InterventionApi, SignatureApi } from './interventions.types.js';
+import { versDataUrlPng } from './signature-png.js';
 
 /*
  * Mise en forme d'une intervention selon le contrat d'API (section 6.3) : seuls les champs prévus
@@ -61,6 +64,37 @@ export function versInterventionApi(
             },
           },
     createur: intervention.createur,
+    // Champs recopiés un par un : si le select s'élargit un jour, l'image ne sort pas pour autant.
+    signature: intervention.signature
+      ? {
+          nomSignataire: intervention.signature.nomSignataire,
+          signeeLe: intervention.signature.signeeLe,
+        }
+      : null,
+  };
+}
+
+/**
+ * GET /interventions/:id/signature. L'empreinte est recalculée avec les données actuelles,
+ * dont le compte rendu de l'intervention (RG34). Un compte rendu effacé (null) ne peut pas
+ * correspondre : une signature exige un compte rendu non vide (RG31).
+ */
+export function versSignatureApi(idIntervention: number, signature: SignatureLue): SignatureApi {
+  const empreinteActuelle = calculerEmpreinte({
+    idIntervention,
+    compteRendu: signature.compteRendu ?? '',
+    nomSignataire: signature.nomSignataire,
+    signeeLe: signature.signeeLe,
+    idAuteur: signature.auteur.id,
+    image: signature.image,
+  });
+  return {
+    nomSignataire: signature.nomSignataire,
+    signeeLe: signature.signeeLe,
+    auteur: { id: signature.auteur.id, nom: signature.auteur.nom, prenom: signature.auteur.prenom },
+    empreinte: signature.empreinte,
+    integre: empreinteActuelle === signature.empreinte,
+    image: versDataUrlPng(signature.image),
   };
 }
 
