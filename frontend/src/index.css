@@ -1,12 +1,6 @@
 @import 'tailwindcss';
 
 /*
- * Les tests citent des classes, y compris hors charte, pour les contrôler : ils ne doivent pas en
- * ajouter à la feuille livrée.
- */
-@source not './**/*.test.{ts,tsx}';
-
-/*
  * Charte graphique Plumbly (« Precision Field System », dossier projet 5.5).
  * Les exports Stitch utilisent des jetons Material différents (#005C55, #F97316, #1F2937) :
  * la charte validée fait foi.

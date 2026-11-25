@@ -49,10 +49,10 @@ export function PlanningSemaine({
                   type="button"
                   onClick={() => onOuvrirJour(jour)}
                   aria-label={`Voir le ${libelleJourLong(jour)}`}
-                  className={`rounded px-1.5 py-0.5 text-xs font-semibold capitalize ${
+                  className={`rounded px-1.5 py-0.5 text-xs font-semibold capitalize hover:bg-sarcelle-claire ${
                     jour === aujourdhui
                       ? 'bg-sarcelle text-white hover:bg-sarcelle-profonde'
-                      : 'text-anthracite hover:bg-sarcelle-claire'
+                      : 'text-anthracite'
                   }`}
                 >
                   {libelleJourCourt(jour)}
