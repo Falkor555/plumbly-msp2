@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -13,6 +13,7 @@ import {
 } from '../test/clientsDeTest';
 import { enregistrerLesRequetes, type RequeteRecue } from '../test/msw/requetesRecues';
 import { serveurApi, urlApi } from '../test/msw/serveur';
+import { afficherALAdresse } from '../test/routeur';
 import { PageFicheClient } from './PageFicheClient';
 
 const LUNDI = '2026-11-23';
@@ -93,9 +94,14 @@ function messageAffiche(historique: HTMLElement, texte: string): Promise<HTMLEle
   return within(historique).findByText(texte, { ignore: 'script, style, .sr-only' });
 }
 
+/** Affiche la page à l'adresse de la fiche : elle y lit l'identifiant, comme dans l'application. */
+function afficherLaFiche(id: number): void {
+  afficherALAdresse(<PageFicheClient />, `/clients/${id}`, '/clients/:id');
+}
+
 async function ouvrirLaFiche(client: Client = heleneAvecAdresseArchivee()): Promise<void> {
   servirLaFiche(client);
-  render(<PageFicheClient id={client.id} />);
+  afficherLaFiche(client.id);
   await screen.findByRole('heading', { level: 1, name: client.nomAffiche });
 }
 
@@ -197,7 +203,7 @@ describe('fiche client (US09)', () => {
         { once: true },
       ),
     );
-    render(<PageFicheClient id={7} />);
+    afficherLaFiche(7);
 
     const alerte = await screen.findByRole('alert');
 
@@ -417,7 +423,7 @@ async function ouvrirLaFicheModifiable(depart: Client = heleneDeTest()): Promise
   let courante = depart;
   servirLHistorique([]);
   const lectures = enregistrerLesRequetes('get', '/clients/7', () => HttpResponse.json(courante));
-  render(<PageFicheClient id={7} />);
+  afficherLaFiche(7);
   await screen.findByRole('heading', { level: 1, name: depart.nomAffiche });
   return {
     lectures,
@@ -810,7 +816,7 @@ describe('archivage du client (US10, RG22)', () => {
       courante = archive;
       return HttpResponse.json(archive);
     });
-    render(<PageFicheClient id={7} />);
+    afficherLaFiche(7);
     await screen.findByRole('heading', { level: 1, name: 'Hélène Payet' });
     await utilisateur.click(bouton('Archiver le client'));
     await utilisateur.click(

@@ -1,10 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { Link } from 'react-router';
 import { clientsApi } from '../api/clients.api';
 import type { Client, CriteresClients, ListePaginee } from '../api/types';
 import { AlerteChargement } from '../commun/AlerteChargement';
 import { AnnonceDuTotal } from '../commun/AnnonceDuTotal';
 import { BOUTON_PRINCIPAL, BOUTON_SECONDAIRE, LIEN } from '../commun/classes';
 import { Pagination } from '../commun/Pagination';
+import { useArriveeSurLaPage } from '../commun/useArriveeSurLaPage';
 import { useChargement } from '../commun/useChargement';
 import { useReessai } from '../commun/useReessai';
 import { ZoneAnnonce } from '../commun/ZoneAnnonce';
@@ -24,6 +26,8 @@ type Annonce = { sorte: 'clientCree'; client: Client } | { sorte: 'texte'; texte
  * US32 : export en CSV de la liste affichée ; US31 : import depuis un fichier CSV.
  */
 export function PageClients() {
+  const zonePrincipale = useRef<HTMLElement>(null);
+  useArriveeSurLaPage(zonePrincipale);
   const [creationOuverte, setCreationOuverte] = useState(false);
   const [importOuvert, setImportOuvert] = useState(false);
   const [annonce, setAnnonce] = useState<Annonce | null>(null);
@@ -88,7 +92,12 @@ export function PageClients() {
   }
 
   return (
-    <main className="mx-auto max-w-[1440px] space-y-4 px-4 py-6 md:px-8">
+    // Cible du focus à l'arrivée sur la page ; hors de l'ordre de tabulation.
+    <main
+      ref={zonePrincipale}
+      tabIndex={-1}
+      className="mx-auto max-w-[1440px] space-y-4 px-4 py-6 focus:outline-none md:px-8"
+    >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Clients</h1>
@@ -226,9 +235,9 @@ function AnnonceClientCree({ client }: { client: Client }) {
   return (
     <>
       Client « {client.nomAffiche} » créé.{' '}
-      <a href={`/clients/${client.id}`} className={`${LIEN} font-semibold`}>
+      <Link to={`/clients/${client.id}`} className={`${LIEN} font-semibold`}>
         Ouvrir sa fiche
-      </a>
+      </Link>
     </>
   );
 }

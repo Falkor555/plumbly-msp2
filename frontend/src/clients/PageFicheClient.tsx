@@ -1,8 +1,12 @@
-import { type Ref, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { type Ref, type RefObject, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router';
 import { clientsApi } from '../api/clients.api';
 import type { Client } from '../api/types';
 import { AlerteChargement } from '../commun/AlerteChargement';
 import { dateMetier } from '../commun/dates';
+import { lireIdentifiant } from '../commun/identifiant';
+import { PageIntrouvable } from '../commun/PageIntrouvable';
+import { useArriveeSurLaPage } from '../commun/useArriveeSurLaPage';
 import { useChargement } from '../commun/useChargement';
 import { useReessai } from '../commun/useReessai';
 import { ZoneAnnonce } from '../commun/ZoneAnnonce';
@@ -22,29 +26,44 @@ const ANNONCES: Record<ActionFiche['nom'], string> = {
   'archivage-client': 'Client archivé : sa fiche est désormais en lecture seule.',
 };
 
+/** US09 et US10 : fiche du client désigné par l'adresse /clients/:id. */
+export function PageFicheClient() {
+  const { id } = useParams();
+  const identifiant = id === undefined ? null : lireIdentifiant(id);
+  if (identifiant === null) {
+    return (
+      <PageIntrouvable retour={{ vers: '/clients', libelle: 'Retour à la liste des clients' }} />
+    );
+  }
+  // La clé repart d'un état neuf quand l'historique du navigateur passe d'une fiche à une autre :
+  // sans elle, la fiche précédente et son message de succès resteraient affichés pendant la lecture.
+  return <FicheClient key={identifiant} id={identifiant} />;
+}
+
 interface Props {
-  /** Identifiant déjà validé par l'aiguillage (entier positif). */
+  /** Identifiant validé : entier positif dans les bornes de l'API. */
   id: number;
 }
 
-/** US09 et US10 : fiche d'un client, archivé ou non, avec ses adresses et son historique. */
-export function PageFicheClient({ id }: Props) {
+/** Fiche d'un client, archivé ou non, avec ses adresses et son historique. */
+function FicheClient({ id }: Props) {
   const charger = useCallback((signal: AbortSignal) => clientsApi.consulter(id, signal), [id]);
   const { etat, recharger, dernieresDonnees } = useChargement<Client>(charger);
   // Après une modification, la fiche relue remplace l'ancienne sans vider la page.
   const client = etat.statut === 'pret' ? etat.donnees : dernieresDonnees;
   const { zoneDeRepli, reessayer } = useReessai<HTMLElement>(recharger);
+  useArriveeSurLaPage(zoneDeRepli);
 
   return (
-    // Bloc de repli du focus après « Réessayer » ; il n'est pas dans l'ordre de tabulation.
+    // Cible du focus à l'arrivée et après « Réessayer » ; hors de l'ordre de tabulation.
     <main
       ref={zoneDeRepli}
       tabIndex={-1}
       className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 focus:outline-none md:px-8"
     >
-      <a href="/clients" className={`${LIEN_FICHE} text-sm`}>
+      <Link to="/clients" className={`${LIEN_FICHE} text-sm`}>
         Retour à la liste des clients
-      </a>
+      </Link>
       {etat.statut !== 'erreur' && client ? (
         <ContenuFiche
           client={client}
@@ -130,7 +149,9 @@ function ContenuFiche({ client, relectureEnCours, onModifie }: PropsContenu) {
  */
 function useFocusApresRelecture(client: Client): (cible: RefObject<HTMLElement | null>) => void {
   const cibleEnAttente = useRef<RefObject<HTMLElement | null> | null>(null);
-  useEffect(() => {
+  // Effet de mise en page : le focus change dans la mise à jour même qui retire le bouton. Un
+  // effet ordinaire ne passerait qu'après l'affichage, laissant un moment le focus au document.
+  useLayoutEffect(() => {
     // La fiche relue est un nouvel objet : l'effet ne passe qu'une fois la relecture arrivée.
     cibleEnAttente.current?.current?.focus();
     cibleEnAttente.current = null;

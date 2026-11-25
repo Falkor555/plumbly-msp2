@@ -1,4 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
+import { PageClients } from './clients/PageClients';
+import { PageFicheClient } from './clients/PageFicheClient';
 import { PageConnexion } from './connexion/PageConnexion';
 import { PageMaTournee } from './ma-tournee/PageMaTournee';
 import { MiseEnPage } from './mise-en-page/MiseEnPage';
@@ -25,6 +27,8 @@ export default function App() {
           <Route element={<RouteProtegee roles={ROLES_BUREAU} />}>
             <Route element={<MiseEnPage />}>
               <Route path="/planning" element={<PagePlanning />} />
+              <Route path="/clients" element={<PageClients />} />
+              <Route path="/clients/:id" element={<PageFicheClient />} />
             </Route>
           </Route>
           <Route element={<RouteProtegee roles={ROLES_TERRAIN} />}>

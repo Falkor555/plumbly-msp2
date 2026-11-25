@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,7 @@ import type { RapportImport, ReponseAnalyse } from '../api/types';
 import { clientsDeTest, servirLesClients } from '../test/clientsDeTest';
 import { enregistrerLesRequetes, type RequeteRecue } from '../test/msw/requetesRecues';
 import { serveurApi, urlApi } from '../test/msw/serveur';
+import { afficherALAdresse } from '../test/routeur';
 import { PageClients } from './PageClients';
 
 /*
@@ -176,7 +177,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
     const lectures = servirLesClients(clientsDeTest());
     const analyses = servirLAnalyse();
     const imports = servirLImport();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
 
     await analyserLeFichier(utilisateur);
 
@@ -239,7 +240,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
     servirLesClients(clientsDeTest());
     servirLAnalyse();
     const imports = servirLImport();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
     const strategie = within(fenetre()).getByRole('group', { name: 'Que faire des doublons ?' });
 
@@ -263,7 +264,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
       }),
     );
     const imports = servirLImport();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
 
     expect(within(fenetre()).queryByRole('group', { name: 'Que faire des doublons ?' })).toBeNull();
@@ -285,7 +286,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
       }),
     );
     const imports = servirLImport();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
     const importer = within(fenetre()).getByRole('button', { name: 'Importer 0 ligne' });
 
@@ -301,7 +302,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
     servirLesClients(clientsDeTest());
     const analyses = servirLAnalyse();
     const imports = servirLImport();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
 
     await utilisateur.selectOptions(menuDeLaColonne('remarque'), 'Informations d’accès');
@@ -337,7 +338,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());
     const analyses = servirLAnalyse();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
     expect(
       within(menuDeLaColonne('remarque')).getByRole('option', {
@@ -360,7 +361,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());
     const analyses = servirLAnalyse();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
     await utilisateur.selectOptions(menuDeLaColonne('remarque'), 'Informations d’accès');
     await waitFor(() => expect(analyses).toHaveLength(2));
@@ -380,7 +381,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
     servirLesClients(clientsDeTest());
     servirLAnalyse();
     const imports = servirLImport();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
     const message = 'Aucune colonne pour le champ obligatoire telephone';
     serveurApi.use(http.post(urlApi('/clients/import/analysis'), refus(400, [message])));
@@ -414,7 +415,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
       totaux: totauxParRang[rang] ?? analyseDeTest().totaux,
     }));
     const imports = servirLImport();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
     const appels = vi.spyOn(clientsApi, 'analyserImport');
     await utilisateur.selectOptions(menuDeLaColonne('remarque'), 'Complément d’adresse');
@@ -443,7 +444,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());
     const analyses = servirLAnalyseEnRetenant(1);
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await ouvrirLImport(utilisateur);
     await choisirLeFichier(utilisateur);
     await within(fenetre()).findByText('clients.csv');
@@ -467,7 +468,7 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
       ...analyseDeTest(),
       separateur: rang === 2 ? ',' : ';',
     }));
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
 
     await utilisateur.selectOptions(
@@ -498,7 +499,7 @@ describe('import des clients : refus du fichier (US31)', () => {
       refus(400, messages),
     );
     const imports = servirLImport();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await ouvrirLImport(utilisateur);
     await choisirLeFichier(utilisateur);
     await within(fenetre()).findByText('clients.csv');
@@ -526,7 +527,7 @@ describe('import des clients : refus du fichier (US31)', () => {
       '/clients/import/analysis',
       refus(400, ['Aucune colonne pour le champ obligatoire telephone']),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await ouvrirLImport(utilisateur);
     // Le même objet File, comme le navigateur pour un même nom : user-event, comme lui, ne
     // signale pas un choix identique à celui que le champ contient déjà.
@@ -551,7 +552,7 @@ describe('import des clients : refus du fichier (US31)', () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());
     const analyses = servirLAnalyse();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await ouvrirLImport(utilisateur);
 
     await choisirLeFichier(utilisateur, fichierCsv('a'.repeat(1_000_001), 'gros.csv'));
@@ -571,7 +572,7 @@ describe('import des clients : refus du fichier (US31)', () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());
     const analyses = servirLAnalyse();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await ouvrirLImport(utilisateur);
     // « é » en Windows-1252 (0xE9) : un octet invalide en UTF-8.
     const windows1252 = new Uint8Array([0x6e, 0x6f, 0x6d, 0x0a, 0x50, 0x61, 0x79, 0x65, 0xe9]);
@@ -592,7 +593,7 @@ describe('import des clients : refus du fichier (US31)', () => {
       '/clients/import/analysis',
       refus(413, 'request entity too large'),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await ouvrirLImport(utilisateur);
     await choisirLeFichier(utilisateur);
     await within(fenetre()).findByText('clients.csv');
@@ -608,7 +609,7 @@ describe('import des clients : refus du fichier (US31)', () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());
     servirLAnalyse();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
 
     await analyserLeFichier(utilisateur);
 
@@ -625,7 +626,7 @@ describe('import des clients : échecs et fermeture (US31)', () => {
     const lectures = servirLesClients(clientsDeTest());
     servirLAnalyse();
     enregistrerLesRequetes('post', '/clients/import', refus(500, 'Internal server error'));
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
 
     await utilisateur.click(within(fenetre()).getByRole('button', { name: 'Importer 1 ligne' }));
@@ -652,7 +653,7 @@ describe('import des clients : échecs et fermeture (US31)', () => {
     servirLAnalyse();
     const message = 'Un import est déjà en cours, réessayez dans un instant.';
     enregistrerLesRequetes('post', '/clients/import', refus(409, message));
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
 
     await utilisateur.click(within(fenetre()).getByRole('button', { name: 'Importer 1 ligne' }));
@@ -664,7 +665,7 @@ describe('import des clients : échecs et fermeture (US31)', () => {
     const utilisateur = userEvent.setup();
     const lectures = servirLesClients(clientsDeTest());
     const analyses = servirLAnalyse();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
 
     await utilisateur.keyboard('{Escape}');
@@ -680,7 +681,7 @@ describe('import des clients : échecs et fermeture (US31)', () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());
     servirLAnalyse();
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await analyserLeFichier(utilisateur);
 
     await utilisateur.click(

@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import type { Client } from '../api/types';
 import { CELLULE_TABLEAU, ENTETE_TABLEAU, LIEN } from '../commun/classes';
 import {
@@ -52,9 +53,9 @@ function LigneClient({ client }: { client: Client }) {
   return (
     <tr className="border-b border-bordure last:border-b-0">
       <th scope="row" className={`${CELLULE_TABLEAU} font-semibold`}>
-        <a href={`/clients/${client.id}`} className={LIEN}>
+        <Link to={`/clients/${client.id}`} className={LIEN}>
           {client.nomAffiche}
-        </a>
+        </Link>
         {client.archive && <span className={`${BADGE} ${CLASSES_ARCHIVE} ml-2`}>Archivé</span>}
       </th>
       <td className={CELLULE_TABLEAU}>

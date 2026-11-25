@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,7 @@ import {
 } from '../test/clientsDeTest';
 import { enregistrerLesRequetes } from '../test/msw/requetesRecues';
 import { serveurApi, urlApi } from '../test/msw/serveur';
+import { afficherALAdresse } from '../test/routeur';
 import { PageClients } from './PageClients';
 
 /*
@@ -61,7 +62,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : affiche les clients en service avec leur ville, leur téléphone et leur type', async () => {
     const recues = servirLesClients(clientsDeTest());
 
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     expect(screen.getByRole('heading', { level: 1, name: 'Clients' })).toBeInTheDocument();
@@ -95,7 +96,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : la recherche « helene » part une seule fois, après le délai de frappe, et retrouve Hélène Payet', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesClients(clientsDeTest());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     await utilisateur.type(champRecherche(), 'helene');
@@ -122,7 +123,7 @@ describe('liste des clients (US08)', () => {
         return HttpResponse.json(listePaginee(avecRecherche ? trouves : []));
       }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await messageAffiche('Aucun client enregistré pour le moment.');
     // Capturée avant la recherche : une région insérée avec son texte ne serait pas lue.
     const zone = zoneDuTotal();
@@ -139,7 +140,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : partant d’une liste de clients, annonce une recherche sans résultat dans la zone de statut déjà présente', async () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     const zone = zoneDuTotal();
     expect(zone).toHaveTextContent('5 clients');
@@ -169,7 +170,7 @@ describe('liste des clients (US08)', () => {
         return HttpResponse.json(listePaginee(trouves));
       }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await waitFor(() => expect(screen.getAllByRole('rowheader')).toHaveLength(3));
     const zone = zoneDuTotal();
     expect(zone).toHaveTextContent('3 clients');
@@ -195,7 +196,7 @@ describe('liste des clients (US08)', () => {
         new URL(request.url).searchParams.has('recherche') ? HttpResponse.error() : undefined,
       ),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     const zone = zoneDuTotal();
     expect(zone).toHaveTextContent('5 clients');
@@ -212,7 +213,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : une recherche d’un seul caractère, même entouré d’espaces, n’interroge pas l’API', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesClients(clientsDeTest());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     await utilisateur.type(champRecherche(), ' h ');
@@ -237,7 +238,7 @@ describe('liste des clients (US08)', () => {
         await reponseRetenue;
       }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     await utilisateur.type(champRecherche(), 'helene');
@@ -256,7 +257,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : pagine par 20 et demande la page 2 puis la page 1 avec Suivante et Précédente', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesClients(vingtCinqClients());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     const pages = navigationDesPages();
 
@@ -291,7 +292,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : un bouton de page inactif ne demande rien', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesClients(vingtCinqClients());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     await utilisateur.click(
@@ -306,7 +307,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : au clavier, « Suivante » garde le focus pendant la lecture et une fois sur la dernière page', async () => {
     const utilisateur = userEvent.setup();
     servirLesClients(vingtCinqClients());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     within(navigationDesPages()).getByRole('button', { name: 'Suivante' }).focus();
 
@@ -322,7 +323,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : revenir à la recherche d’origine après en avoir essayé une autre reste en page 1', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesClients(vingtCinqClients());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     await utilisateur.click(within(navigationDesPages()).getByRole('button', { name: 'Suivante' }));
     await screen.findByRole('link', { name: 'Client n°16' });
@@ -368,7 +369,7 @@ describe('liste des clients (US08)', () => {
     async (_filtre, changer, attendu) => {
       const utilisateur = userEvent.setup();
       const recues = servirLesClients(vingtCinqClients());
-      render(<PageClients />);
+      afficherALAdresse(<PageClients />, '/clients');
       await attendreLaListe();
       await utilisateur.click(
         within(navigationDesPages()).getByRole('button', { name: 'Suivante' }),
@@ -388,7 +389,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : « Inclure les archivés » envoie archives=true et signale le client archivé', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesClients(clientsDeTest());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     await utilisateur.click(screen.getByRole('checkbox', { name: 'Inclure les archivés' }));
@@ -409,7 +410,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : envoie telle quelle une saisie à caractères spéciaux et affiche simplement « aucun client »', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesClients(clientsDeTest());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     await utilisateur.type(champRecherche(), "' OR 1=1 --");
@@ -422,7 +423,7 @@ describe('liste des clients (US08)', () => {
 
   it('US08 : limite la recherche à 100 caractères et explique ce qu’elle couvre', async () => {
     servirLesClients(clientsDeTest());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     expect(champRecherche()).toHaveAttribute('maxLength', '100');
@@ -434,7 +435,7 @@ describe('liste des clients (US08)', () => {
   it('US08 : indique une liste vide quand aucun client n’est enregistré', async () => {
     servirLesClients([]);
 
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
 
     expect(await messageAffiche('Aucun client enregistré pour le moment.')).toBeInTheDocument();
     expect(zoneDuTotal()).toHaveTextContent('Aucun client enregistré pour le moment.');
@@ -454,7 +455,7 @@ describe('liste des clients (US08)', () => {
         await reponseRetenue;
       }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await messageAffiche('Aucun client enregistré pour le moment.');
     const zone = zoneDuTotal();
 
@@ -481,7 +482,7 @@ describe('liste des clients (US08)', () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesClients(clientsDeTest());
     serveurApi.use(http.get(urlApi('/clients'), () => HttpResponse.error(), { once: true }));
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
 
     const alerte = await screen.findByRole('alert');
 
@@ -513,7 +514,7 @@ describe('liste des clients (US08)', () => {
       ),
     );
 
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
 
     const alerte = await screen.findByRole('alert');
     expect(alerte).toHaveTextContent('Une erreur est survenue. Réessayez plus tard.');
@@ -567,7 +568,7 @@ describe('création d’un client (US06, US07)', () => {
       clients.push(marieTecher());
       return HttpResponse.json(marieTecher(), { status: 201 });
     });
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     // La région live doit exister, vide, avant le message : sinon il risque de ne pas être lu.
     const zoneDAnnonce = screen.getByRole('status', { name: 'Confirmation' });
@@ -627,7 +628,7 @@ describe('création d’un client (US06, US07)', () => {
     const creations = enregistrerLesRequetes('post', '/clients', () =>
       HttpResponse.json(marieTecher(), { status: 201 }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     const fenetre = await ouvrirLaCreation(utilisateur);
     expect(within(fenetre).queryByRole('textbox', { name: /^Raison sociale/ })).toBeNull();
@@ -651,7 +652,7 @@ describe('création d’un client (US06, US07)', () => {
   it('US06 : plusieurs champs en erreur sont tous signalés, le focus allant au premier', async () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     const fenetre = await ouvrirLaCreation(utilisateur);
     await utilisateur.type(champ(fenetre, 'Téléphone (obligatoire)'), '0692-11');
@@ -691,7 +692,7 @@ describe('création d’un client (US06, US07)', () => {
         ),
       ),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     const fenetre = await ouvrirLaCreation(utilisateur);
     await utilisateur.type(champ(fenetre, 'Nom (obligatoire)'), 'Técher');
@@ -723,7 +724,7 @@ describe('création d’un client (US06, US07)', () => {
         );
       }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     const fenetre = await ouvrirLaCreation(utilisateur);
     await utilisateur.type(champ(fenetre, 'Nom (obligatoire)'), 'Técher');
@@ -747,7 +748,7 @@ describe('création d’un client (US06, US07)', () => {
   it('US06 : le résumé garde le nombre de champs refusés pendant la saisie et se réannonce à chaque envoi refusé', async () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     const fenetre = await ouvrirLaCreation(utilisateur);
     await utilisateur.type(champ(fenetre, 'Rue (obligatoire)'), '5 rue de Paris');
@@ -782,7 +783,7 @@ describe('création d’un client (US06, US07)', () => {
         return HttpResponse.json(marieTecher(), { status: 201 });
       }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     const fenetre = await ouvrirLaCreation(utilisateur);
     await utilisateur.type(champ(fenetre, 'Nom (obligatoire)'), 'Técher');
@@ -808,7 +809,7 @@ describe('création d’un client (US06, US07)', () => {
     const creations = enregistrerLesRequetes('post', '/clients', () =>
       HttpResponse.json(marieTecher(), { status: 201 }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     const fenetre = await ouvrirLaCreation(utilisateur);
     // Identité et adresse côte à côte : la fenêtre de création est la large.

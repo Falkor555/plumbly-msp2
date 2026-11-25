@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { clientsDeTest, servirLesClients } from '../test/clientsDeTest';
 import { enregistrerLesRequetes, parametresRecus } from '../test/msw/requetesRecues';
 import { serveurApi, urlApi } from '../test/msw/serveur';
+import { afficherALAdresse } from '../test/routeur';
 import { PageClients } from './PageClients';
 
 /*
@@ -55,7 +56,7 @@ describe('export des clients en CSV (US32)', () => {
     const libererAdresse = vi.spyOn(URL, 'revokeObjectURL');
     const lectures = servirLesClients(clientsDeTest());
     const exports = enregistrerLesRequetes('get', '/clients/export', reponseCsv);
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     await utilisateur.selectOptions(screen.getByLabelText('Type de client'), 'Particulier');
     await utilisateur.selectOptions(screen.getByLabelText('Trier par'), 'Les plus récents d’abord');
@@ -96,7 +97,7 @@ describe('export des clients en CSV (US32)', () => {
     espionnerLesClics();
     servirLesClients(clientsDeTest());
     const exports = enregistrerLesRequetes('get', '/clients/export', reponseCsv);
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     await utilisateur.click(screen.getByRole('button', { name: 'Exporter en CSV' }));
@@ -119,7 +120,7 @@ describe('export des clients en CSV (US32)', () => {
         return reponseCsv();
       }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     await utilisateur.click(screen.getByRole('button', { name: 'Exporter en CSV' }));
@@ -142,7 +143,7 @@ describe('export des clients en CSV (US32)', () => {
     enregistrerLesRequetes('get', '/clients/export', () =>
       HttpResponse.json({ statusCode: 400, message, error: 'Bad Request' }, { status: 400 }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
 
     await utilisateur.click(screen.getByRole('button', { name: 'Exporter en CSV' }));
@@ -164,7 +165,7 @@ describe('export des clients en CSV (US32)', () => {
     const exports = enregistrerLesRequetes('get', '/clients/export', () =>
       HttpResponse.json({ statusCode: 400, message, error: 'Bad Request' }, { status: 400 }),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     await utilisateur.click(screen.getByRole('button', { name: 'Exporter en CSV' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(message);
@@ -187,7 +188,7 @@ describe('export des clients en CSV (US32)', () => {
         { once: true },
       ),
     );
-    render(<PageClients />);
+    afficherALAdresse(<PageClients />, '/clients');
     await attendreLaListe();
     await utilisateur.click(screen.getByRole('button', { name: 'Exporter en CSV' }));
     const alerte = await screen.findByRole('alert');
