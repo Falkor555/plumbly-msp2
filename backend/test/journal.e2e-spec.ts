@@ -319,6 +319,90 @@ describe('journal des actions dans MongoDB (e2e)', () => {
     );
   });
 
+  describe('TS-02 : changement de statut fait par un technicien', () => {
+    const AUJOURDHUI = '2026-12-07';
+
+    /** Intervention planifiée dans la tournée du jour du technicien : RG24 permet de la démarrer. */
+    async function interventionDuJour(): Promise<number> {
+      const { prisma } = application;
+      const fiche = await prisma.technicien.findUniqueOrThrow({
+        where: { idUtilisateur: donnees.technicien.id },
+      });
+      const tournee = await prisma.tournee.create({
+        data: {
+          idTechnicien: fiche.id,
+          dateTournee: new Date(`${AUJOURDHUI}T00:00:00Z`),
+          idCreateur: donnees.gestionnaire.id,
+        },
+      });
+      return creerIntervention(prisma, donnees.gestionnaire.id, {
+        idTournee: tournee.id,
+        debutPrevu: `${AUJOURDHUI}T10:00:00+04:00`,
+      });
+    }
+
+    it('TS-02 : le technicien qui démarre son intervention écrit STATUT_MODIFIE, sans donnée personnelle', async () => {
+      const id = await interventionDuJour();
+
+      await requetesEn(application.app, donnees.technicien)
+        .post(`/interventions/${id}/start`)
+        .expect(200);
+
+      const documents = await journal.find({}).toArray();
+      expect(documents).toEqual([
+        {
+          _id: expect.anything(),
+          date: MAINTENANT,
+          action: 'STATUT_MODIFIE',
+          auteur: { id: donnees.technicien.id, role: 'TECHNICIEN' },
+          entite: { type: 'intervention', id },
+          avant: { statut: 'PLANIFIEE' },
+          apres: { statut: 'EN_COURS' },
+        },
+      ]);
+      expect(documents.flatMap(clesDe).filter((cle) => CHAMPS_PERSONNELS.includes(cle))).toEqual(
+        [],
+      );
+    });
+
+    it('TS-02 : l’historique relit l’entrée avec le nom et le prénom du technicien, lus dans PostgreSQL', async () => {
+      const id = await interventionDuJour();
+      await requetesEn(application.app, donnees.technicien)
+        .post(`/interventions/${id}/start`)
+        .expect(200);
+
+      const reponse = await historique(id, donnees.gestionnaire).expect(200);
+
+      expect(reponse.body).toEqual([
+        {
+          date: '2026-12-07T05:00:00.000Z',
+          action: 'STATUT_MODIFIE',
+          auteur: { id: donnees.technicien.id, nom: 'Hoarau', prenom: 'Kévin', role: 'TECHNICIEN' },
+          avant: { statut: 'PLANIFIEE' },
+          apres: { statut: 'EN_COURS' },
+        },
+      ]);
+    });
+
+    it('TS-02 : un collègue qui tente de démarrer la même intervention (403) n’ajoute aucun document', async () => {
+      const id = await interventionDuJour();
+      const collegue = await creerCompte(application.prisma, {
+        email: 'mathieu@test.re',
+        nom: 'Rivière',
+        prenom: 'Mathieu',
+        role: 'TECHNICIEN',
+      });
+
+      await requetesEn(application.app, collegue).post(`/interventions/${id}/start`).expect(403);
+
+      expect(await journal.countDocuments()).toBe(0);
+      const intervention = await application.prisma.intervention.findUniqueOrThrow({
+        where: { id },
+      });
+      expect(intervention.statut).toBe('PLANIFIEE');
+    });
+  });
+
   describe('droits et validation de GET /interventions/:id/history', () => {
     it('répond 401 sans utilisateur connecté', async () => {
       await historique(donnees.idIntervention).expect(401);
