@@ -317,6 +317,22 @@ describe('validation des interventions', () => {
       ]);
     });
 
+    it('refuse une moitié d’emoji dans le compte rendu ou le nom, qui fausserait l’empreinte', () => {
+      expect(
+        erreursDe(() =>
+          lireFinDIntervention({ compteRendu: 'Fuite réparée \ud83d', signature: SIGNATURE }),
+        ),
+      ).toEqual(['compteRendu contient un caractère non autorisé']);
+      expect(
+        erreursDe(() =>
+          lireFinDIntervention({
+            compteRendu: 'Ok',
+            signature: { image: IMAGE, nomSignataire: 'Jean \ud83d' },
+          }),
+        ),
+      ).toEqual(['signature.nomSignataire contient un caractère non autorisé']);
+    });
+
     it('refuse une signature sans image, ou dont l’image n’est pas un texte', () => {
       expect(
         erreursDe(() =>
