@@ -128,9 +128,10 @@ Chaque route est rattachée à une user story ([user-stories.md](user-stories.md
 | PATCH | `/interventions/:id` | ADMIN, GEST | Modifier une intervention non terminée | US16 |
 | POST | `/interventions/:id/cancel` | ADMIN, GEST | Annuler avec un motif | US16 |
 | POST | `/interventions/:id/start` | TECH (affecté) | Passer à « en cours » | US17 |
-| POST | `/interventions/:id/complete` | TECH (affecté) | Passer à « terminée », avec compte rendu facultatif | US17, US18 |
+| POST | `/interventions/:id/complete` | TECH (affecté) | Passer à « terminée », avec compte rendu facultatif et signature du client facultative | US17, US18, US33 |
 | PATCH | `/interventions/:id/report` | TECH (affecté) | Compléter le compte rendu d'une intervention terminée | US18 |
 | GET | `/interventions/:id/history` | ADMIN, GEST | Historique des statuts, lu dans le journal MongoDB | US19 |
+| GET | `/interventions/:id/signature` | ADMIN, GEST, TECH (affecté) | Consulter la signature du client et vérifier son empreinte | US33 |
 
 ### 5.4 Types d'intervention — Loïc
 
@@ -448,7 +449,7 @@ Le statut ne se modifie jamais directement : il change uniquement par les routes
 | `POST /tours/:id/interventions` (Arnaud) | `A_PLANIFIER` | `PLANIFIEE` | ADMIN, GEST | RG02, RG09, RG10, RG11 |
 | `DELETE /tours/:id/interventions/:interventionId` (Arnaud) | `PLANIFIEE` | `A_PLANIFIER` | ADMIN, GEST | RG04 |
 | `POST /interventions/:id/start` | `PLANIFIEE` | `EN_COURS` | TECH affecté | RG03, RG24 |
-| `POST /interventions/:id/complete` | `EN_COURS` | `TERMINEE` | TECH affecté | RG03 |
+| `POST /interventions/:id/complete` | `EN_COURS` | `TERMINEE` | TECH affecté | RG03, RG30 à RG35 si signature |
 | `POST /interventions/:id/cancel` | `A_PLANIFIER`, `PLANIFIEE`, `EN_COURS` | `ANNULEE` | ADMIN, GEST | RG05 |
 
 Toute autre transition est refusée (`400`). Chaque changement de statut est enregistré dans le journal des actions (`STATUT_MODIFIE` ou `INTERVENTION_ANNULEE`, RG07). Un technicien « affecté » est celui de la tournée qui contient l'intervention. La table de ces transitions est écrite à un seul endroit du code, `backend/src/interventions/cycle-de-vie.ts`, que les routes des interventions et des tournées appellent avant toute écriture.
@@ -471,6 +472,7 @@ L'objet **Intervention** renvoyé par l'API contient des résumés des élément
   "demarreeLe": null,
   "termineeLe": null,
   "annuleeLe": null,
+  "signature": null,
   "creeLe": "2026-11-24T09:12:00.000Z",
   "majLe": "2026-11-24T09:30:00.000Z",
   "type": { "id": 1, "libelle": "Fuite" },
@@ -481,7 +483,7 @@ L'objet **Intervention** renvoyé par l'API contient des résumés des élément
 }
 ```
 
-`finPrevue` est calculée par la base (début + durée) et `enRetard` par l'API : une intervention planifiée non démarrée 15 minutes après son début prévu est en retard (RG20). `tournee` vaut `null` tant que l'intervention n'est pas planifiée. `nomAffiche` est le nom et le prénom pour un particulier, la raison sociale pour un professionnel.
+`finPrevue` est calculée par la base (début + durée) et `enRetard` par l'API : une intervention planifiée non démarrée 15 minutes après son début prévu est en retard (RG20). `tournee` vaut `null` tant que l'intervention n'est pas planifiée. `nomAffiche` est le nom et le prénom pour un particulier, la raison sociale pour un professionnel. `signature` vaut `null` tant que le client n'a pas signé ; sinon c'est un résumé sans l'image, `{ "nomSignataire": "Jean Dupont", "signeeLe": "2026-11-25T08:58:40.000Z" }` (l'image se lit avec `GET /interventions/:id/signature`).
 
 #### `GET /interventions` — lister et filtrer (US15)
 
@@ -589,18 +591,31 @@ Effets : `demarreeLe` renseigné ; journal `STATUT_MODIFIE`.
 
 | Champ envoyé | Type | Validation |
 | --- | --- | --- |
-| `compteRendu` | texte | Facultatif, 2 000 caractères maximum |
+| `compteRendu` | texte | Facultatif, 2 000 caractères maximum ; **obligatoire (1 à 2 000) si `signature` est envoyé** (RG31) |
+| `signature` | objet | Facultatif (US33). Absent : clôture sans signature, comme avant |
+| `signature.image` | texte | Obligatoire dans `signature` : data URL `data:image/png;base64,…`, PNG de 48 Ko au plus une fois décodé, 100 à 1 200 px de large, 50 à 600 px de haut (RG35) |
+| `signature.nomSignataire` | texte | Obligatoire dans `signature`, 1 à 100 caractères (RG31) |
 
-Réponse `200` : l'objet Intervention au statut `TERMINEE`.
+Exemple avec signature :
+
+```json
+{
+  "compteRendu": "Joint du siphon remplacé, plus de fuite.",
+  "signature": { "nomSignataire": "Jean Dupont", "image": "data:image/png;base64,iVBORw0KGgo…" }
+}
+```
+
+Réponse `200` : l'objet Intervention au statut `TERMINEE`, avec `signature` renseigné si le client a signé.
 
 | Erreur | Cas |
 | --- | --- |
-| `400` | Intervention qui n'est pas « en cours » ; compte rendu trop long |
+| `400` | Intervention qui n'est pas « en cours » ; compte rendu trop long ; signature sans compte rendu ; nom du signataire manquant ou trop long ; image qui n'est pas un PNG valide, trop lourde ou aux dimensions hors limites |
 | `401` | Non connecté |
 | `403` | Utilisateur qui n'est pas le technicien affecté (RG03) |
 | `404` | Intervention inexistante |
+| `409` | Intervention modifiée entre-temps (clôture simultanée) |
 
-Effets : `termineeLe` renseigné ; journal `STATUT_MODIFIE`.
+Effets : `termineeLe` renseigné ; si signature : ligne `signature_intervention` créée dans la même transaction, `signeeLe` égal à `termineeLe` (horloge du serveur), empreinte calculée (RG34). Journal `STATUT_MODIFIE`, puis `SIGNATURE_ENREGISTREE` (identifiant de l'intervention et empreinte, sans l'image ni le nom du signataire).
 
 #### `PATCH /interventions/:id/report` — compléter le compte rendu (US18)
 
@@ -612,7 +627,7 @@ Réponse `200` : l'objet Intervention mis à jour.
 
 | Erreur | Cas |
 | --- | --- |
-| `400` | Intervention qui n'est pas « terminée » ; texte vide ou trop long |
+| `400` | Intervention qui n'est pas « terminée » ; intervention signée, dont le compte rendu est définitif (RG33) ; texte vide ou trop long |
 | `401` | Non connecté |
 | `403` | Utilisateur qui n'est pas le technicien affecté |
 | `404` | Intervention inexistante |
@@ -638,6 +653,29 @@ Réponse `200` : les entrées du journal MongoDB concernant l'intervention, de l
 | `401` | Non connecté |
 | `403` | Technicien |
 | `404` | Intervention inexistante |
+
+#### `GET /interventions/:id/signature` — consulter la signature du client (US33)
+
+Réponse `200` :
+
+```json
+{
+  "nomSignataire": "Jean Dupont",
+  "signeeLe": "2026-11-25T08:58:40.000Z",
+  "auteur": { "id": 7, "nom": "Benali", "prenom": "Karim" },
+  "empreinte": "3f8a…c21e",
+  "integre": true,
+  "image": "data:image/png;base64,iVBORw0KGgo…"
+}
+```
+
+`integre` vaut `false` si l'empreinte recalculée avec les données actuelles (dont le compte rendu) ne correspond plus à celle enregistrée (RG34). L'image est renvoyée en data URL pour être affichée par une balise `<img>` : une adresse d'image classique n'enverrait pas le jeton d'accès.
+
+| Erreur | Cas |
+| --- | --- |
+| `401` | Non connecté |
+| `403` | Technicien qui n'est pas celui de la tournée |
+| `404` | Intervention inexistante ; intervention sans signature |
 
 ### 6.4 Types d'intervention — Loïc
 
