@@ -2,12 +2,14 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
   Patch,
   Post,
   Query,
+  type StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -20,6 +22,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiPayloadTooLargeResponse,
+  ApiProduces,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -31,6 +34,7 @@ import {
   type UtilisateurConnecte,
   UtilisateurCourant,
 } from '../commun/autorisation/utilisateur-connecte.js';
+import { versReponseCsv } from '../commun/csv/fichier-csv.js';
 import { lireIdentifiant, type PageApi } from '../commun/validation.js';
 import { InterventionsService } from './interventions.service.js';
 import {
@@ -41,6 +45,7 @@ import {
 import {
   lireAnnulation,
   lireCompteRendu,
+  lireCriteresExportInterventions,
   lireDemarrage,
   lireFiltresInterventions,
   lireFinDIntervention,
@@ -168,6 +173,42 @@ export class InterventionsController {
   @ApiForbiddenResponse({ description: 'Technicien' })
   lister(@Query() requete: Record<string, unknown>): Promise<PageApi<InterventionApi>> {
     return this.service.lister(lireFiltresInterventions(requete));
+  }
+
+  // Déclarée avant GET :id : sinon « export » serait lu comme un identifiant (400).
+  @Get('export')
+  // Le fichier contient des données de clients : il ne reste dans aucun cache.
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({
+    summary: 'Exporter en CSV la liste filtrée des interventions (US29)',
+    description:
+      'Mêmes filtres et même tri que GET /interventions, sans page ni limit. UTF-8 avec BOM, ' +
+      '« ; », CRLF, formules neutralisées (RG26) ; 5 000 lignes au plus. Ni téléphone, ni ' +
+      'e-mail, ni rue, ni accès, ni compte rendu, ni motif, ni signature : seulement `signee` ' +
+      '(oui / non). Journal EXPORT_CSV (RG25). Droits : ADMIN, GESTIONNAIRE.',
+  })
+  @ApiQuery({ name: 'recherche', required: false, example: 'helene' })
+  @ApiQuery({ name: 'statut', required: false, example: 'A_PLANIFIER,PLANIFIEE' })
+  @ApiQuery({ name: 'urgence', required: false, enum: ['NORMALE', 'PRIORITAIRE', 'URGENTE'] })
+  @ApiQuery({ name: 'technicienId', required: false, example: 2 })
+  @ApiQuery({ name: 'clientId', required: false, example: 8 })
+  @ApiQuery({ name: 'du', required: false, example: '2026-11-23' })
+  @ApiQuery({ name: 'au', required: false, example: '2026-11-28' })
+  @ApiQuery({ name: 'tri', required: false, enum: TRIS_INTERVENTIONS })
+  @ApiProduces('text/csv')
+  @ApiResponse({ status: 200, description: 'Fichier interventions-AAAA-MM-JJ.csv' })
+  @ApiBadRequestResponse({
+    description: 'Paramètre invalide ou inconnu, page ou limit présent, plus de 5 000 lignes',
+  })
+  @ApiForbiddenResponse({ description: 'Technicien' })
+  async exporter(
+    @Query() requete: Record<string, unknown>,
+    @UtilisateurCourant() utilisateur: UtilisateurConnecte,
+  ): Promise<StreamableFile> {
+    const criteres = lireCriteresExportInterventions(requete);
+    // Les clés ont été validées par lireCriteresExportInterventions : ce sont des noms connus.
+    const fichier = await this.service.exporter(criteres, utilisateur, Object.keys(requete));
+    return versReponseCsv(fichier);
   }
 
   @Post()

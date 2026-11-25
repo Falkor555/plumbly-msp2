@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { configurerApplication } from '../src/configurer-application.js';
@@ -42,11 +43,11 @@ async function demarrer(limiterLesTentatives: boolean): Promise<INestApplication
     constructeur = constructeur.overrideGuard(ThrottlerGuard).useValue({ canActivate: () => true });
   }
   const module = await constructeur.compile();
-  const app = module.createNestApplication<INestApplication<App>>();
-  // Mêmes réglages que main.ts : Helmet, lecture des cookies et préfixe des routes.
+  const app = module.createNestApplication<NestExpressApplication>();
+  // Mêmes réglages que main.ts : Helmet, cookies, préfixe des routes et limites du corps JSON.
   configurerApplication(app);
   await app.init();
-  return app;
+  return app as INestApplication<App>;
 }
 
 async function creerCompte(

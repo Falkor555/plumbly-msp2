@@ -33,7 +33,10 @@ export const TRIS_INTERVENTIONS = [
 export type TriInterventions = (typeof TRIS_INTERVENTIONS)[number];
 
 /** GET /interventions (US15) : tous les filtres se combinent. */
-export interface FiltresInterventions extends Pagination {
+export type FiltresInterventions = Pagination & CriteresInterventions;
+
+/** Filtres et tri de la liste, communs à GET /interventions et à son export (US29). */
+export interface CriteresInterventions {
   tri: TriInterventions;
   recherche?: string;
   statuts?: StatutIntervention[];

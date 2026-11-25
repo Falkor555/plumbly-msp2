@@ -1,10 +1,12 @@
 import type { INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { NextFunction, Response } from 'express';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../../src/app.module.js';
 import { AuthentificationGuard } from '../../src/authentification/authentification.guard.js';
+import { configurerApplication } from '../../src/configurer-application.js';
 import type {
   RequeteAuthentifiee,
   UtilisateurConnecte,
@@ -55,13 +57,14 @@ export async function demarrerApplication(
     constructeur.overrideProvider(jeton).useValue(double);
   }
   const module = await constructeur.compile();
-  const app = module.createNestApplication<INestApplication<App>>();
+  const app = module.createNestApplication<NestExpressApplication>();
   app.use(authentificationDeTest);
-  app.setGlobalPrefix('api/v1');
+  // Comme main.ts : préfixe api/v1 et limites du corps JSON (1,5 Mo pour l'import, 100 Ko ailleurs).
+  configurerApplication(app);
   await app.init();
   const prisma = app.get(PrismaService);
   await viderLaBase(prisma);
-  return { app, prisma };
+  return { app: app as INestApplication<App>, prisma };
 }
 
 /** Requêtes HTTP envoyées au nom d'un utilisateur, ou sans utilisateur (401). */

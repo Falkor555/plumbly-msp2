@@ -41,6 +41,34 @@ describe('verifierClesSures', () => {
     expect(() => verifierClesSures({ $set: { statut: 'TERMINEE' } })).toThrow(CleInterdite);
   });
 
+  it('accepte le document d’un export CSV, avec son tableau de noms de filtres', () => {
+    const document = {
+      date: DATE,
+      action: 'EXPORT_CSV',
+      auteur: { id: 2, role: 'GESTIONNAIRE' },
+      entite: { type: 'utilisateur', id: 2 },
+      contexte: { ressource: 'clients', lignes: 3, filtres: ['recherche', 'typeClient'] },
+    };
+
+    expect(() => verifierClesSures(document)).not.toThrow();
+  });
+
+  it('contrôle chaque élément d’un tableau, y compris après des textes', () => {
+    const document = { contexte: { filtres: ['statut', 'du', { $where: 'sleep(1000)' }] } };
+
+    expect(() => verifierClesSures(document)).toThrow(
+      new CleInterdite('document.contexte.filtres[2].$where'),
+    );
+  });
+
+  it('contrôle un tableau placé dans un tableau', () => {
+    const document = { contexte: { filtres: [['statut'], [{ 'a.b': 1 }]] } };
+
+    expect(() => verifierClesSures(document)).toThrow(
+      new CleInterdite('document.contexte.filtres[1][0].a.b'),
+    );
+  });
+
   it('accepte les valeurs nulles, les dates et les tableaux de scalaires', () => {
     expect(() => verifierClesSures({ a: null, b: DATE, c: [1, 'deux', false] })).not.toThrow();
   });

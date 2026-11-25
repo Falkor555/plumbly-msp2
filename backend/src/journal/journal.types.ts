@@ -85,6 +85,33 @@ export interface AccesRefuse {
   route: string;
 }
 
+/**
+ * Export CSV réussi (RG25). filtres contient le NOM des paramètres reçus, jamais leur valeur :
+ * une recherche peut être le nom d'un client. Aucune donnée de client n'est journalisée.
+ */
+export interface ExportCsv {
+  type: 'EXPORT_CSV';
+  auteur: AuteurJournal;
+  ressource: 'clients' | 'interventions';
+  /** Lignes de données du fichier, en-tête exclu. */
+  lignes: number;
+  filtres: string[];
+}
+
+/**
+ * Import de clients enregistré (RG25, RG29) : la stratégie choisie et les compteurs du rapport,
+ * jamais un nom, un téléphone ni un e-mail.
+ */
+export interface ClientsImportes {
+  type: 'CLIENTS_IMPORTES';
+  auteur: AuteurJournal;
+  strategieDoublons: 'IGNORER' | 'METTRE_A_JOUR';
+  crees: number;
+  misAJour: number;
+  ignores: number;
+  rejetes: number;
+}
+
 export type ActionJournalisee =
   | StatutModifie
   | InterventionAnnulee
@@ -93,7 +120,9 @@ export type ActionJournalisee =
   | ConnexionEchouee
   | CompteCree
   | CompteDesactive
-  | AccesRefuse;
+  | AccesRefuse
+  | ExportCsv
+  | ClientsImportes;
 
 export type TypeAction = ActionJournalisee['type'];
 
@@ -111,7 +140,9 @@ export interface EntiteConsultee {
   id: number;
 }
 
-export type ValeurJournal = string | number | boolean | null | { [cle: string]: ValeurJournal };
+// Tableaux admis pour les noms de filtres d'un export : verifierClesSures parcourt leurs éléments.
+export type ValeurJournal =
+  string | number | boolean | null | ValeurJournal[] | { [cle: string]: ValeurJournal };
 export type DonneesJournal = { [cle: string]: ValeurJournal };
 
 /** Document de la collection journal_actions, sans _id (généré par MongoDB). */

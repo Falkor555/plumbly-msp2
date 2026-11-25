@@ -170,6 +170,64 @@ describe('versDocumentJournal', () => {
     });
   });
 
+  it('EXPORT_CSV : l’entité est l’auteur ; ressource, lignes et noms des filtres dans le contexte', () => {
+    const action = {
+      type: 'EXPORT_CSV' as const,
+      auteur: GESTIONNAIRE,
+      ressource: 'interventions' as const,
+      lignes: 128,
+      filtres: ['statut', 'du', 'au'],
+      // Surplus qu'un appelant pourrait passer par erreur : les valeurs ne doivent pas entrer.
+      valeurs: { recherche: 'Hélène Grondin' },
+    };
+
+    const document = versDocumentJournal(action, DATE);
+
+    expect(document).toEqual({
+      date: DATE,
+      action: 'EXPORT_CSV',
+      auteur: { id: 2, role: 'GESTIONNAIRE' },
+      entite: { type: 'utilisateur', id: 2 },
+      contexte: { ressource: 'interventions', lignes: 128, filtres: ['statut', 'du', 'au'] },
+    });
+  });
+
+  it('EXPORT_CSV : le tableau des filtres est une copie, pas celui de l’appelant', () => {
+    const filtres = ['recherche'];
+
+    const document = versDocumentJournal(
+      { type: 'EXPORT_CSV', auteur: GESTIONNAIRE, ressource: 'clients', lignes: 0, filtres },
+      DATE,
+    );
+    filtres.push('ajout après coup');
+
+    expect(document.contexte).toEqual({ ressource: 'clients', lignes: 0, filtres: ['recherche'] });
+  });
+
+  it('CLIENTS_IMPORTES : l’entité est l’auteur ; stratégie et compteurs seulement', () => {
+    const action = {
+      type: 'CLIENTS_IMPORTES' as const,
+      auteur: GESTIONNAIRE,
+      strategieDoublons: 'IGNORER' as const,
+      crees: 41,
+      misAJour: 0,
+      ignores: 5,
+      rejetes: 2,
+      // Surplus qu'un appelant pourrait passer par erreur : les lignes du fichier ne doivent pas entrer.
+      lignes: [{ nomClient: 'Grondin', telephone: '0692123456' }],
+    };
+
+    const document = versDocumentJournal(action, DATE);
+
+    expect(document).toEqual({
+      date: DATE,
+      action: 'CLIENTS_IMPORTES',
+      auteur: { id: 2, role: 'GESTIONNAIRE' },
+      entite: { type: 'utilisateur', id: 2 },
+      contexte: { strategieDoublons: 'IGNORER', crees: 41, misAJour: 0, ignores: 5, rejetes: 2 },
+    });
+  });
+
   it('ne recopie de l’auteur que son identifiant et son rôle', () => {
     const utilisateurComplet = { id: 7, role: 'TECHNICIEN', email: 'k@exemple.fr', nom: 'Benali' };
 

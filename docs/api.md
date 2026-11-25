@@ -12,7 +12,7 @@ Ce document définit le contrat de l'API REST de Plumbly : les routes, les donn�
 | Élément | Convention | Exemple |
 | --- | --- | --- |
 | URL de base | Préfixe versionné | `http://localhost:3000/api/v1` |
-| Format | JSON en UTF-8 | `Content-Type: application/json` |
+| Format | JSON en UTF-8 ; les exports sont des fichiers CSV (section 6.12) | `Content-Type: application/json` |
 | Noms des ressources | Anglais, au pluriel (cahier des charges, 8.3) | `/interventions`, `/tours` |
 | Noms des champs | Français, en camelCase, identiques au dictionnaire de données | `debutPrevu`, `dureeEstimeeMin` |
 | Identifiants | Entiers | `"id": 42` |
@@ -67,7 +67,7 @@ Pour une erreur de validation, `message` contient la liste des champs en erreur 
 | `403` | Authentifié mais non autorisé | Un technicien appelle `GET /clients`, ou modifie l'intervention d'un collègue |
 | `404` | Ressource introuvable | Intervention inexistante |
 | `409` | Conflit avec l'état existant | Créneau déjà occupé, e-mail déjà utilisé, deuxième tournée le même jour |
-| `413` | Corps de requête de plus de 100 Ko | Signature trop lourde ; le serveur répond `{ "statusCode": 413, "message": "request entity too large" }`, sans liste de champs |
+| `413` | Corps de requête de plus de 100 Ko, ou de plus de 1,5 Mo sur `/clients/import` et `/clients/import/analysis` | Signature trop lourde, fichier CSV de plus de 1 Mo envoyé à l'import ; le serveur répond `{ "statusCode": 413, "message": "request entity too large" }`, sans liste de champs |
 | `429` | Trop de requêtes | Plus de 5 tentatives de connexion en 15 minutes |
 | `500` | Erreur interne | Message générique, sans détail technique |
 
@@ -124,6 +124,7 @@ Chaque route est rattachée à une user story ([user-stories.md](user-stories.md
 | Méthode | Route | Droits | Rôle de la route | US |
 | --- | --- | --- | --- | --- |
 | GET | `/interventions` | ADMIN, GEST | Lister et filtrer les interventions, urgentes en tête | US15 |
+| GET | `/interventions/export` | ADMIN, GEST | Exporter en CSV la liste filtrée | US29 |
 | POST | `/interventions` | ADMIN, GEST | Créer une intervention au statut « à planifier » | US14 |
 | GET | `/interventions/:id` | ADMIN, GEST, TECH (les siennes) | Consulter une intervention | US14, US24 |
 | PATCH | `/interventions/:id` | ADMIN, GEST | Modifier une intervention non terminée | US16 |
@@ -147,6 +148,9 @@ Chaque route est rattachée à une user story ([user-stories.md](user-stories.md
 | Méthode | Route | Droits | Rôle de la route | US |
 | --- | --- | --- | --- | --- |
 | GET | `/clients` | ADMIN, GEST | Rechercher et lister les clients | US08 |
+| GET | `/clients/export` | ADMIN, GEST | Exporter en CSV la liste filtrée, une ligne par adresse | US32 |
+| POST | `/clients/import/analysis` | ADMIN, GEST | Analyser un fichier CSV sans rien enregistrer | US31 |
+| POST | `/clients/import` | ADMIN, GEST | Importer les lignes valides d'un fichier CSV | US31 |
 | POST | `/clients` | ADMIN, GEST | Créer un client avec sa première adresse | US06 |
 | GET | `/clients/:id` | ADMIN, GEST | Consulter un client et ses adresses | US06 |
 | PATCH | `/clients/:id` | ADMIN, GEST | Modifier un client | US10 |
@@ -1257,6 +1261,144 @@ Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'i
 | `POST /interventions/:id/complete`, `PATCH /interventions/:id/report` | Un compte rendu vide ou fait d'espaces répond `400`. `report` remplace le texte précédent |
 | `POST /intervention-types`, `PATCH /intervention-types/:id` | L'unicité du libellé tient compte de la casse, comme la contrainte en base : « Fuite » et « fuite » sont deux types |
 
+### 6.12 Import et export CSV
+
+Règles de gestion : RG25 à RG29 du [cahier des charges](cahier-des-charges.md#5-règles-de-gestion). Choix techniques : [ADR 0014](adr/0014-import-export-csv.md). Routes réservées à ADMIN et GEST : elles répondent `401` sans connexion et `403` pour un technicien.
+
+#### Format des exports
+
+| Élément | Valeur |
+| --- | --- |
+| En-têtes HTTP | `Content-Type: text/csv; charset=utf-8` ; `Content-Disposition: attachment; filename="clients-2026-11-25.csv"` (jour à La Réunion) ; `Cache-Control: no-store` |
+| Encodage | UTF-8 avec BOM, pour qu'Excel affiche les accents |
+| Séparateur, fins de ligne | `;`, CRLF |
+| Guillemets | RFC 4180 : un champ qui contient `;`, `"`, un retour chariot ou un saut de ligne est entouré de guillemets, et ses `"` sont doublés |
+| Formules | Une cellule de texte qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est précédée d'une apostrophe (RG26) |
+| Dates | `AAAA-MM-JJ` et `AAAA-MM-JJ HH:MM`, à l'heure de La Réunion |
+| Valeur absente | Cellule vide |
+| Limite | 5 000 lignes ; au-delà, `400` « L'export dépasse 5 000 lignes : affinez les filtres. » |
+
+Chaque export réussi ajoute une entrée `EXPORT_CSV` au journal (RG25).
+
+#### `GET /interventions/export` — exporter les interventions (US29)
+
+Paramètres : ceux de `GET /interventions` (`recherche`, `statut`, `urgence`, `technicienId`, `clientId`, `du`, `au`, `tri`), avec les mêmes règles ; `page` et `limit` sont refusés (`400`). Les lignes sont dans l'ordre de la liste.
+
+Colonnes : `id`, `cree_le`, `client`, `code_postal`, `ville`, `type_intervention`, `description`, `urgence`, `statut`, `duree_estimee_min`, `debut_prevu`, `technicien`, `ordre_tournee`, `terminee_le`, `signee` (`oui` / `non`).
+
+Le téléphone et l'e-mail du client, la rue, les informations d'accès, le compte rendu, le motif d'annulation et la signature (image, nom du signataire, empreinte) ne sont pas exportés (minimisation) : seule la colonne `signee` dit si le client a signé (US33).
+
+Réponse `200` : le fichier `interventions-AAAA-MM-JJ.csv`.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Paramètre invalide, `page` ou `limit` présent, plus de 5 000 lignes |
+
+#### `GET /clients/export` — exporter les clients (US32)
+
+Paramètres : `recherche`, `typeClient`, `archives`, `tri` de `GET /clients`, avec les mêmes règles ; `page` et `limit` sont refusés (`400`).
+
+Une ligne par adresse non archivée ; un client sans adresse non archivée (client archivé) sort sur une ligne, colonnes d'adresse vides.
+
+Colonnes : `id`, `type_client`, `nom`, `prenom`, `raison_sociale`, `telephone`, `email`, `rue`, `complement`, `code_postal`, `ville`, `infos_acces`, `archive` (`oui` / `non`), `cree_le`. Ces noms sont reconnus par l'import.
+
+Réponse `200` : le fichier `clients-AAAA-MM-JJ.csv`.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Paramètre invalide, `page` ou `limit` présent, plus de 5 000 lignes |
+
+#### Corps commun aux deux routes d'import
+
+Le navigateur lit le fichier (`File.text()`) et envoie son texte en JSON.
+
+| Champ envoyé | Type | Validation |
+| --- | --- | --- |
+| `contenu` | texte | Obligatoire ; 1 000 000 caractères au plus ; ni caractère NUL ni caractère de remplacement `U+FFFD` (fichier qui n'est pas en UTF-8) ; un BOM de début est retiré ; une ligne d'en-têtes et 1 à 1 000 lignes de données |
+| `separateur` | texte | Facultatif : `;` ou `,` ; détecté sur la ligne d'en-têtes s'il est absent |
+| `correspondance` | objet | Facultatif : `{ "<en-tête du fichier>": "<champ client>" \| null }` ; remplace la correspondance proposée pour les colonnes citées ; `null` ignore la colonne. Les champs : `typeClient`, `nomClient`, `prenomClient`, `raisonSociale`, `telephone`, `emailClient`, `rue`, `complement`, `codePostal`, `ville`, `infosAcces`. Un champ ne peut être choisi que pour une colonne |
+| `strategieDoublons` | texte | `POST /clients/import` seulement, obligatoire : `IGNORER` ou `METTRE_A_JOUR` |
+
+Les colonnes reconnues sans correspondance explicite, la normalisation des en-têtes, la déduction du type de client, la retranscription de l'apostrophe et les règles des doublons sont décrites dans [import-export-csv.md](import-export-csv.md) ; chaque ligne est validée comme le corps de `POST /clients` (section 6.5). Un numéro de ligne est celui du fichier : l'en-tête est la ligne 1, et une ligne entre guillemets sur plusieurs lignes porte le numéro de sa première ligne.
+
+Erreurs communes aux deux routes, qui portent sur le fichier entier :
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Corps invalide ; fichier vide, sans ligne de données, de plus de 1 000 lignes, pas en UTF-8, ou avec des guillemets non fermés ; deux colonnes portant le même en-tête ; correspondance qui cite un en-tête absent ou un champ inconnu, ou qui choisit deux fois le même champ ; champ obligatoire sans colonne (`telephone`, `rue`, `codePostal`, `ville`, et `nomClient` ou `raisonSociale`) |
+| `413` | Corps de plus de 1,5 Mo |
+
+#### `POST /clients/import/analysis` — analyser un fichier (US31)
+
+N'enregistre rien et n'écrit pas dans le journal.
+
+Réponse `200` :
+
+```json
+{
+  "separateur": ";",
+  "enTetes": ["nom", "prenom", "Tel", "adresse", "code_postal", "ville", "remarque"],
+  "correspondance": { "nom": "nomClient", "prenom": "prenomClient", "Tel": "telephone", "adresse": "rue", "code_postal": "codePostal", "ville": "ville", "remarque": null },
+  "colonnesIgnorees": ["remarque"],
+  "apercu": [
+    { "numero": 2, "cellules": ["DUPONT", "Marie", "0692 12 34 56", "12 rue des Manguiers", "97400", "Saint-Denis", ""] }
+  ],
+  "lignes": [
+    { "numero": 2, "resultat": "VALIDE" },
+    { "numero": 3, "resultat": "DOUBLON", "clientId": 8, "motif": "Même téléphone que le client 8" },
+    { "numero": 4, "resultat": "INVALIDE", "erreurs": ["telephone doit contenir 10 chiffres commençant par 0 (espaces et points acceptés)"] }
+  ],
+  "totaux": { "lignes": 3, "valides": 1, "doublons": 1, "invalides": 1 }
+}
+```
+
+`apercu` contient les 10 premières lignes de données, telles que lues. `lignes` contient toutes les lignes ; `resultat` vaut `VALIDE`, `DOUBLON` ou `INVALIDE`. Un doublon d'un client archivé est `DOUBLON` avec le motif « Client archivé : il ne sera pas mis à jour » ; à l'import, il est toujours `IGNORE`. Une ligne qui répète le téléphone ou l'e-mail d'une ligne précédente, pour un client absent de la base, est `INVALIDE` (« Doublon de la ligne N »).
+
+#### `POST /clients/import` — importer un fichier (US31)
+
+Refait toute l'analyse, puis enregistre dans une seule transaction (RG29) : création des lignes `VALIDE` ; pour les `DOUBLON`, rien (`IGNORER`) ou mise à jour du client existant (`METTRE_A_JOUR`, RG28). Écrit une entrée `CLIENTS_IMPORTES` dans le journal après la transaction.
+
+Réponse `200` :
+
+```json
+{
+  "totaux": { "crees": 1, "misAJour": 0, "ignores": 1, "rejetes": 1 },
+  "lignes": [
+    { "numero": 2, "resultat": "CREE", "clientId": 31 },
+    { "numero": 3, "resultat": "IGNORE", "clientId": 8, "motif": "Même téléphone que le client 8" },
+    { "numero": 4, "resultat": "REJETE", "erreurs": ["telephone doit contenir 10 chiffres commençant par 0 (espaces et points acceptés)"] }
+  ]
+}
+```
+
+`resultat` vaut `CREE`, `MIS_A_JOUR`, `IGNORE` ou `REJETE`. Un import sans aucune ligne à enregistrer répond aussi `200`, avec des compteurs à zéro.
+
+| Erreur | Cas |
+| --- | --- |
+| `400` | Erreurs communes ; `strategieDoublons` absente ou invalide |
+| `409` | « Un import est déjà en cours, réessayez dans un instant. » si le verrou n'est pas obtenu en 10 secondes |
+
+### 6.13 Écarts de la mise en œuvre de l'import et de l'export CSV (#47)
+
+Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'implémentation.
+
+| Route | Écart |
+| --- | --- |
+| `GET /interventions/export` | Colonne `signee` (`oui` / `non`) ajoutée après `terminee_le` : la signature du client (US33) a été livrée avant ce lot. Ni l'image, ni le nom du signataire, ni l'empreinte |
+| `GET /clients/export` | La limite de 5 000 porte sur les lignes du fichier, pas sur les clients : 2 501 clients à deux adresses donnent 5 002 lignes et sont refusés |
+| `GET /clients/export`, `GET /interventions/export` | `page` ou `limit` répond `400` avec le message des champs inconnus (« Le champ page n'est pas autorisé ») |
+| `GET /clients/export`, `GET /interventions/export` | `filtres` de l'entrée `EXPORT_CSV` contient les paramètres reçus dans l'ordre de l'URL ; un filtre absent n'y figure pas, même s'il a une valeur par défaut (`tri`, `archives`) |
+| `GET /clients/export`, `GET /interventions/export` | Un `400` (paramètre invalide, plus de 5 000 lignes) n'écrit rien dans le journal ; un `403` n'y écrit que l'entrée `ACCES_REFUSE` (TS-03) |
+| Section 3 | La ligne `413` prévue pour l'import est fusionnée avec celle qui existait (100 Ko) : 100 Ko sur toutes les routes, 1,5 Mo sur les deux routes d'import. Un fichier de plus de 1 000 000 caractères mais de moins de 1,5 Mo reçoit `400`, pas `413` |
+| `POST /clients/import/analysis`, `POST /clients/import` | Le lecteur de formulaires (`application/x-www-form-urlencoded`) garde ses 100 Ko, y compris sur les routes d'import : seul le JSON est relevé |
+| `POST /clients/import/analysis`, `POST /clients/import` | Deux colonnes candidates pour le même champ (« Tel » et « Mobile ») : la première le prend, la seconde est proposée `null` et listée dans `colonnesIgnorees`. Un choix envoyé l'emporte sur la proposition d'une autre colonne ; seul un même champ choisi deux fois dans `correspondance` répond `400` |
+| `POST /clients/import/analysis`, `POST /clients/import` | Deux colonnes au même en-tête, y compris deux en-têtes vides, répondent `400` : le message donne leurs numéros (« Les colonnes 1 et 6 portent le même en-tête »), pas l'en-tête. Une ligne faite seulement de séparateurs est une ligne vide. Un guillemet n'ouvre un champ entre guillemets qu'en début de cellule : au milieu (`3"`), il est gardé tel quel |
+| `POST /clients/import/analysis`, `POST /clients/import` | Un motif nomme le champ de la correspondance (`codePostal doit contenir 5 chiffres`), sans le préfixe `adresse.` de `POST /clients` ; une ligne qui n'a pas le nombre de colonnes de l'en-tête est rejetée par « La ligne a N colonnes au lieu de M » |
+| `POST /clients/import/analysis`, `POST /clients/import` | Une ligne invalide reste `INVALIDE`, même si elle désigne un client existant, et ne réserve ni son téléphone ni son e-mail. Une ligne `DOUBLON` réserve les siens pour son client : une ligne suivante qui reprend l'e-mail ou le téléphone nouveau qu'elle apporte devient doublon du même client (« Même e-mail que la ligne 2, doublon du client 8 »). Une ligne qui désigne deux cibles différentes (deux clients, ou un client et une ligne nouvelle) est rejetée par « Correspond à deux clients différents » |
+| `POST /clients/import` | `MIS_A_JOUR` même si aucune valeur ne change ; seuls les champs renseignés qui diffèrent sont écrits. Un client archivé entre l'analyse et le verrou de sa ligne est `IGNORE` |
+| `POST /clients/import` | Une erreur de la base répond le `500` générique (section 3) ; le log de l'API ne garde que le code Prisma, le code PostgreSQL et le nom de la contrainte, jamais le message ni le détail, qui peuvent citer la ligne du fichier |
+| `POST /clients/import` | `CLIENTS_IMPORTES` est écrit aussi pour un import réussi sans aucune ligne enregistrée (compteurs à zéro) ; un `400`, un `409` ou un `500` n'écrit rien |
+
 ## 7. Points ouverts
 
 - [x] **Routes d'Arnaud** : routes des sections 5.5 à 5.8 validées par le binôme.
@@ -1271,3 +1413,5 @@ Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'i
 - [ ] **Journal des connexions et des comptes** : `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE` et `COMPTE_DESACTIVE` à enregistrer dans le journal des actions (card #27).
 - [ ] **Mot de passe oublié** (US04, Should) : `POST /auth/forgot-password` et `POST /auth/reset-password` ne sont pas développées ; elles dépendent de Mailpit.
 - [ ] **Mot de passe provisoire** : `mdpAChanger` n'est imposé que par le front ; l'API pourrait refuser les autres routes tant qu'il vaut `true`.
+- [ ] **Limiteur de débit** : l'import et l'export ne sont pas limités en nombre d'appels ; à traiter avec `@nestjs/throttler` en même temps que la connexion (#13).
+- [ ] **Import des types d'intervention** (Could) : non traité par US31.

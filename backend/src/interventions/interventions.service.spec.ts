@@ -225,6 +225,75 @@ function creerService({
   return { service, depot, creation, operations, journal, evenements };
 }
 
+describe('InterventionsService : export CSV (US29)', () => {
+  const CRITERES = { tri: '-urgence' as const, statuts: ['PLANIFIEE' as const] };
+
+  function interventions(nombre: number): InterventionDetaillee[] {
+    return Array.from({ length: nombre }, (_, rang) => ({
+      ...interventionDetaillee('PLANIFIEE'),
+      id: rang + 1,
+    }));
+  }
+
+  it('lit toute la liste filtrée avec le tri de la liste, sans pagination de 100', async () => {
+    const { service, depot } = creerService();
+
+    await service.exporter(CRITERES, GESTIONNAIRE, ['statut']);
+
+    expect(depot.rechercher).toHaveBeenCalledWith({ ...CRITERES, page: 1, limit: 5001 });
+  });
+
+  it('renvoie le fichier interventions-AAAA-MM-JJ.csv, une ligne par intervention', async () => {
+    const { service, depot } = creerService();
+    depot.rechercher.mockResolvedValue({ interventions: interventions(2), total: 2 });
+
+    const fichier = await service.exporter(CRITERES, GESTIONNAIRE, []);
+
+    expect(fichier.nom).toBe('interventions-2026-12-07.csv');
+    expect(fichier.contenu.split('\r\n').slice(1, -1)).toEqual([
+      '1;2026-12-07;Hélène Grondin;97400;Saint-Denis;Fuite;Fuite;NORMALE;PLANIFIEE;60;' +
+        '2026-12-07 10:00;Kévin Hoarau;1;;non',
+      '2;2026-12-07;Hélène Grondin;97400;Saint-Denis;Fuite;Fuite;NORMALE;PLANIFIEE;60;' +
+        '2026-12-07 10:00;Kévin Hoarau;1;;non',
+    ]);
+  });
+
+  it('journalise EXPORT_CSV une fois, avec le nombre de lignes et le nom des filtres seulement', async () => {
+    const { service, depot, journal } = creerService();
+    depot.rechercher.mockResolvedValue({ interventions: interventions(3), total: 3 });
+
+    await service.exporter(CRITERES, GESTIONNAIRE, ['statut', 'tri']);
+
+    expect(journal.enregistrer).toHaveBeenCalledTimes(1);
+    expect(journal.enregistrer).toHaveBeenCalledWith({
+      type: 'EXPORT_CSV',
+      auteur: { id: 3, role: 'GESTIONNAIRE' },
+      ressource: 'interventions',
+      lignes: 3,
+      filtres: ['statut', 'tri'],
+    });
+  });
+
+  it('accepte exactement 5 000 lignes', async () => {
+    const { service, depot, journal } = creerService();
+    depot.rechercher.mockResolvedValue({ interventions: interventions(5000), total: 5000 });
+
+    await service.exporter(CRITERES, GESTIONNAIRE, []);
+
+    expect(journal.enregistrer).toHaveBeenCalledWith(expect.objectContaining({ lignes: 5000 }));
+  });
+
+  it('refuse 5 001 lignes (400) sans rien journaliser', async () => {
+    const { service, depot, journal } = creerService();
+    depot.rechercher.mockResolvedValue({ interventions: interventions(5001), total: 9000 });
+
+    await expect(service.exporter(CRITERES, GESTIONNAIRE, [])).rejects.toThrow(
+      new BadRequestException('L’export dépasse 5 000 lignes : affinez les filtres.'),
+    );
+    expect(journal.enregistrer).not.toHaveBeenCalled();
+  });
+});
+
 describe('InterventionsService : lecture et création', () => {
   describe('creer (US14, RG01)', () => {
     it('reprend la durée par défaut du type quand aucune durée n’est envoyée', async () => {

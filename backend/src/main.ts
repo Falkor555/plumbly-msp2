@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
 import { configurerApplication } from './configurer-application.js';
 import { configurerSwagger } from './configurer-swagger.js';
@@ -13,8 +14,8 @@ if (existsSync('.env')) {
 }
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
-  // Helmet, cookies et préfixe : les mêmes réglages que dans les tests d'intégration.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Helmet, cookies, préfixe api/v1 et limites du corps JSON : partagés avec les tests.
   configurerApplication(app);
   // Documentation interactive sur /api/docs, jamais exposée en production :
   // elle donnerait la carte complète de l'API, routes d'administration comprises.

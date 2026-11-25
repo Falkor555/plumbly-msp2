@@ -210,6 +210,18 @@ interface RouteQuiLit {
 const ROUTES_QUI_LISENT_UN_CORPS: RouteQuiLit[] = [
   { methode: 'POST', route: '/clients', profil: 'gestionnaire', url: () => '/clients' },
   {
+    methode: 'POST',
+    route: '/clients/import/analysis',
+    profil: 'gestionnaire',
+    url: () => '/clients/import/analysis',
+  },
+  {
+    methode: 'POST',
+    route: '/clients/import',
+    profil: 'gestionnaire',
+    url: () => '/clients/import',
+  },
+  {
     methode: 'PATCH',
     route: '/clients/:id',
     profil: 'gestionnaire',
@@ -318,11 +330,23 @@ const ROUTES_QUI_LISENT_LA_REQUETE: RouteQuiLit[] = [
   { methode: 'GET', route: '/clients', profil: 'gestionnaire', url: () => '/clients' },
   {
     methode: 'GET',
+    route: '/clients/export',
+    profil: 'gestionnaire',
+    url: () => '/clients/export',
+  },
+  {
+    methode: 'GET',
     route: '/clients/:id/interventions',
     profil: 'gestionnaire',
     url: (f) => `/clients/${f.idClient}/interventions`,
   },
   { methode: 'GET', route: '/interventions', profil: 'gestionnaire', url: () => '/interventions' },
+  {
+    methode: 'GET',
+    route: '/interventions/export',
+    profil: 'gestionnaire',
+    url: () => '/interventions/export',
+  },
   { methode: 'GET', route: '/technicians', profil: 'gestionnaire', url: () => '/technicians' },
   {
     methode: 'GET',
@@ -464,7 +488,7 @@ describe('TS-05 : un champ inconnu est refusé sur chaque route', () => {
     }
   }
 
-  it('TS-05 : la matrice couvre toutes les routes qui lisent un corps (23) ou une requête (7)', () => {
+  it('TS-05 : la matrice couvre toutes les routes qui lisent un corps (25) ou une requête (9)', () => {
     expect(decrireLaMatrice(ROUTES_QUI_LISENT_UN_CORPS)).toEqual(
       routesQuiLisent(RouteParamtypes.BODY),
     );
@@ -472,7 +496,7 @@ describe('TS-05 : un champ inconnu est refusé sur chaque route', () => {
       routesQuiLisent(RouteParamtypes.QUERY),
     );
     expect([ROUTES_QUI_LISENT_UN_CORPS.length, ROUTES_QUI_LISENT_LA_REQUETE.length]).toEqual([
-      23, 7,
+      25, 9,
     ]);
   });
 

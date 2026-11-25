@@ -18,6 +18,7 @@ Ce dossier contient les ADR (*Architecture Decision Records*) de Plumbly. Un ADR
 | [0010](0010-flux-git-develop.md) | Flux Git : `develop` par défaut et une seule fusion finale vers `main` | Acceptée | 2026-11-23 |
 | [0011](0011-vitest-pour-tous-les-tests.md) | Vitest pour tous les tests, front-end et back-end | Acceptée | 2026-11-24 |
 | [0013](0013-signature-client-a-la-cloture.md) | Signature du client à la clôture d'une intervention | Proposée | 2026-11-25 |
+| [0014](0014-import-export-csv.md) | Import et export CSV, sans dépendance, fichier envoyé en JSON | Proposée | 2026-11-25 |
 
 ## Rédiger un nouvel ADR
 
