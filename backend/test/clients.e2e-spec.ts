@@ -62,7 +62,7 @@ describe('clients (e2e)', () => {
 
   beforeEach(async () => {
     await application.prisma.$executeRaw`
-      TRUNCATE TABLE intervention, tournee, adresse, client RESTART IDENTITY`;
+      TRUNCATE TABLE signature_intervention, intervention, tournee, adresse, client RESTART IDENTITY`;
   });
 
   afterAll(async () => {

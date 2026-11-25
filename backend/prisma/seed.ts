@@ -119,8 +119,9 @@ async function viderLesTables(tx: Transaction): Promise<void> {
   // en RESTRICT, et remet les identifiants à 1 pour que les données de test soient stables.
   await tx.$executeRaw`
     TRUNCATE TABLE
-      intervention, tournee, indisponibilite, technicien, adresse, client,
-      type_intervention, jeton_rafraichissement, jeton_reinitialisation, utilisateur
+      signature_intervention, intervention, tournee, indisponibilite, technicien,
+      adresse, client, type_intervention, jeton_rafraichissement, jeton_reinitialisation,
+      utilisateur
     RESTART IDENTITY`;
 }
 

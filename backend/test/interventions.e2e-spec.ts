@@ -61,7 +61,7 @@ describe('interventions (e2e)', () => {
   beforeEach(async () => {
     journal.enregistrer.mockClear();
     await application.prisma.$executeRaw`
-      TRUNCATE TABLE intervention, tournee, indisponibilite RESTART IDENTITY`;
+      TRUNCATE TABLE signature_intervention, intervention, tournee, indisponibilite RESTART IDENTITY`;
   });
 
   afterAll(async () => {
@@ -878,7 +878,7 @@ describe('interventions (e2e)', () => {
       // Plusieurs essais : l'entrelacement qui laisserait passer les deux ne se produit pas à chaque fois.
       for (let essai = 0; essai < 10; essai += 1) {
         await application.prisma.$executeRaw`
-          TRUNCATE TABLE intervention, tournee RESTART IDENTITY`;
+          TRUNCATE TABLE signature_intervention, intervention, tournee RESTART IDENTITY`;
         const idTournee = await creerTournee(fixtures.kevin);
         const premiere = await planifiee(idTournee, 1, '08:00');
         const deuxieme = await planifiee(idTournee, 2, '10:00');

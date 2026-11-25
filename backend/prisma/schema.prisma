@@ -78,6 +78,7 @@ model Utilisateur {
   jetonsReinitialisation JetonReinitialisation[]
   interventionsCreees    Intervention[]
   tourneesCreees         Tournee[]
+  signaturesEnregistrees SignatureIntervention[]
 
   @@map("utilisateur")
 }
@@ -233,10 +234,11 @@ model Intervention {
   idCreateur         Int                @map("id_createur")
   idTournee          Int?               @map("id_tournee")
 
-  adresse          Adresse          @relation(fields: [idAdresse], references: [id], onDelete: Restrict)
-  typeIntervention TypeIntervention @relation(fields: [idTypeIntervention], references: [id], onDelete: Restrict)
-  createur         Utilisateur      @relation(fields: [idCreateur], references: [id], onDelete: Restrict)
-  tournee          Tournee?         @relation(fields: [idTournee], references: [id], onDelete: Restrict)
+  adresse          Adresse                @relation(fields: [idAdresse], references: [id], onDelete: Restrict)
+  typeIntervention TypeIntervention       @relation(fields: [idTypeIntervention], references: [id], onDelete: Restrict)
+  createur         Utilisateur            @relation(fields: [idCreateur], references: [id], onDelete: Restrict)
+  tournee          Tournee?               @relation(fields: [idTournee], references: [id], onDelete: Restrict)
+  signature        SignatureIntervention?
 
   // RG13 : rang unique dans une tournée. La migration le crée en contrainte DEFERRABLE INITIALLY DEFERRED
   // (non exprimable ici) ; le déclarer garde Prisma aligné sur la base et évite qu'il propose de le supprimer.
@@ -246,4 +248,23 @@ model Intervention {
   @@index([idTypeIntervention])
   @@index([idCreateur])
   @@map("intervention")
+}
+
+// US33, ADR 0013 : table séparée pour que les listes d'interventions ne lisent jamais l'image.
+// Les CHECK (taille de l'image, format de l'empreinte, nom non vide) et le déclencheur qui refuse
+// toute mise à jour (RG32) sont écrits à la main dans la migration 20261125120000_signature_intervention.
+model SignatureIntervention {
+  idIntervention Int      @id @map("id_intervention")
+  image          Bytes    @db.ByteA
+  nomSignataire  String   @map("nom_signataire") @db.VarChar(100)
+  // Égale à intervention.terminee_le : les deux viennent de la même lecture de l'horloge du serveur.
+  signeeLe       DateTime @map("signee_le") @db.Timestamptz(3)
+  empreinte      String   @db.Char(64)
+  idAuteur       Int      @map("id_auteur")
+
+  intervention Intervention @relation(fields: [idIntervention], references: [id], onDelete: Restrict)
+  auteur       Utilisateur  @relation(fields: [idAuteur], references: [id], onDelete: Restrict)
+
+  @@index([idAuteur])
+  @@map("signature_intervention")
 }
