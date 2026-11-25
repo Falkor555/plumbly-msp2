@@ -64,6 +64,18 @@ export function versDocumentJournal(action: ActionJournalisee, date: Date): Docu
           filtres: [...action.filtres],
         },
       };
+    case 'CLIENTS_IMPORTES':
+      // L'entité est l'auteur : l'import porte sur plusieurs clients et ne cite aucun d'eux.
+      return {
+        ...enTete(action.type, date, action.auteur, utilisateur(action.auteur.id)),
+        contexte: {
+          strategieDoublons: action.strategieDoublons,
+          crees: action.crees,
+          misAJour: action.misAJour,
+          ignores: action.ignores,
+          rejetes: action.rejetes,
+        },
+      };
   }
 }
 

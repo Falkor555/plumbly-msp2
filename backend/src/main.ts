@@ -1,6 +1,8 @@
 import { existsSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
+import { configurerApplication } from './configurer-application.js';
 import { configurerSwagger } from './configurer-swagger.js';
 
 const PORT_PAR_DEFAUT = 3000;
@@ -12,8 +14,9 @@ if (existsSync('.env')) {
 }
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api/v1');
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Préfixe api/v1 et limites du corps JSON, partagés avec l'application des tests.
+  configurerApplication(app);
   // Documentation interactive sur /api/docs, jamais exposée en production :
   // elle donnerait la carte complète de l'API, routes d'administration comprises.
   if (process.env.NODE_ENV !== 'production') {

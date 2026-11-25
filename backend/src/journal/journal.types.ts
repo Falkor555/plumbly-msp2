@@ -98,6 +98,20 @@ export interface ExportCsv {
   filtres: string[];
 }
 
+/**
+ * Import de clients enregistré (RG25, RG29) : la stratégie choisie et les compteurs du rapport,
+ * jamais un nom, un téléphone ni un e-mail.
+ */
+export interface ClientsImportes {
+  type: 'CLIENTS_IMPORTES';
+  auteur: AuteurJournal;
+  strategieDoublons: 'IGNORER' | 'METTRE_A_JOUR';
+  crees: number;
+  misAJour: number;
+  ignores: number;
+  rejetes: number;
+}
+
 export type ActionJournalisee =
   | StatutModifie
   | InterventionAnnulee
@@ -107,7 +121,8 @@ export type ActionJournalisee =
   | CompteCree
   | CompteDesactive
   | AccesRefuse
-  | ExportCsv;
+  | ExportCsv
+  | ClientsImportes;
 
 export type TypeAction = ActionJournalisee['type'];
 

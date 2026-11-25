@@ -204,6 +204,30 @@ describe('versDocumentJournal', () => {
     expect(document.contexte).toEqual({ ressource: 'clients', lignes: 0, filtres: ['recherche'] });
   });
 
+  it('CLIENTS_IMPORTES : l’entité est l’auteur ; stratégie et compteurs seulement', () => {
+    const action = {
+      type: 'CLIENTS_IMPORTES' as const,
+      auteur: GESTIONNAIRE,
+      strategieDoublons: 'IGNORER' as const,
+      crees: 41,
+      misAJour: 0,
+      ignores: 5,
+      rejetes: 2,
+      // Surplus qu'un appelant pourrait passer par erreur : les lignes du fichier ne doivent pas entrer.
+      lignes: [{ nomClient: 'Grondin', telephone: '0692123456' }],
+    };
+
+    const document = versDocumentJournal(action, DATE);
+
+    expect(document).toEqual({
+      date: DATE,
+      action: 'CLIENTS_IMPORTES',
+      auteur: { id: 2, role: 'GESTIONNAIRE' },
+      entite: { type: 'utilisateur', id: 2 },
+      contexte: { strategieDoublons: 'IGNORER', crees: 41, misAJour: 0, ignores: 5, rejetes: 2 },
+    });
+  });
+
   it('ne recopie de l’auteur que son identifiant et son rôle', () => {
     const utilisateurComplet = { id: 7, role: 'TECHNICIEN', email: 'k@exemple.fr', nom: 'Benali' };
 

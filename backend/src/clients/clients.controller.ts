@@ -12,7 +12,12 @@ import {
   type StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiProduces } from '@nestjs/swagger';
+import {
+  ApiConflictResponse,
+  ApiOperation,
+  ApiPayloadTooLargeResponse,
+  ApiProduces,
+} from '@nestjs/swagger';
 import { Roles } from '../commun/autorisation/roles.decorator.js';
 import { RolesGuard } from '../commun/autorisation/roles.guard.js';
 import {
@@ -23,6 +28,9 @@ import { versReponseCsv } from '../commun/csv/fichier-csv.js';
 import { lireIdentifiant, type PageApi } from '../commun/validation.js';
 import type { InterventionApi } from '../interventions/interventions.types.js';
 import { ClientsService } from './clients.service.js';
+import { ImportClientsService } from './import/import-clients.service.js';
+import type { RapportImport, ReponseAnalyse } from './import/import-clients.types.js';
+import { lireDemandeAnalyse, lireDemandeImport } from './import/import-clients.validation.js';
 import type { AdresseApi, ClientApi } from './clients.types.js';
 import {
   lireCriteresExportClients,
@@ -42,7 +50,10 @@ import {
 @UseGuards(RolesGuard)
 @Roles('ADMIN', 'GESTIONNAIRE')
 export class ClientsController {
-  constructor(private readonly service: ClientsService) {}
+  constructor(
+    private readonly service: ClientsService,
+    private readonly importClients: ImportClientsService,
+  ) {}
 
   /** US08 */
   @Get()
@@ -78,6 +89,42 @@ export class ClientsController {
     // Les clés ont été validées par lireCriteresExportClients : ce sont des noms connus.
     const fichier = await this.service.exporter(criteres, utilisateur, Object.keys(requete));
     return versReponseCsv(fichier);
+  }
+
+  /** US31 : aperçu, correspondance et doublons ; rien n'est enregistré ni journalisé. */
+  @Post('import/analysis')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Analyser un fichier CSV de clients sans rien enregistrer (US31)',
+    description:
+      'Corps JSON { contenu, separateur?, correspondance? } : texte du fichier (1 000 000 ' +
+      'caractères, 1 000 lignes de données au plus). Renvoie le séparateur, les en-têtes, la ' +
+      'correspondance, les 10 premières lignes et le résultat de chaque ligne. Droits : ADMIN, ' +
+      'GESTIONNAIRE.',
+  })
+  @ApiPayloadTooLargeResponse({ description: 'Corps de requête de plus de 1,5 Mo' })
+  analyserImport(@Body() corps: unknown): Promise<ReponseAnalyse> {
+    return this.importClients.analyser(lireDemandeAnalyse(corps));
+  }
+
+  /** US31 : refait l'analyse, enregistre dans une seule transaction (RG29), journalise. */
+  @Post('import')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Importer les lignes valides d’un fichier CSV de clients (US31)',
+    description:
+      'Corps de l’analyse avec strategieDoublons (IGNORER ou METTRE_A_JOUR, obligatoire, RG28). ' +
+      'Crée les lignes valides, ignore ou met à jour les doublons, sans jamais vider un champ ni ' +
+      'toucher un client archivé ; renvoie le rapport. Journal CLIENTS_IMPORTES (RG25). Droits : ' +
+      'ADMIN, GESTIONNAIRE.',
+  })
+  @ApiPayloadTooLargeResponse({ description: 'Corps de requête de plus de 1,5 Mo' })
+  @ApiConflictResponse({ description: 'Un import est déjà en cours' })
+  importer(
+    @Body() corps: unknown,
+    @UtilisateurCourant() utilisateur: UtilisateurConnecte,
+  ): Promise<RapportImport> {
+    return this.importClients.importer(lireDemandeImport(corps), utilisateur);
   }
 
   @Get(':id')
