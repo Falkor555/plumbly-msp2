@@ -1,13 +1,13 @@
 # User stories — Plumbly
 
-Ce document détaille les 31 user stories de Plumbly, regroupées en 7 epics. Chacune suit le format « En tant que…, je veux…, afin de… », porte une priorité MoSCoW et des critères d'acceptation au format « Étant donné / Quand / Alors ». Les acteurs sont décrits dans les [personas](personas.md) et les règles de gestion (RG) dans le [cahier des charges](cahier-des-charges.md#5-règles-de-gestion).
+Ce document détaille les 32 user stories de Plumbly, regroupées en 7 epics. Chacune suit le format « En tant que…, je veux…, afin de… », porte une priorité MoSCoW et des critères d'acceptation au format « Étant donné / Quand / Alors ». Les acteurs sont décrits dans les [personas](personas.md) et les règles de gestion (RG) dans le [cahier des charges](cahier-des-charges.md#5-règles-de-gestion).
 
 ## Priorisation MoSCoW
 
 | Priorité | Signification | Nombre |
 | --- | --- | --- |
 | **M** — Must | Indispensable au MVP, livré en semaine 2 | 19 |
-| **S** — Should | Important, livré si le temps le permet | 10 |
+| **S** — Should | Important, livré si le temps le permet | 11 |
 | **C** — Could | Confort, prévu pour une version suivante | 2 |
 | **W** — Won't | Hors périmètre de cette version (voir cahier des charges, 3.3) | — |
 
@@ -45,6 +45,7 @@ Ce document détaille les 31 user stories de Plumbly, regroupées en 7 epics. Ch
 | US28 | Tableau de bord | Interventions en retard | Gestionnaire | S | #21 |
 | US29 | Import et export | Exporter les interventions en CSV | Gestionnaire | S | #47 |
 | US33 | Interventions | Faire signer le client à la clôture | Technicien | S | #17, #18 |
+| US31 | Import et export | Importer des clients depuis un fichier CSV | Gestionnaire | S | #47 |
 | US32 | Import et export | Exporter les clients en CSV | Gestionnaire | S | #47 |
 
 ---
@@ -302,7 +303,7 @@ La signature est dessinée au doigt sur l'écran du technicien. Elle ne crée pa
 
 ## Epic 7 — Import et export
 
-Règles de gestion RG25 et RG26 ; format des fichiers et règles détaillées dans le [contrat d'API](api.md) (section 6.12).
+Règles de gestion RG25 à RG29 ; format des fichiers et règles détaillées dans le [contrat d'API](api.md) (section 6.12) et dans [import-export-csv.md](import-export-csv.md).
 
 ### US29 — Exporter les interventions en CSV · Should
 
@@ -315,6 +316,20 @@ Règles de gestion RG25 et RG26 ; format des fichiers et règles détaillées da
 - **Étant donné** un export réussi, **alors** le journal des actions enregistre qui a exporté, quoi et combien de lignes, sans aucune donnée de client (RG25).
 - **Étant donné** des filtres qui donnent plus de 5 000 interventions, **quand** j'exporte, **alors** l'export est refusé avec un message qui demande d'affiner les filtres (RG26).
 
+### US31 — Importer des clients depuis un fichier CSV · Should
+
+**En tant que** gestionnaire, **je veux** importer une liste de clients depuis un fichier CSV **afin d'**éviter de ressaisir une base existante à la mise en place de Plumbly.
+
+- **Étant donné** un fichier CSV UTF-8 de 1 Mo et 1 000 lignes au plus, **quand** je le choisis, **alors** l'application affiche les en-têtes, les 10 premières lignes et la correspondance proposée entre les colonnes et les champs client, sans rien enregistrer.
+- **Étant donné** des en-têtes comme « Tel », « Mobile » ou « Courriel », **alors** la correspondance proposée les rattache au bon champ, et je peux la modifier.
+- **Étant donné** une correspondance où il manque un champ obligatoire (téléphone, rue, code postal, ville, et nom ou raison sociale), **alors** l'import est impossible et l'application dit lequel manque.
+- **Étant donné** des lignes invalides, **alors** chacune est listée avec son numéro de ligne dans le fichier et la raison du rejet, et elle n'empêche pas l'import des autres (RG27).
+- **Étant donné** une ligne dont le téléphone ou l'e-mail correspond à un client existant, ou à une ligne précédente du fichier, **alors** elle est signalée comme doublon dans l'aperçu (RG28).
+- **Étant donné** des doublons, **quand** je lance l'import, **alors** je choisis explicitement de les ignorer (par défaut) ou de mettre à jour les clients existants ; aucun client n'est créé en double, et aucune donnée existante n'est effacée (RG28).
+- **Étant donné** un import lancé, **alors** un rapport donne le nombre de clients créés, mis à jour, ignorés et rejetés, avec le détail par ligne.
+- **Étant donné** une erreur de la base pendant l'enregistrement, **alors** aucun client du fichier n'est enregistré (RG29).
+- **Étant donné** un import réussi, **alors** le journal enregistre l'auteur et les compteurs, sans nom, téléphone ni e-mail (RG25).
+- **Étant donné** que je suis technicien, **alors** l'accès est refusé (403).
 ### US32 — Exporter les clients en CSV · Should
 
 **En tant que** gestionnaire ou administrateur, **je veux** exporter les clients en CSV **afin de** les relire, les sauvegarder ou les transmettre à un autre outil.

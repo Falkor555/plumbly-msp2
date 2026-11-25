@@ -84,7 +84,7 @@ Le MVP livré en deux semaines couvre l'authentification, la gestion des clients
 - Vue planning jour / semaine par technicien
 - Vue « ma tournée du jour » sur mobile pour le technicien
 - Signature du client sur le mobile du technicien à la clôture d'une intervention (Should, US33)
-- Export CSV des clients et des interventions filtrées (Should, US29, US32)
+- Import et export CSV des clients, export CSV des interventions filtrées (Should, US29, US31, US32)
 - Tableau de bord : indicateurs d'activité calculés en SQL
 - Journal des actions dans MongoDB, incluant l'historique des changements de statut
 
@@ -174,6 +174,7 @@ Les besoins sont exprimés en user stories, priorisées selon la méthode MoSCoW
 | ID | User story | Priorité | Critères d'acceptation |
 | --- | --- | --- | --- |
 | US29 | En tant que gestionnaire ou administrateur, je veux exporter la liste des interventions filtrée en CSV afin de la suivre ou l'archiver dans un tableur. | S | Seules les lignes filtrées, dans l'ordre de la liste ; accents lisibles dans Excel, formules neutralisées (RG26) ; ni téléphone, ni e-mail, ni adresse précise, ni signature ; 5 000 lignes au plus ; refusé au technicien ; export journalisé (RG25) |
+| US31 | En tant que gestionnaire, je veux importer une liste de clients depuis un fichier CSV afin d'éviter de ressaisir une base existante à la mise en place de Plumbly. | S | Fichier CSV UTF-8 de 1 Mo et 1 000 lignes au plus ; aperçu et correspondance des colonnes modifiable sans rien enregistrer ; lignes invalides listées avec leur numéro sans bloquer les autres (RG27) ; doublons signalés, ignorés ou mis à jour selon un choix explicite, sans rien effacer (RG28) ; rapport des créés, mis à jour, ignorés et rejetés ; une erreur de la base n'enregistre aucun client (RG29) ; refusé au technicien ; import journalisé (RG25) |
 | US32 | En tant que gestionnaire ou administrateur, je veux exporter les clients en CSV afin de les relire, les sauvegarder ou les transmettre à un autre outil. | S | Une ligne par adresse active ; colonnes reconnues par l'import ; mêmes règles d'encodage, de neutralisation, de droits, de limite et de journal que US29 |
 
 ## 5. Règles de gestion
@@ -258,6 +259,9 @@ stateDiagram-v2
 | --- | --- |
 | RG25 | L'import et l'export CSV sont réservés aux administrateurs et aux gestionnaires. Chaque import et chaque export réussi est journalisé dans MongoDB avec l'auteur, la ressource, les compteurs et le nom des filtres utilisés, jamais leurs valeurs ni une donnée de client. |
 | RG26 | Un export est encodé en UTF-8 avec BOM, séparé par des points-virgules, avec des fins de ligne CRLF et des guillemets selon la RFC 4180. Toute cellule de texte qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est précédée d'une apostrophe. Un export est limité à 5 000 lignes. |
+| RG27 | Un fichier importé est un CSV UTF-8 de 1 Mo et 1 000 lignes de données au plus, avec une ligne d'en-têtes. Chaque ligne est validée avec les règles de la création d'un client (US06, RG21). Une ligne invalide est rejetée sans bloquer les autres. |
+| RG28 | Une ligne est un doublon si son téléphone (normalisé) ou son e-mail (sans tenir compte de la casse) est celui d'un client existant ou d'une ligne précédente du fichier. Un doublon n'est jamais créé. Selon le choix explicite de l'utilisateur, il est ignoré (par défaut) ou met à jour le client existant ; une mise à jour n'efface aucune valeur et ne touche jamais un client archivé. |
+| RG29 | Les lignes valides d'un import sont enregistrées dans une seule transaction : en cas d'erreur, aucune n'est gardée. Deux imports ne s'exécutent jamais en même temps. |
 
 ### 5.5 Droits par rôle
 
