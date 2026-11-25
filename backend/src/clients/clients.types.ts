@@ -35,13 +35,16 @@ export type ModificationClient = Partial<IdentiteClient>;
 export const TRIS_CLIENTS = ['nomAffiche', '-nomAffiche', 'creeLe', '-creeLe'] as const;
 export type TriClients = (typeof TRIS_CLIENTS)[number];
 
-/** GET /clients (US08). */
-export interface FiltresClients extends Pagination {
+/** Filtres et tri de la liste des clients, communs à GET /clients et à son export (US32). */
+export interface CriteresClients {
   recherche?: string;
   typeClient?: TypeClient;
   archives: boolean;
   tri: TriClients;
 }
+
+/** GET /clients (US08). */
+export type FiltresClients = Pagination & CriteresClients;
 
 /** GET /clients/:id/interventions (US09). */
 export interface FiltresHistorique extends Pagination {

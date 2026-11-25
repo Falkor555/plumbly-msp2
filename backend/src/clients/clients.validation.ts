@@ -14,6 +14,7 @@ import {
 } from '../commun/validation.js';
 import { StatutIntervention, TypeClient } from '../generated/prisma/client.ts';
 import type {
+  CriteresClients,
   FiltresClients,
   FiltresHistorique,
   ModificationAdresse,
@@ -38,6 +39,7 @@ const CHAMPS_IDENTITE = [
   'emailClient',
 ] as const;
 const CHAMPS_ADRESSE = ['rue', 'complement', 'codePostal', 'ville', 'infosAcces'] as const;
+const CRITERES_DE_LISTE = ['recherche', 'typeClient', 'archives', 'tri'] as const;
 const TYPES_CLIENT = Object.values(TypeClient);
 const STATUTS = Object.values(StatutIntervention);
 
@@ -100,32 +102,24 @@ export function lireModificationAdresse(corps: unknown): ModificationAdresse {
 
 /** GET /clients : clients non archivés triés par nom affiché, par défaut. */
 export function lireFiltresClients(requete: Record<string, unknown>): FiltresClients {
-  const champs = lireObjet(requete, [
-    'page',
-    'limit',
-    'recherche',
-    'typeClient',
-    'archives',
-    'tri',
-  ]);
+  const champs = lireObjet(requete, ['page', 'limit', ...CRITERES_DE_LISTE]);
   const erreurs: string[] = [];
-  const filtres: FiltresClients = {
-    ...lirePagination(champs, erreurs),
-    archives: lireBooleenDeRequete(champs, 'archives', erreurs),
-    tri: lireTri(champs, TRIS_CLIENTS, 'nomAffiche', erreurs),
-  };
-  const recherche = lireRecherche(champs, erreurs);
-  const typeClient = lireEnumeration(champs, 'typeClient', TYPES_CLIENT, erreurs, {
-    obligatoire: false,
-  });
+  const pagination = lirePagination(champs, erreurs);
+  const criteres = lireCriteresDeListe(champs, erreurs);
   signalerErreurs(erreurs);
-  if (recherche !== undefined) {
-    filtres.recherche = recherche;
-  }
-  if (typeClient !== undefined) {
-    filtres.typeClient = typeClient;
-  }
-  return filtres;
+  return { ...pagination, ...criteres };
+}
+
+/**
+ * GET /clients/export (US32) : mêmes filtres et même tri que la liste, sans pagination. page et
+ * limit sont refusés (400) : le fichier contient toute la liste filtrée.
+ */
+export function lireCriteresExportClients(requete: Record<string, unknown>): CriteresClients {
+  const champs = lireObjet(requete, CRITERES_DE_LISTE);
+  const erreurs: string[] = [];
+  const criteres = lireCriteresDeListe(champs, erreurs);
+  signalerErreurs(erreurs);
+  return criteres;
 }
 
 /** GET /clients/:id/interventions : statut accepte plusieurs valeurs séparées par des virgules. */
@@ -142,6 +136,24 @@ export function lireFiltresHistorique(requete: Record<string, unknown>): Filtres
 }
 
 // ---------- Outils ----------
+
+function lireCriteresDeListe(champs: Champs, erreurs: string[]): CriteresClients {
+  const criteres: CriteresClients = {
+    archives: lireBooleenDeRequete(champs, 'archives', erreurs),
+    tri: lireTri(champs, TRIS_CLIENTS, 'nomAffiche', erreurs),
+  };
+  const recherche = lireRecherche(champs, erreurs);
+  const typeClient = lireEnumeration(champs, 'typeClient', TYPES_CLIENT, erreurs, {
+    obligatoire: false,
+  });
+  if (recherche !== undefined) {
+    criteres.recherche = recherche;
+  }
+  if (typeClient !== undefined) {
+    criteres.typeClient = typeClient;
+  }
+  return criteres;
+}
 
 function lireIdentite(
   champs: Champs,

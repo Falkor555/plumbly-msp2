@@ -291,6 +291,12 @@ const ROUTES_QUI_LISENT_LA_REQUETE: RouteQuiLit[] = [
   { methode: 'GET', route: '/clients', profil: 'gestionnaire', url: () => '/clients' },
   {
     methode: 'GET',
+    route: '/clients/export',
+    profil: 'gestionnaire',
+    url: () => '/clients/export',
+  },
+  {
+    methode: 'GET',
     route: '/clients/:id/interventions',
     profil: 'gestionnaire',
     url: (f) => `/clients/${f.idClient}/interventions`,
@@ -437,7 +443,7 @@ describe('TS-05 : un champ inconnu est refusé sur chaque route', () => {
     }
   }
 
-  it('TS-05 : la matrice couvre toutes les routes qui lisent un corps (18) ou une requête (6)', () => {
+  it('TS-05 : la matrice couvre toutes les routes qui lisent un corps (18) ou une requête (7)', () => {
     expect(decrireLaMatrice(ROUTES_QUI_LISENT_UN_CORPS)).toEqual(
       routesQuiLisent(RouteParamtypes.BODY),
     );
@@ -445,7 +451,7 @@ describe('TS-05 : un champ inconnu est refusé sur chaque route', () => {
       routesQuiLisent(RouteParamtypes.QUERY),
     );
     expect([ROUTES_QUI_LISENT_UN_CORPS.length, ROUTES_QUI_LISENT_LA_REQUETE.length]).toEqual([
-      18, 6,
+      18, 7,
     ]);
   });
 

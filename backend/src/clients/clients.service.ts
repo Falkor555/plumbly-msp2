@@ -4,10 +4,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import type { UtilisateurConnecte } from '../commun/autorisation/utilisateur-connecte.js';
+import { ecrireCsv } from '../commun/csv/ecrire-csv.js';
+import {
+  type FichierCsv,
+  LIMITE_DE_LIGNES_EXPORT,
+  nomDuFichierCsv,
+  verifierLimiteExport,
+} from '../commun/csv/fichier-csv.js';
 import { Horloge } from '../commun/horloge.js';
 import { type PageApi, paginer } from '../commun/validation.js';
 import { versInterventionApi } from '../interventions/interventions.presentation.js';
 import type { InterventionApi } from '../interventions/interventions.types.js';
+import { JournalDesActions } from '../journal/journal-des-actions.js';
 import { versAdresseApi, versClientApi } from './clients.presentation.js';
 import {
   type AdresseDuClient,
@@ -18,6 +27,7 @@ import {
 import type {
   AdresseApi,
   ClientApi,
+  CriteresClients,
   FiltresClients,
   FiltresHistorique,
   ModificationAdresse,
@@ -25,6 +35,7 @@ import type {
   NouveauClient,
   NouvelleAdresse,
 } from './clients.types.js';
+import { COLONNES_EXPORT_CLIENTS, versLignesCsvClients } from './export-clients.js';
 import { verifierIdentite } from './regles-clients.js';
 
 /** Gestion des clients : US06 à US10, règles RG21 et RG22 du cahier des charges. */
@@ -33,12 +44,43 @@ export class ClientsService {
   constructor(
     private readonly depot: ClientsRepository,
     private readonly horloge: Horloge,
+    private readonly journal: JournalDesActions,
   ) {}
 
   /** US08 : recherche et liste paginée, adresses en service seulement. */
   async lister(filtres: FiltresClients): Promise<PageApi<ClientApi>> {
     const { clients, total } = await this.depot.rechercher(filtres);
     return paginer(clients.map(versClientApi), total, filtres);
+  }
+
+  /**
+   * US32 : toute la liste filtrée, une ligne par adresse active, dans l'ordre de GET /clients.
+   * Au-delà de 5 000 lignes, refus (RG26) et rien n'est journalisé ; sinon une entrée
+   * EXPORT_CSV avec le nom des filtres reçus (RG25).
+   */
+  async exporter(
+    criteres: CriteresClients,
+    auteur: UtilisateurConnecte,
+    nomsDesFiltres: string[],
+  ): Promise<FichierCsv> {
+    // Une ligne de plus que la limite suffit à savoir qu'elle est dépassée.
+    const { clients } = await this.depot.rechercher({
+      ...criteres,
+      page: 1,
+      limit: LIMITE_DE_LIGNES_EXPORT + 1,
+    });
+    verifierLimiteExport(clients.length);
+    const lignes = versLignesCsvClients(clients);
+    verifierLimiteExport(lignes.length);
+    const contenu = ecrireCsv(COLONNES_EXPORT_CLIENTS, lignes);
+    await this.journal.enregistrer({
+      type: 'EXPORT_CSV',
+      auteur: { id: auteur.id, role: auteur.role },
+      ressource: 'clients',
+      lignes: lignes.length,
+      filtres: nomsDesFiltres,
+    });
+    return { nom: nomDuFichierCsv('clients', this.horloge.maintenant()), contenu };
   }
 
   /** US06 : le client et sa première adresse, créés ensemble (RG21). */

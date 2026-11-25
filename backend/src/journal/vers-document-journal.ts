@@ -54,6 +54,16 @@ export function versDocumentJournal(action: ActionJournalisee, date: Date): Docu
         ...enTete(action.type, date, action.auteur, utilisateur(action.auteur.id)),
         contexte: { methode: action.methode, route: action.route },
       };
+    case 'EXPORT_CSV':
+      // L'entité est l'auteur : un export porte sur une liste et ne cite aucun client.
+      return {
+        ...enTete(action.type, date, action.auteur, utilisateur(action.auteur.id)),
+        contexte: {
+          ressource: action.ressource,
+          lignes: action.lignes,
+          filtres: [...action.filtres],
+        },
+      };
   }
 }
 

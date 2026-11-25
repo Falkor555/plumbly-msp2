@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import {
+  lireCriteresExportClients,
   lireFiltresClients,
   lireFiltresHistorique,
   lireModificationAdresse,
@@ -246,6 +247,46 @@ describe('validation des clients', () => {
     it('refuse un paramètre inconnu', () => {
       expect(messagesDe(() => lireFiltresClients({ ville: 'Saint-Denis' }))).toEqual([
         'Le champ ville n’est pas autorisé',
+      ]);
+    });
+  });
+
+  describe('filtres de l’export (US32)', () => {
+    it('applique les valeurs par défaut de la liste, sans pagination', () => {
+      expect(lireCriteresExportClients({})).toEqual({ archives: false, tri: 'nomAffiche' });
+    });
+
+    it('lit les mêmes filtres que la liste', () => {
+      expect(
+        lireCriteresExportClients({
+          recherche: ' helene ',
+          typeClient: 'PROFESSIONNEL',
+          archives: 'true',
+          tri: '-creeLe',
+        }),
+      ).toEqual({
+        recherche: 'helene',
+        typeClient: 'PROFESSIONNEL',
+        archives: true,
+        tri: '-creeLe',
+      });
+    });
+
+    it.each(['page', 'limit'])(
+      'refuse le paramètre %s : le fichier contient toute la liste',
+      (nom) => {
+        expect(messagesDe(() => lireCriteresExportClients({ [nom]: '1' }))).toEqual([
+          `Le champ ${nom} n’est pas autorisé`,
+        ]);
+      },
+    );
+
+    it('refuse les mêmes valeurs invalides que la liste', () => {
+      expect(
+        messagesDe(() => lireCriteresExportClients({ recherche: 'h', typeClient: 'AUTRE' })),
+      ).toEqual([
+        'recherche doit contenir au moins 2 caractères',
+        'typeClient doit valoir PARTICULIER ou PROFESSIONNEL',
       ]);
     });
   });
