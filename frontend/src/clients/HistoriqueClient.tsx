@@ -2,6 +2,7 @@ import { useCallback, useId, useState } from 'react';
 import { clientsApi } from '../api/clients.api';
 import type { Intervention, ListePaginee, StatutIntervention } from '../api/types';
 import { AlerteChargement } from '../commun/AlerteChargement';
+import { AnnonceDuTotal } from '../commun/AnnonceDuTotal';
 import { CELLULE_TABLEAU, ENTETE_TABLEAU } from '../commun/classes';
 import { dateHeureMetier } from '../commun/dates';
 import { Pagination } from '../commun/Pagination';
@@ -58,6 +59,12 @@ export function HistoriqueClient({ idClient }: Props) {
   return (
     <div className="space-y-3">
       <FiltreStatuts statuts={statuts} onBasculer={basculerStatut} />
+      <AnnonceDuTotal
+        etiquette="Nombre d’interventions"
+        texte={
+          etat.statut === 'pret' ? resultatDeLHistorique(etat.donnees, statuts.length > 0) : null
+        }
+      />
       {/* Repli du focus après « Réessayer » ; ce bloc n'est pas dans l'ordre de tabulation. */}
       <div ref={zoneDeRepli} tabIndex={-1} className="space-y-3 focus:outline-none">
         {etat.statut === 'erreur' ? (
@@ -125,12 +132,10 @@ function ResultatsHistorique({ liste, occupe, filtre, onChangerPage }: PropsResu
     );
   }
   if (liste.data.length === 0) {
+    // Sans role="status" : ce nœud est inséré avec son texte, c'est AnnonceDuTotal qui le lit.
     return (
-      <p
-        role="status"
-        className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte"
-      >
-        {filtre ? 'Aucune intervention avec ces statuts.' : 'Aucune intervention pour ce client.'}
+      <p className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
+        {messageAucuneIntervention(filtre)}
       </p>
     );
   }
@@ -145,6 +150,17 @@ function ResultatsHistorique({ liste, occupe, filtre, onChangerPage }: PropsResu
       />
     </>
   );
+}
+
+/** Annonce d'une réponse : le nombre d'interventions, ou le message qui remplace une liste vide. */
+function resultatDeLHistorique(liste: ListePaginee<Intervention>, filtre: boolean): string {
+  return liste.data.length > 0
+    ? nombreDInterventions(liste.meta.total)
+    : messageAucuneIntervention(filtre);
+}
+
+function messageAucuneIntervention(filtre: boolean): string {
+  return filtre ? 'Aucune intervention avec ces statuts.' : 'Aucune intervention pour ce client.';
 }
 
 function TableauHistorique({

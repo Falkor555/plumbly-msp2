@@ -83,6 +83,16 @@ function section(nom: string): HTMLElement {
   return screen.getByRole('region', { name: nom });
 }
 
+/** Région live du nombre d'interventions, montée avec l'historique même quand il est vide. */
+function zoneDuTotal(historique: HTMLElement): HTMLElement {
+  return within(historique).getByRole('status', { name: 'Nombre d’interventions' });
+}
+
+/** Message d'historique vide affiché à l'écran, hors de la zone du total qui en porte le texte. */
+function messageAffiche(historique: HTMLElement, texte: string): Promise<HTMLElement> {
+  return within(historique).findByText(texte, { ignore: 'script, style, .sr-only' });
+}
+
 async function ouvrirLaFiche(client: Client = heleneAvecAdresseArchivee()): Promise<void> {
   servirLaFiche(client);
   render(<PageFicheClient id={client.id} />);
@@ -240,7 +250,11 @@ describe('historique des interventions du client (US09)', () => {
         'Jean Rivière',
       ],
     ]);
-    expect(within(historique).getByText('3 interventions')).toBeInTheDocument();
+    const pages = within(historique).getByRole('navigation', {
+      name: 'Pages de l’historique des interventions',
+    });
+    expect(within(pages).getByText('3 interventions')).toBeInTheDocument();
+    expect(zoneDuTotal(historique)).toHaveTextContent('3 interventions');
     expect(Object.fromEntries(recues[0])).toEqual({ page: '1', limit: '10' });
   });
 
@@ -330,8 +344,28 @@ describe('historique des interventions du client (US09)', () => {
     await utilisateur.click(within(historique).getByRole('checkbox', { name: 'Annulée' }));
 
     expect(
-      await within(historique).findByText('Aucune intervention avec ces statuts.'),
+      await messageAffiche(historique, 'Aucune intervention avec ces statuts.'),
     ).toBeInTheDocument();
+    expect(zoneDuTotal(historique)).toHaveTextContent('Aucune intervention avec ces statuts.');
+  });
+
+  it('US09 : annonce dans une zone restée en place le filtre qui vide l’historique puis celui qui le remplit', async () => {
+    const utilisateur = userEvent.setup();
+    servirLHistorique(historiqueDeHelene());
+    await ouvrirLaFiche();
+    const historique = section('Historique des interventions');
+    await within(historique).findByText('Recherche de fuite');
+    const zone = zoneDuTotal(historique);
+    expect(zone).toHaveTextContent('3 interventions');
+    await utilisateur.click(within(historique).getByRole('checkbox', { name: 'Annulée' }));
+    await messageAffiche(historique, 'Aucune intervention avec ces statuts.');
+    expect(zone).toHaveTextContent('Aucune intervention avec ces statuts.');
+
+    await utilisateur.click(within(historique).getByRole('checkbox', { name: 'Terminée' }));
+
+    await waitFor(() => expect(zone).toHaveTextContent('1 intervention'));
+    expect(zoneDuTotal(historique)).toBe(zone);
+    expect(within(historique).getByText('Entretien chaudière')).toBeInTheDocument();
   });
 
   it('US09 : indique un client sans intervention', async () => {
@@ -339,11 +373,11 @@ describe('historique des interventions du client (US09)', () => {
 
     await ouvrirLaFiche();
 
+    const historique = section('Historique des interventions');
     expect(
-      await within(section('Historique des interventions')).findByText(
-        'Aucune intervention pour ce client.',
-      ),
+      await messageAffiche(historique, 'Aucune intervention pour ce client.'),
     ).toBeInTheDocument();
+    expect(zoneDuTotal(historique)).toHaveTextContent('Aucune intervention pour ce client.');
   });
 
   it('US09 : une erreur de l’historique s’affiche dans sa section, sans masquer la fiche', async () => {
@@ -408,9 +442,7 @@ function bouton(nom: string): HTMLElement {
 
 /** Région live des messages de succès, présente (vide) dès l'affichage de la fiche. */
 function zoneDAnnonce(): HTMLElement {
-  const zone = document.querySelector<HTMLElement>('main > [aria-live="polite"]');
-  if (!zone) throw new Error('Zone d’annonce absente de la fiche');
-  return zone;
+  return screen.getByRole('status', { name: 'Confirmation' });
 }
 
 describe('modification des coordonnées (US10)', () => {

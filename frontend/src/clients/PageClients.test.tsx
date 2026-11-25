@@ -3,7 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import type { Client } from '../api/types';
-import { clientsDeTest, fabriquerClient, servirLesClients } from '../test/clientsDeTest';
+import {
+  clientsDeTest,
+  fabriquerClient,
+  listePaginee,
+  servirLesClients,
+} from '../test/clientsDeTest';
 import { enregistrerLesRequetes } from '../test/msw/requetesRecues';
 import { serveurApi, urlApi } from '../test/msw/serveur';
 import { PageClients } from './PageClients';
@@ -27,6 +32,21 @@ function champRecherche(): HTMLElement {
 
 function navigationDesPages(): HTMLElement {
   return screen.getByRole('navigation', { name: 'Pages de la liste des clients' });
+}
+
+/** Région live du nombre de clients, montée en permanence, même sans liste affichée. */
+function zoneDuTotal(): HTMLElement {
+  return screen.getByRole('status', { name: 'Nombre de clients' });
+}
+
+/** Message de liste vide affiché à l'écran, hors de la zone du total qui en porte le même texte. */
+function messageAffiche(texte: string): Promise<HTMLElement> {
+  return screen.findByText(texte, { ignore: 'script, style, .sr-only' });
+}
+
+/** Message de chargement : les deux autres statuts de la page sont nommés, lui ne l'est pas. */
+function messageDeChargement(): HTMLElement {
+  return screen.getByRole('status', { name: '' });
 }
 
 function ligneDe(nom: string): HTMLElement {
@@ -89,7 +109,104 @@ describe('liste des clients (US08)', () => {
     expect(recues.map((parametres) => parametres.get('recherche'))).toEqual([null, 'helene']);
     expect(recues[1].get('page')).toBe('1');
     // Le nombre de résultats est un message de statut, lu par le lecteur d'écran (RGAA 7.5).
-    expect(within(navigationDesPages()).getByRole('status')).toHaveTextContent('1 client');
+    expect(zoneDuTotal()).toHaveTextContent('1 client');
+    expect(within(navigationDesPages()).getByText('1 client')).toBeInTheDocument();
+  });
+
+  it('US08 : partant d’une liste vide, annonce le total d’une recherche dans la zone de statut déjà présente', async () => {
+    const utilisateur = userEvent.setup();
+    const trouves = clientsDeTest().slice(0, 3);
+    serveurApi.use(
+      http.get(urlApi('/clients'), ({ request }) => {
+        const avecRecherche = new URL(request.url).searchParams.has('recherche');
+        return HttpResponse.json(listePaginee(avecRecherche ? trouves : []));
+      }),
+    );
+    render(<PageClients />);
+    await messageAffiche('Aucun client enregistré pour le moment.');
+    // Capturée avant la recherche : une région insérée avec son texte ne serait pas lue.
+    const zone = zoneDuTotal();
+    expect(zone).toHaveTextContent('Aucun client enregistré pour le moment.');
+    expect(zone).toHaveAttribute('aria-live', 'polite');
+
+    await utilisateur.type(champRecherche(), 'saint');
+
+    await waitFor(() => expect(zone).toHaveTextContent('3 clients'));
+    expect(zoneDuTotal()).toBe(zone);
+    expect(screen.getAllByRole('rowheader')).toHaveLength(3);
+  });
+
+  it('US08 : partant d’une liste de clients, annonce une recherche sans résultat dans la zone de statut déjà présente', async () => {
+    const utilisateur = userEvent.setup();
+    servirLesClients(clientsDeTest());
+    render(<PageClients />);
+    await attendreLaListe();
+    const zone = zoneDuTotal();
+    expect(zone).toHaveTextContent('5 clients');
+
+    await utilisateur.type(champRecherche(), 'zzz');
+
+    await waitFor(() =>
+      expect(zone).toHaveTextContent('Aucun client ne correspond à ces critères.'),
+    );
+    expect(zoneDuTotal()).toBe(zone);
+    expect(await messageAffiche('Aucun client ne correspond à ces critères.')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('US08 : une recherche qui retrouve le même total l’annonce de nouveau, la zone se vidant pendant la lecture', async () => {
+    const utilisateur = userEvent.setup();
+    const trouves = clientsDeTest().slice(0, 3);
+    let liberer: () => void = () => undefined;
+    const reponseRetenue = new Promise<void>((resolve) => (liberer = resolve));
+    const rechercheRecue = vi.fn();
+    serveurApi.use(
+      http.get(urlApi('/clients'), async ({ request }) => {
+        if (new URL(request.url).searchParams.has('recherche')) {
+          rechercheRecue();
+          await reponseRetenue;
+        }
+        return HttpResponse.json(listePaginee(trouves));
+      }),
+    );
+    render(<PageClients />);
+    await waitFor(() => expect(screen.getAllByRole('rowheader')).toHaveLength(3));
+    const zone = zoneDuTotal();
+    expect(zone).toHaveTextContent('3 clients');
+
+    await utilisateur.type(champRecherche(), 'saint');
+    await vi.waitFor(() => expect(rechercheRecue).toHaveBeenCalledTimes(1));
+
+    // Le tableau précédent reste affiché, mais le total n'est plus celui des critères en cours.
+    expect(zone).toBeEmptyDOMElement();
+    expect(screen.getAllByRole('rowheader')).toHaveLength(3);
+
+    liberer();
+
+    await waitFor(() => expect(zone).toHaveTextContent('3 clients'));
+    expect(zoneDuTotal()).toBe(zone);
+  });
+
+  it('US08 : une relecture en échec vide la zone du total au lieu d’annoncer un total périmé', async () => {
+    const utilisateur = userEvent.setup();
+    servirLesClients(clientsDeTest());
+    serveurApi.use(
+      http.get(urlApi('/clients'), ({ request }) =>
+        new URL(request.url).searchParams.has('recherche') ? HttpResponse.error() : undefined,
+      ),
+    );
+    render(<PageClients />);
+    await attendreLaListe();
+    const zone = zoneDuTotal();
+    expect(zone).toHaveTextContent('5 clients');
+
+    await utilisateur.type(champRecherche(), 'he');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Connexion au serveur impossible. Vérifiez votre réseau puis réessayez.',
+    );
+    expect(zone).toBeEmptyDOMElement();
+    expect(zoneDuTotal()).toBe(zone);
   });
 
   it('US08 : une recherche d’un seul caractère, même entouré d’espaces, n’interroge pas l’API', async () => {
@@ -210,7 +327,7 @@ describe('liste des clients (US08)', () => {
     await utilisateur.click(within(navigationDesPages()).getByRole('button', { name: 'Suivante' }));
     await screen.findByRole('link', { name: 'Client n°16' });
     await utilisateur.type(champRecherche(), 'xy');
-    await screen.findByText('Aucun client ne correspond à ces critères.');
+    await messageAffiche('Aucun client ne correspond à ces critères.');
 
     await utilisateur.clear(champRecherche());
 
@@ -297,10 +414,8 @@ describe('liste des clients (US08)', () => {
 
     await utilisateur.type(champRecherche(), "' OR 1=1 --");
 
-    expect(await screen.findByText('Aucun client ne correspond à ces critères.')).toHaveAttribute(
-      'role',
-      'status',
-    );
+    expect(await messageAffiche('Aucun client ne correspond à ces critères.')).toBeInTheDocument();
+    expect(zoneDuTotal()).toHaveTextContent('Aucun client ne correspond à ces critères.');
     expect(recues.at(-1)?.get('recherche')).toBe("' OR 1=1 --");
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -321,7 +436,8 @@ describe('liste des clients (US08)', () => {
 
     render(<PageClients />);
 
-    expect(await screen.findByText('Aucun client enregistré pour le moment.')).toBeInTheDocument();
+    expect(await messageAffiche('Aucun client enregistré pour le moment.')).toBeInTheDocument();
+    expect(zoneDuTotal()).toHaveTextContent('Aucun client enregistré pour le moment.');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
@@ -339,21 +455,26 @@ describe('liste des clients (US08)', () => {
       }),
     );
     render(<PageClients />);
-    await screen.findByText('Aucun client enregistré pour le moment.');
+    await messageAffiche('Aucun client enregistré pour le moment.');
+    const zone = zoneDuTotal();
 
     await utilisateur.type(champRecherche(), 'he');
     await vi.waitFor(() => expect(rechercheRecue).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByRole('status')).toHaveTextContent('Chargement des clients…');
+    expect(messageDeChargement()).toHaveTextContent('Chargement des clients…');
+    expect(zone).toBeEmptyDOMElement();
     expect(
       screen.queryByText('Aucun client ne correspond à ces critères.'),
     ).not.toBeInTheDocument();
 
     liberer();
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Aucun client ne correspond à ces critères.',
+    await waitFor(() =>
+      expect(zone).toHaveTextContent('Aucun client ne correspond à ces critères.'),
     );
+    expect(await messageAffiche('Aucun client ne correspond à ces critères.')).toBeInTheDocument();
+    expect(screen.queryByText('Chargement des clients…')).not.toBeInTheDocument();
+    expect(zoneDuTotal()).toBe(zone);
   });
 
   it('US08 : une panne réseau affiche une alerte, puis « Réessayer » relit la liste', async () => {
@@ -368,12 +489,17 @@ describe('liste des clients (US08)', () => {
       'Connexion au serveur impossible. Vérifiez votre réseau puis réessayez.',
     );
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    // La zone du total reste dans la page pendant l'erreur, vide, pour annoncer la liste relue.
+    const zone = zoneDuTotal();
+    expect(zone).toBeEmptyDOMElement();
 
     await utilisateur.click(within(alerte).getByRole('button', { name: 'Réessayer' }));
 
     await attendreLaListe();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(recues).toHaveLength(1);
+    expect(zoneDuTotal()).toBe(zone);
+    expect(zone).toHaveTextContent('5 clients');
     // Le bouton a disparu avec l'alerte : le focus reste juste avant la liste relue.
     expect(document.body).not.toHaveFocus();
     await utilisateur.tab();
@@ -441,10 +567,10 @@ describe('création d’un client (US06, US07)', () => {
       clients.push(marieTecher());
       return HttpResponse.json(marieTecher(), { status: 201 });
     });
-    const { container } = render(<PageClients />);
+    render(<PageClients />);
     await attendreLaListe();
     // La région live doit exister, vide, avant le message : sinon il risque de ne pas être lu.
-    const zoneDAnnonce = container.querySelector('main > [aria-live="polite"]');
+    const zoneDAnnonce = screen.getByRole('status', { name: 'Confirmation' });
     expect(zoneDAnnonce).toBeEmptyDOMElement();
     expect(zoneDAnnonce).toHaveAttribute('aria-atomic', 'true');
     const fenetre = await ouvrirLaCreation(utilisateur);

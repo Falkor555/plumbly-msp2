@@ -7,7 +7,12 @@ interface Props {
   meta: ListePaginee<unknown>['meta'];
   /** Nom de la navigation, qui distingue plusieurs listes paginées d'une même page. */
   etiquette: string;
-  /** Total annoncé à côté des pages, par exemple « 12 clients ». */
+  /**
+   * Total affiché à côté des pages, par exemple « 12 clients ». Il n'est pas annoncé ici : la
+   * pagination disparaît avec une liste vide ou en erreur, et une région live insérée avec son
+   * texte n'est pas lue de façon fiable. L'annonce passe par AnnonceDuTotal, toujours présente, qui
+   * porte ce même total pour les aides techniques : il est masqué ici pour ne pas être lu deux fois.
+   */
   libelleTotal: string;
   onChangerPage: (page: number) => void;
 }
@@ -18,8 +23,7 @@ export function Pagination({ meta, etiquette, libelleTotal, onChangerPage }: Pro
   const nombreDePages = Math.max(meta.totalPages, 1);
   return (
     <nav aria-label={etiquette} className="flex flex-wrap items-center gap-3 text-sm">
-      {/* Message de statut (RGAA 7.5) : le nombre de résultats est lu après une recherche. */}
-      <p role="status" className="text-gris-texte tabular-nums">
+      <p aria-hidden="true" className="text-gris-texte tabular-nums">
         {libelleTotal}
       </p>
       <div className="ml-auto flex items-center gap-3">

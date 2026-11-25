@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { clientsApi } from '../api/clients.api';
 import type { Client, CriteresClients, ListePaginee } from '../api/types';
 import { AlerteChargement } from '../commun/AlerteChargement';
+import { AnnonceDuTotal } from '../commun/AnnonceDuTotal';
 import { BOUTON_PRINCIPAL, BOUTON_SECONDAIRE, LIEN } from '../commun/classes';
 import { Pagination } from '../commun/Pagination';
 import { useChargement } from '../commun/useChargement';
@@ -149,6 +150,12 @@ export function PageClients() {
         changerCriteres={changerCriteres}
       />
 
+      <AnnonceDuTotal
+        etiquette="Nombre de clients"
+        texte={
+          etat.statut === 'pret' ? resultatDeLaListe(etat.donnees, filtres.criteresAppliques) : null
+        }
+      />
       {/* Repli du focus après « Réessayer » ; ce bloc n'est pas dans l'ordre de tabulation. */}
       <div ref={zoneDeRepli} tabIndex={-1} className="space-y-4 focus:outline-none">
         {etat.statut === 'erreur' ? (
@@ -183,14 +190,10 @@ function ResultatsClients({ liste, occupe, criteres, onChangerPage }: PropsResul
     );
   }
   if (liste.data.length === 0) {
+    // Sans role="status" : ce nœud est inséré avec son texte, c'est AnnonceDuTotal qui le lit.
     return (
-      <p
-        role="status"
-        className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte"
-      >
-        {criteresActifs(criteres)
-          ? 'Aucun client ne correspond à ces critères.'
-          : 'Aucun client enregistré pour le moment.'}
+      <p className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
+        {messageAucunClient(criteres)}
       </p>
     );
   }
@@ -228,6 +231,17 @@ function AnnonceClientCree({ client }: { client: Client }) {
       </a>
     </>
   );
+}
+
+/** Annonce d'une réponse : le nombre de clients, ou le message qui remplace une liste vide. */
+function resultatDeLaListe(liste: ListePaginee<Client>, criteres: CriteresClients): string {
+  return liste.data.length > 0 ? nombreDeClients(liste.meta.total) : messageAucunClient(criteres);
+}
+
+function messageAucunClient(criteres: CriteresClients): string {
+  return criteresActifs(criteres)
+    ? 'Aucun client ne correspond à ces critères.'
+    : 'Aucun client enregistré pour le moment.';
 }
 
 /** Le tri ne restreint pas la liste : seuls la recherche, le type et les archivés comptent. */
