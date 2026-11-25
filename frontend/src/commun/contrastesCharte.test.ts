@@ -59,6 +59,7 @@ const COUPLES: [texte: string, fond: string, ou: string][] = [
   ['white', 'sarcelle', 'boutons principaux, vue et jour choisis, pastille d’étape'],
   ['white', 'sarcelle-profonde', 'survol des boutons principaux'],
   ['anthracite', 'sarcelle-claire', 'survol des jours de la semaine'],
+  ['white', 'sarcelle-profonde', 'survol du jour courant de la semaine (seul fond au survol)'],
   ['anthracite', 'gray-100', 'survol des boutons secondaires'],
   ['anthracite', 'gray-50', 'survol des cartes d’intervention et d’adresse'],
   ['sarcelle-profonde', 'gray-50', 'lien Itinéraire au survol de la carte d’adresse'],
