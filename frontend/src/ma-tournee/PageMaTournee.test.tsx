@@ -117,6 +117,25 @@ describe('ma tournée du jour (technicien)', () => {
     expect(await screen.findByText("Vous n'avez pas de tournée aujourd'hui.")).toBeInTheDocument();
   });
 
+  it('explique la situation, sans « Réessayer », si le compte n’a pas de fiche technicien (404)', async () => {
+    serveurApi.use(
+      http.get(urlApi('/tours/me/today'), () =>
+        HttpResponse.json(
+          { statusCode: 404, message: 'Aucune fiche technicien n’est liée à ce compte.' },
+          { status: 404 },
+        ),
+      ),
+    );
+
+    render(<PageMaTournee />);
+
+    expect(
+      await screen.findByText(/pas encore rattaché à une fiche technicien/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
+  });
+
   it('indique une tournée créée mais encore vide', async () => {
     serveurApi.use(
       http.get(urlApi('/tours/me/today'), () =>

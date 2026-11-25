@@ -1409,6 +1409,7 @@ Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'i
 - [ ] **Durée d'une intervention** : limites de 15 à 720 minutes à confirmer.
 - [x] **Démarrage d'une intervention** : uniquement le jour de sa tournée, à l'heure de La Réunion ; règle RG24 du cahier des charges (#17).
 - [x] **Swagger** : documentation interactive sur `/api/docs`, désactivée en production. Les corps de requête sont décrits à la main (`@ApiBody`) : la validation est écrite en fonctions (`*.validation.ts`), sans classes DTO dont Swagger pourrait tirer le schéma.
+- [ ] **Corps de requête dans Swagger** : les routes des clients (6) et des techniciens (3), et une route des interventions, n’ont pas de `@ApiBody` ; Swagger n’y propose donc pas de zone de saisie. L’API fonctionne, seule la documentation est incomplète.
 - [x] **Authentification** (card #13) : connexion, rafraîchissement avec rotation, déconnexion, profil, changement de mot de passe et gestion des comptes ; en-têtes de sécurité posés par Helmet.
 - [ ] **Journal des connexions et des comptes** : `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE` et `COMPTE_DESACTIVE` à enregistrer dans le journal des actions (card #27).
 - [ ] **Mot de passe oublié** (US04, Should) : `POST /auth/forgot-password` et `POST /auth/reset-password` ne sont pas développées ; elles dépendent de Mailpit.
