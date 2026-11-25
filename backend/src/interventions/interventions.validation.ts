@@ -17,6 +17,7 @@ import { lireDuree } from './duree.js';
 import {
   type Annulation,
   type CompteRendu,
+  type CriteresInterventions,
   type FiltresInterventions,
   type FinDIntervention,
   type ModificationIntervention,
@@ -47,9 +48,7 @@ const CHAMPS_INTERVENTION = [
   'dureeEstimeeMin',
 ] as const;
 
-const PARAMETRES_DE_LISTE = [
-  'page',
-  'limit',
+const CRITERES_DE_LISTE = [
   'recherche',
   'statut',
   'urgence',
@@ -132,13 +131,33 @@ export function lireCompteRendu(corps: unknown): CompteRendu {
 
 /** GET /interventions (US15) : par défaut, les plus urgentes puis les plus anciennes (RG18). */
 export function lireFiltresInterventions(requete: Record<string, unknown>): FiltresInterventions {
-  const champs = lireObjet(requete, PARAMETRES_DE_LISTE);
+  const champs = lireObjet(requete, ['page', 'limit', ...CRITERES_DE_LISTE]);
   const erreurs: string[] = [];
-  const filtres: FiltresInterventions = {
-    ...lirePagination(champs, erreurs),
-    tri: lireTri(champs, TRIS_INTERVENTIONS, '-urgence', erreurs),
-  };
-  const facultatifs: Partial<FiltresInterventions> = {
+  const pagination = lirePagination(champs, erreurs);
+  const criteres = lireCriteresDeListe(champs, erreurs);
+  signalerErreurs(erreurs);
+  return { ...pagination, ...criteres };
+}
+
+/**
+ * GET /interventions/export (US29) : mêmes filtres et même tri que la liste, sans pagination.
+ * page et limit sont refusés (400) : le fichier contient toute la liste filtrée.
+ */
+export function lireCriteresExportInterventions(
+  requete: Record<string, unknown>,
+): CriteresInterventions {
+  const champs = lireObjet(requete, CRITERES_DE_LISTE);
+  const erreurs: string[] = [];
+  const criteres = lireCriteresDeListe(champs, erreurs);
+  signalerErreurs(erreurs);
+  return criteres;
+}
+
+// ---------- Outils ----------
+
+function lireCriteresDeListe(champs: Champs, erreurs: string[]): CriteresInterventions {
+  const tri = lireTri(champs, TRIS_INTERVENTIONS, '-urgence', erreurs);
+  const facultatifs: Partial<CriteresInterventions> = {
     recherche: lireRecherche(champs, erreurs),
     statuts: lireStatuts(champs.statut, erreurs),
     urgence: lireUrgence(champs, erreurs, { obligatoire: false }),
@@ -146,11 +165,8 @@ export function lireFiltresInterventions(requete: Record<string, unknown>): Filt
     clientId: lireIdentifiantDeRequete(champs, 'clientId', erreurs),
     ...lireJours(champs, erreurs),
   };
-  signalerErreurs(erreurs);
-  return { ...filtres, ...sansChampsAbsents(facultatifs) };
+  return { tri, ...sansChampsAbsents(facultatifs) };
 }
-
-// ---------- Outils ----------
 
 /**
  * Objet signature de POST /complete. lireObjet n'est pas utilisé ici : il lève dès la première

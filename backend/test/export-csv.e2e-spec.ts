@@ -395,4 +395,325 @@ describe('exports CSV (e2e)', () => {
       expect(JSON.stringify(actionsJournalisees())).not.toMatch(/H[ée]l[èe]ne|Grondin/);
     });
   });
+
+  describe('GET /interventions/export (US29)', () => {
+    const EN_TETE_INTERVENTIONS =
+      'id;cree_le;client;code_postal;ville;type_intervention;description;urgence;statut;' +
+      'duree_estimee_min;debut_prevu;technicien;ordre_tournee;terminee_le;signee';
+
+    const exporter = (requete = '', utilisateur = fixtures.gestionnaire) =>
+      telecharger(en(utilisateur).get(`/interventions/export${requete}`));
+
+    interface Planning {
+      idType: number;
+      idTechnicien: number;
+      idTournee: number;
+      idAdresseMarie: number;
+      idClientMarie: number;
+      idAdresseBoulangerie: number;
+    }
+
+    let comptesDeTechnicien = 0;
+
+    /** Marie Dupont (particulière) et la boulangerie Hoarau ; tournée du jour de Karim Payet. */
+    async function creerPlanning(): Promise<Planning> {
+      const { prisma } = application;
+      const type = await prisma.typeIntervention.create({
+        data: { libelle: 'Chauffe-eau', dureeDefautMin: 90 },
+      });
+      // Les comptes restent d'un test à l'autre : l'e-mail, unique (RG23), est numéroté.
+      comptesDeTechnicien += 1;
+      const compte = await creerCompte(prisma, {
+        email: `karim-${comptesDeTechnicien}@test.re`,
+        nom: 'Payet',
+        prenom: 'Karim',
+        role: 'TECHNICIEN',
+      });
+      const technicien = await prisma.technicien.create({
+        data: { telephone: '0692000001', couleurPlanning: '#0F766E', idUtilisateur: compte.id },
+      });
+      const tournee = await prisma.tournee.create({
+        data: {
+          idTechnicien: technicien.id,
+          dateTournee: new Date('2026-12-07T00:00:00Z'),
+          idCreateur: fixtures.gestionnaire.id,
+        },
+      });
+      const idClientMarie = await creerClient({
+        nomClient: 'Dupont',
+        prenomClient: 'Marie',
+        emailClient: 'marie.dupont@exemple.re',
+        adresses: [{ rue: '12 rue des Manguiers', infosAcces: 'Code 4521' }],
+      });
+      await creerClient({
+        typeClient: 'PROFESSIONNEL',
+        nomClient: null,
+        raisonSociale: 'Boulangerie Hoarau',
+        telephone: '0262987654',
+        adresses: [{ rue: '8 avenue de la Victoire', codePostal: '97410', ville: 'Saint-Pierre' }],
+      });
+      const adresses = await prisma.adresse.findMany({ orderBy: { id: 'asc' } });
+      return {
+        idType: type.id,
+        idTechnicien: technicien.id,
+        idTournee: tournee.id,
+        idAdresseMarie: adresses[0].id,
+        idClientMarie,
+        idAdresseBoulangerie: adresses[1].id,
+      };
+    }
+
+    interface InterventionACreer {
+      idAdresse: number;
+      description?: string;
+      urgence?: 'NORMALE' | 'PRIORITAIRE' | 'URGENTE';
+      statut?: 'A_PLANIFIER' | 'PLANIFIEE' | 'EN_COURS' | 'TERMINEE' | 'ANNULEE';
+      creeLe: string;
+      planifiee?: { ordre: number; debut: string };
+      termineeLe?: string;
+      compteRendu?: string;
+      motifAnnulation?: string;
+    }
+
+    async function creerIntervention(planning: Planning, donnees: InterventionACreer) {
+      const intervention = await application.prisma.intervention.create({
+        data: {
+          description: donnees.description ?? 'Plus d’eau chaude',
+          urgence: donnees.urgence ?? 'NORMALE',
+          statut: donnees.statut ?? (donnees.planifiee ? 'PLANIFIEE' : 'A_PLANIFIER'),
+          dureeEstimeeMin: 90,
+          creeLe: new Date(donnees.creeLe),
+          idTournee: donnees.planifiee ? planning.idTournee : null,
+          ordreTournee: donnees.planifiee?.ordre ?? null,
+          debutPrevu: donnees.planifiee ? new Date(donnees.planifiee.debut) : null,
+          demarreeLe: donnees.termineeLe
+            ? new Date(donnees.planifiee?.debut ?? donnees.creeLe)
+            : null,
+          termineeLe: donnees.termineeLe ? new Date(donnees.termineeLe) : null,
+          compteRendu: donnees.compteRendu ?? null,
+          motifAnnulation: donnees.motifAnnulation ?? null,
+          annuleeLe: donnees.statut === 'ANNULEE' ? new Date(donnees.creeLe) : null,
+          idAdresse: donnees.idAdresse,
+          idTypeIntervention: planning.idType,
+          idCreateur: fixtures.gestionnaire.id,
+        },
+      });
+      return intervention.id;
+    }
+
+    it('répond un fichier CSV daté du jour à La Réunion, jamais mis en cache, avec le BOM', async () => {
+      const reponse = await exporter().expect(200);
+
+      expect(reponse.headers['content-type']).toBe('text/csv; charset=utf-8');
+      expect(reponse.headers['content-disposition']).toBe(
+        'attachment; filename="interventions-2026-12-07.csv"',
+      );
+      expect(reponse.headers['cache-control']).toBe('no-store');
+      expect([...(reponse.body as Buffer).subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+      expect(texteDe(reponse)).toBe(`${BOM}${EN_TETE_INTERVENTIONS}\r\n`);
+    });
+
+    it('écrit chaque intervention dans l’ordre de la liste (urgentes, puis plus anciennes)', async () => {
+      const planning = await creerPlanning();
+      await creerIntervention(planning, {
+        idAdresse: planning.idAdresseBoulangerie,
+        description: 'Fuite sous l’évier',
+        creeLe: '2026-12-01T06:00:00Z',
+      });
+      const idSignee = await creerIntervention(planning, {
+        idAdresse: planning.idAdresseMarie,
+        urgence: 'URGENTE',
+        statut: 'TERMINEE',
+        creeLe: '2026-12-03T21:30:00Z',
+        planifiee: { ordre: 1, debut: '2026-12-07T08:00:00+04:00' },
+        termineeLe: '2026-12-07T09:42:00+04:00',
+        compteRendu: 'Résistance changée',
+      });
+      await application.prisma.signatureIntervention.create({
+        data: {
+          idIntervention: idSignee,
+          image: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+          nomSignataire: 'Jean Signataire',
+          signeeLe: new Date('2026-12-07T09:42:00+04:00'),
+          empreinte: 'a'.repeat(64),
+          idAuteur: fixtures.admin.id,
+        },
+      });
+
+      const reponse = await exporter().expect(200);
+
+      expect(lignesDe(reponse)).toEqual([
+        EN_TETE_INTERVENTIONS,
+        '2;2026-12-04;Marie Dupont;97400;Saint-Denis;Chauffe-eau;Plus d’eau chaude;URGENTE;' +
+          'TERMINEE;90;2026-12-07 08:00;Karim Payet;1;2026-12-07 09:42;oui',
+        '1;2026-12-01;Boulangerie Hoarau;97410;Saint-Pierre;Chauffe-eau;Fuite sous l’évier;' +
+          'NORMALE;A_PLANIFIER;90;;;;;non',
+      ]);
+    });
+
+    it('n’exporte ni téléphone, ni e-mail, ni rue, ni accès, ni compte rendu, ni motif, ni signataire', async () => {
+      const planning = await creerPlanning();
+      await creerIntervention(planning, {
+        idAdresse: planning.idAdresseMarie,
+        statut: 'TERMINEE',
+        creeLe: '2026-12-03T06:00:00Z',
+        planifiee: { ordre: 1, debut: '2026-12-07T08:00:00+04:00' },
+        termineeLe: '2026-12-07T09:42:00+04:00',
+        compteRendu: 'Résistance changée',
+      });
+      await creerIntervention(planning, {
+        idAdresse: planning.idAdresseMarie,
+        statut: 'ANNULEE',
+        creeLe: '2026-12-02T06:00:00Z',
+        motifAnnulation: 'Motif confidentiel',
+      });
+
+      const texte = texteDe(await exporter().expect(200));
+
+      for (const absent of [
+        '0692123456',
+        'marie.dupont@exemple.re',
+        '12 rue des Manguiers',
+        'Code 4521',
+        'Résistance changée',
+        'Motif confidentiel',
+      ]) {
+        expect(texte).not.toContain(absent);
+      }
+    });
+
+    it('applique les filtres de la liste : statut, urgence, technicien, client, période, recherche', async () => {
+      const planning = await creerPlanning();
+      await creerIntervention(planning, {
+        idAdresse: planning.idAdresseMarie,
+        urgence: 'URGENTE',
+        creeLe: '2026-12-01T06:00:00Z',
+        planifiee: { ordre: 1, debut: '2026-12-07T08:00:00+04:00' },
+      });
+      await creerIntervention(planning, {
+        idAdresse: planning.idAdresseBoulangerie,
+        description: 'Chasse d’eau',
+        creeLe: '2026-12-02T06:00:00Z',
+      });
+
+      const identifiants = async (requete: string) =>
+        cellulesDe(await exporter(requete).expect(200))
+          .slice(1)
+          .map(([id]) => id);
+
+      expect(await identifiants('?statut=PLANIFIEE')).toEqual(['1']);
+      expect(await identifiants('?urgence=NORMALE')).toEqual(['2']);
+      expect(await identifiants(`?technicienId=${planning.idTechnicien}`)).toEqual(['1']);
+      expect(await identifiants(`?clientId=${planning.idClientMarie}`)).toEqual(['1']);
+      expect(await identifiants('?du=2026-12-07&au=2026-12-07')).toEqual(['1']);
+      expect(await identifiants('?recherche=chasse')).toEqual(['2']);
+    });
+
+    it('respecte le tri demandé', async () => {
+      const planning = await creerPlanning();
+      for (const jour of ['01', '03', '02']) {
+        await creerIntervention(planning, {
+          idAdresse: planning.idAdresseMarie,
+          creeLe: `2026-12-${jour}T06:00:00Z`,
+        });
+      }
+
+      const reponse = await exporter('?tri=-creeLe').expect(200);
+
+      expect(
+        cellulesDe(reponse)
+          .slice(1)
+          .map(([id]) => id),
+      ).toEqual(['2', '3', '1']);
+    });
+
+    it('neutralise une formule dans la description, sans préfixer id, durée ni rang', async () => {
+      const planning = await creerPlanning();
+      await creerIntervention(planning, {
+        idAdresse: planning.idAdresseMarie,
+        description: '=HYPERLINK("http://exemple.re/piege";"Cliquez")',
+        creeLe: '2026-12-01T06:00:00Z',
+        planifiee: { ordre: 1, debut: '2026-12-07T08:00:00+04:00' },
+      });
+
+      const [, ligne] = cellulesDe(await exporter().expect(200));
+
+      expect(ligne[6]).toBe(`'=HYPERLINK("http://exemple.re/piege";"Cliquez")`);
+      expect([ligne[0], ligne[9], ligne[12]]).toEqual(['1', '90', '1']);
+    });
+
+    it('n’est pas captée par GET /interventions/:id (pas de 400 « Identifiant invalide. »)', async () => {
+      const reponse = await exporter().expect(200);
+
+      expect(reponse.headers['content-type']).toBe('text/csv; charset=utf-8');
+    });
+
+    it.each(['page=1', 'limit=50'])(
+      'refuse %s (400) : le fichier contient toute la liste',
+      async (parametre) => {
+        const reponse = await gestionnaire().get(`/interventions/export?${parametre}`).expect(400);
+
+        expect(reponse.body).toEqual({
+          statusCode: 400,
+          message: [`Le champ ${parametre.split('=')[0]} n’est pas autorisé`],
+          error: 'Bad Request',
+        });
+        expect(actionsJournalisees()).toEqual([]);
+      },
+    );
+
+    it('refuse plus de 5 000 lignes (400), sans rien journaliser', async () => {
+      const planning = await creerPlanning();
+      await application.prisma.intervention.createMany({
+        data: Array.from({ length: 5001 }, () => ({
+          description: 'Fuite',
+          urgence: 'NORMALE' as const,
+          dureeEstimeeMin: 30,
+          idAdresse: planning.idAdresseMarie,
+          idTypeIntervention: planning.idType,
+          idCreateur: fixtures.gestionnaire.id,
+        })),
+      });
+
+      const reponse = await gestionnaire().get('/interventions/export').expect(400);
+
+      expect(reponse.body.message).toBe('L’export dépasse 5 000 lignes : affinez les filtres.');
+      expect(actionsJournalisees()).toEqual([]);
+    });
+
+    it('autorise l’administrateur', async () => {
+      await exporter('', fixtures.admin).expect(200);
+    });
+
+    it('refuse le technicien (403) : seul l’accès refusé est journalisé, aucun EXPORT_CSV', async () => {
+      await en(fixtures.technicien).get('/interventions/export').expect(403);
+
+      expect(actionsJournalisees().map(({ type }) => type)).toEqual(['ACCES_REFUSE']);
+    });
+
+    it('répond 401 sans utilisateur', async () => {
+      await en().get('/interventions/export').expect(401);
+    });
+
+    it('journalise EXPORT_CSV avec le nombre de lignes et le nom des filtres, jamais leur valeur', async () => {
+      const planning = await creerPlanning();
+      await creerIntervention(planning, {
+        idAdresse: planning.idAdresseMarie,
+        creeLe: '2026-12-01T06:00:00Z',
+      });
+
+      await exporter('?recherche=Dupont&statut=A_PLANIFIER').expect(200);
+
+      expect(actionsJournalisees()).toEqual([
+        {
+          type: 'EXPORT_CSV',
+          auteur: { id: fixtures.gestionnaire.id, role: 'GESTIONNAIRE' },
+          ressource: 'interventions',
+          lignes: 1,
+          filtres: ['recherche', 'statut'],
+        },
+      ]);
+      expect(JSON.stringify(actionsJournalisees())).not.toContain('Dupont');
+    });
+  });
 });
