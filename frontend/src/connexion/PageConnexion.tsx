@@ -64,6 +64,12 @@ export function PageConnexion() {
           <h1 className="text-xl font-semibold">Connexion</h1>
         </header>
 
+        {etat.motif === 'motDePasseChange' && (
+          <p role="status" className="rounded bg-sarcelle-claire px-3 py-2 text-sm">
+            Mot de passe modifié. Connectez-vous avec votre nouveau mot de passe.
+          </p>
+        )}
+
         {etat.motif === 'expiree' && (
           <p role="status" className="rounded bg-sarcelle-claire px-3 py-2 text-sm">
             Votre session a expiré. Reconnectez-vous pour continuer.

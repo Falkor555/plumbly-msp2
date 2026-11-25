@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router';
 import { PageConnexion } from './connexion/PageConnexion';
 import { PageMaTournee } from './ma-tournee/PageMaTournee';
 import { MiseEnPage } from './mise-en-page/MiseEnPage';
+import { PageMotDePasse } from './mot-de-passe/PageMotDePasse';
 import { PagePlanning } from './planning/PagePlanning';
 import { FournisseurSession } from './session/FournisseurSession';
 import { RedirectionAccueil } from './session/RedirectionAccueil';
@@ -20,6 +21,7 @@ export default function App() {
       <FournisseurSession>
         <Routes>
           <Route path="/connexion" element={<PageConnexion />} />
+          <Route path="/mot-de-passe" element={<PageMotDePasse />} />
           <Route element={<RouteProtegee roles={ROLES_BUREAU} />}>
             <Route element={<MiseEnPage />}>
               <Route path="/planning" element={<PagePlanning />} />

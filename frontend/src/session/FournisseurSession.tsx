@@ -36,6 +36,15 @@ export function FournisseurSession({ children }: { children: ReactNode }) {
     setEtat({ statut: 'deconnecte' });
   }, []);
 
-  const valeur = useMemo(() => ({ etat, connecter, deconnecter }), [etat, connecter, deconnecter]);
+  const changerMotDePasse = useCallback(async (ancien: string, nouveau: string) => {
+    await authApi.changerMotDePasse(ancien, nouveau);
+    // L'API a coupé toutes les sessions, celle-ci comprise : reconnexion avec le nouveau mot de passe.
+    setEtat({ statut: 'deconnecte', motif: 'motDePasseChange' });
+  }, []);
+
+  const valeur = useMemo(
+    () => ({ etat, connecter, deconnecter, changerMotDePasse }),
+    [etat, connecter, deconnecter, changerMotDePasse],
+  );
   return <ContexteSession.Provider value={valeur}>{children}</ContexteSession.Provider>;
 }

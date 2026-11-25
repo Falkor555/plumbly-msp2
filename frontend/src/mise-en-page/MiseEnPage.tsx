@@ -34,6 +34,9 @@ export function MiseEnPage() {
             <span className="hidden text-sm text-gris-texte sm:inline">
               {profil.prenom} {profil.nom}
             </span>
+            <NavLink to="/mot-de-passe" className={LIEN}>
+              Mot de passe
+            </NavLink>
             <button type="button" onClick={() => void deconnecter()} className={BOUTON_SECONDAIRE}>
               Se déconnecter
             </button>

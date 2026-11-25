@@ -19,6 +19,10 @@ export function RouteProtegee({ roles }: { roles: readonly Role[] }) {
     // La page demandée est retenue : la connexion y ramènera l'utilisateur.
     return <Navigate to="/connexion" replace state={{ depuis: location.pathname }} />;
   }
+  if (etat.profil.mdpAChanger) {
+    // US03 : le mot de passe provisoire doit être remplacé avant d'utiliser l'application.
+    return <Navigate to="/mot-de-passe" replace />;
+  }
   if (!roles.includes(etat.profil.role)) {
     return <Navigate to={accueilDe(etat.profil.role)} replace />;
   }

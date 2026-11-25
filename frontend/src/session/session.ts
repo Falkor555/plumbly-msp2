@@ -9,13 +9,14 @@ import type { Profil } from '../api/auth.api';
  */
 export type EtatSession =
   | { statut: 'verification' }
-  | { statut: 'deconnecte'; motif?: 'expiree' }
+  | { statut: 'deconnecte'; motif?: 'expiree' | 'motDePasseChange' }
   | { statut: 'connecte'; profil: Profil };
 
 export interface ValeurSession {
   etat: EtatSession;
   connecter(email: string, motDePasse: string): Promise<Profil>;
   deconnecter(): Promise<void>;
+  changerMotDePasse(ancienMotDePasse: string, nouveauMotDePasse: string): Promise<void>;
 }
 
 /*

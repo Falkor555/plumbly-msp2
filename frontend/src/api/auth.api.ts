@@ -55,4 +55,13 @@ export const authApi = {
       effacerJetonAcces();
     }
   },
+
+  /**
+   * US03, US05. L'API coupe ensuite toutes les sessions, celle-ci comprise : le jeton d'accès
+   * devenu inutile est effacé, l'utilisateur se reconnecte avec son nouveau mot de passe.
+   */
+  async changerMotDePasse(ancienMotDePasse: string, nouveauMotDePasse: string): Promise<void> {
+    await api.patch('/users/me/password', { ancienMotDePasse, nouveauMotDePasse });
+    effacerJetonAcces();
+  },
 };

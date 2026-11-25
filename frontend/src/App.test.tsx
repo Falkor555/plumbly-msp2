@@ -138,3 +138,66 @@ describe('connexion et navigation (US01, US02, US24)', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Connexion' })).toBeInTheDocument();
   });
 });
+
+describe('mot de passe provisoire (US03)', () => {
+  const NOUVEAU = 'Nouveau#MotDePasse2';
+  const KARIM_PROVISOIRE: Profil = { ...KARIM, mdpAChanger: true };
+
+  async function remplir(actuel: string, nouveau: string, confirmation: string) {
+    await userEvent.type(await screen.findByLabelText('Mot de passe provisoire'), actuel);
+    await userEvent.type(screen.getByLabelText('Nouveau mot de passe'), nouveau);
+    await userEvent.type(screen.getByLabelText('Confirmer le nouveau mot de passe'), confirmation);
+  }
+
+  it('impose le changement avant toute autre page', async () => {
+    serveurApi.use(...sessionDe(KARIM_PROVISOIRE));
+    ouvrir('/ma-tournee');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Choisissez votre mot de passe' }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/mot-de-passe');
+  });
+
+  it('garde le bouton désactivé tant que la confirmation diffère', async () => {
+    serveurApi.use(...sessionDe(KARIM_PROVISOIRE));
+    ouvrir('/mot-de-passe');
+    await remplir('Provisoire#1', NOUVEAU, 'Autre#MotDePasse3');
+    expect(screen.getByText('Les deux mots de passe ne sont pas identiques.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enregistrer le mot de passe' })).toBeDisabled();
+  });
+
+  it('enregistre le nouveau mot de passe puis demande de se reconnecter', async () => {
+    serveurApi.use(
+      ...sessionDe(KARIM_PROVISOIRE),
+      http.patch(urlApi('/users/me/password'), () => new HttpResponse(null, { status: 204 })),
+    );
+    ouvrir('/mot-de-passe');
+    await remplir('Provisoire#1', NOUVEAU, NOUVEAU);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer le mot de passe' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Connexion' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Mot de passe modifié. Connectez-vous avec votre nouveau mot de passe.'),
+    ).toBeInTheDocument();
+  });
+
+  it('affiche le refus de l’API et reste sur la page', async () => {
+    serveurApi.use(
+      ...sessionDe(KARIM_PROVISOIRE),
+      http.patch(urlApi('/users/me/password'), () =>
+        HttpResponse.json(
+          { statusCode: 400, message: ['ancienMotDePasse est incorrect'], error: 'Bad Request' },
+          { status: 400 },
+        ),
+      ),
+    );
+    ouvrir('/mot-de-passe');
+    await remplir('Faux#MotDePasse1', NOUVEAU, NOUVEAU);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer le mot de passe' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('ancienMotDePasse est incorrect');
+    expect(window.location.pathname).toBe('/mot-de-passe');
+  });
+});

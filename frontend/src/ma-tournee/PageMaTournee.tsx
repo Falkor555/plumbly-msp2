@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { interventionsApi } from '../api/interventions.api';
+import { ErreurApi } from '../api/erreurs';
 import { tourneesApi } from '../api/tournees.api';
 import type { Intervention, StatutIntervention, Tournee } from '../api/types';
 import { heureMetier, jourMetier, libelleJourLong } from '../commun/dates';
@@ -11,6 +12,14 @@ import { BadgesIntervention } from '../planning/BadgesIntervention';
 import { creneau, nombreDInterventions } from '../planning/presentation';
 import { FenetreCloture, type IssueCloture } from '../signature/FenetreCloture';
 import { FenetreCompteRendu } from './FenetreCompteRendu';
+
+/**
+ * Compte technicien sans fiche technicien (US11 pas encore faite par le gestionnaire) : l'API
+ * répond 404 (contrat d'API, 6.7). Ce n'est pas une panne : un message dit quoi faire, sans
+ * « Réessayer » qui ne changerait rien.
+ */
+const SANS_FICHE_TECHNICIEN = 'sans fiche technicien';
+type ResultatTournee = Tournee | null | typeof SANS_FICHE_TECHNICIEN;
 
 /** L'étape en cours est mise en avant ; celles qui sont finies passent au second plan. */
 const CLASSES_ETAPE: Record<StatutIntervention, string> = {
@@ -39,17 +48,23 @@ export function PageMaTournee() {
   const [fenetre, setFenetre] = useState<FenetreOuverte | null>(null);
   const [annonce, setAnnonce] = useState('');
   const etapeAFocaliser = useRef<number | null>(null);
-  const charger = useCallback(
-    (signal: AbortSignal) => tourneesApi.consulterMaTourneeDuJour(signal),
-    [],
-  );
-  const { etat, recharger, dernieresDonnees } = useChargement<Tournee | null>(charger);
-  const tournee =
+  const charger = useCallback(async (signal: AbortSignal): Promise<ResultatTournee> => {
+    try {
+      return await tourneesApi.consulterMaTourneeDuJour(signal);
+    } catch (erreur) {
+      if (erreur instanceof ErreurApi && erreur.statut === 404) return SANS_FICHE_TECHNICIEN;
+      throw erreur;
+    }
+  }, []);
+  const { etat, recharger, dernieresDonnees } = useChargement<ResultatTournee>(charger);
+  const resultat =
     etat.statut === 'pret'
       ? etat.donnees
       : etat.statut === 'chargement'
         ? dernieresDonnees
         : undefined;
+  const sansFicheTechnicien = resultat === SANS_FICHE_TECHNICIEN;
+  const tournee = sansFicheTechnicien ? undefined : resultat;
   const jour = tournee ? tournee.dateTournee : jourMetier(new Date());
   const idEtape = (idIntervention: number) => `${prefixeEtape}-etape-${idIntervention}`;
 
@@ -101,6 +116,12 @@ export function PageMaTournee() {
             Réessayer
           </button>
         </div>
+      )}
+      {sansFicheTechnicien && (
+        <p className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
+          Votre compte n'est pas encore rattaché à une fiche technicien. Demandez à votre
+          gestionnaire de la créer : votre tournée s'affichera ensuite ici.
+        </p>
       )}
       {tournee === null && (
         <p className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
