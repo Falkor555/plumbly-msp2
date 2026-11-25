@@ -67,10 +67,11 @@ export function lireIdentifiant(texte: string): number {
 }
 
 /*
- * Lecture des corps et des paramètres de requête, écrite à la main en attendant le
- * ValidationPipe et class-validator prévus par le contrat d'API (section 6) : mêmes règles,
- * même format d'erreur (400, message = liste des champs en erreur), champs inconnus refusés.
- * Chaque lecteur ajoute ses erreurs à la liste reçue, pour les renvoyer toutes en une fois.
+ * Lecture des corps et des paramètres de requête, écrite à la main par choix : aucune
+ * dépendance à ajouter, des messages en français, et tout champ inconnu refusé d'emblée (400
+ * qui ne nomme que les champs refusés). Pour les champs connus, chaque lecteur ajoute ses
+ * erreurs à la liste reçue : elles repartent toutes en un seul 400 (message = liste des champs
+ * en erreur).
  */
 
 export type Champs = Record<string, unknown>;
