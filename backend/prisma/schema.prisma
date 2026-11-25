@@ -11,6 +11,10 @@
 // Ce que Prisma ne sait pas décrire est ajouté en SQL écrit à la main dans la migration
 // 20261124000000_schema_initial : contraintes CHECK, contrainte UNIQUE différée
 // (tournée, ordre) et colonne générée intervention.fin_prevue (section 5.1 du modèle).
+//
+// Les commentaires /// sont recopiés par Prisma dans le client généré : ils s'affichent au survol
+// d'un champ dans l'éditeur. Ils ne disent que ce que le type ne dit pas (règle, contrainte SQL
+// invisible ici, raison d'un choix) ; les // restent dans ce fichier.
 
 generator client {
   provider     = "prisma-client"
@@ -25,6 +29,7 @@ datasource db {
 
 // ---------- Énumérations ----------
 
+/// Un seul rôle par compte (section 5.5 du cahier des charges), vérifié par RolesGuard.
 enum Role {
   ADMIN
   GESTIONNAIRE
@@ -33,6 +38,8 @@ enum Role {
   @@map("role_utilisateur")
 }
 
+/// Décide de l'identité exigée (CHECK de la migration) : nom pour un particulier,
+/// raison sociale pour un professionnel.
 enum TypeClient {
   PARTICULIER
   PROFESSIONNEL
@@ -40,6 +47,7 @@ enum TypeClient {
   @@map("type_client")
 }
 
+/// RG17, RG18 : les interventions urgentes passent en tête des listes « à planifier ».
 enum Urgence {
   NORMALE
   PRIORITAIRE
@@ -48,6 +56,8 @@ enum Urgence {
   @@map("urgence")
 }
 
+/// Les transitions autorisées sont dans backend/src/interventions/cycle-de-vie.ts (RG01 à RG06) ;
+/// TERMINEE et ANNULEE sont définitifs.
 enum StatutIntervention {
   A_PLANIFIER
   PLANIFIEE
@@ -63,11 +73,15 @@ enum StatutIntervention {
 model Utilisateur {
   id                Int       @id @default(autoincrement()) @map("id_utilisateur")
   email             String    @unique @db.VarChar(255)
+  /// Empreinte argon2id au format PHC (ADR 0007) : le mot de passe lui-même n'est jamais stocké.
   motDePasseHash    String    @map("mot_de_passe_hash") @db.VarChar(255)
   nom               String    @db.VarChar(100)
   prenom            String    @db.VarChar(100)
   role              Role
+  /// Faux : le compte ne peut plus se connecter ni rafraîchir sa session ; il n'est pas supprimé,
+  /// car ses interventions et tournées le référencent.
   actif             Boolean   @default(true)
+  /// Vrai tant que le mot de passe provisoire donné par l'administrateur n'a pas été remplacé.
   mdpAChanger       Boolean   @default(true) @map("mdp_a_changer")
   derniereConnexion DateTime? @map("derniere_connexion") @db.Timestamptz(3)
   creeLe            DateTime  @default(now()) @map("cree_le") @db.Timestamptz(3)
@@ -83,8 +97,11 @@ model Utilisateur {
   @@map("utilisateur")
 }
 
+/// Rotation (ADR 0007) : chaque jeton ne sert qu'une fois. Un jeton déjà révoqué présenté à
+/// nouveau a été copié : toutes les sessions du compte sont alors révoquées.
 model JetonRafraichissement {
   id            Int       @id @default(autoincrement()) @map("id_jeton_rafraichissement")
+  /// SHA-256 du jeton envoyé en cookie : une fuite de la table ne donne aucune session valide.
   hashJeton     String    @unique @map("hash_jeton") @db.VarChar(255)
   expireLe      DateTime  @map("expire_le") @db.Timestamptz(3)
   revoqueLe     DateTime? @map("revoque_le") @db.Timestamptz(3)
@@ -97,8 +114,10 @@ model JetonRafraichissement {
   @@map("jeton_rafraichissement")
 }
 
+/// Lien « mot de passe oublié » (US04), à usage unique : utiliseLe marque le jeton consommé.
 model JetonReinitialisation {
   id            Int       @id @default(autoincrement()) @map("id_jeton_reinitialisation")
+  /// SHA-256 du jeton envoyé par e-mail, pour la même raison que JetonRafraichissement.hashJeton.
   hashJeton     String    @unique @map("hash_jeton") @db.VarChar(255)
   expireLe      DateTime  @map("expire_le") @db.Timestamptz(3)
   utiliseLe     DateTime? @map("utilise_le") @db.Timestamptz(3)
@@ -121,6 +140,8 @@ model Client {
   raisonSociale String?    @map("raison_sociale") @db.VarChar(150)
   telephone     String     @db.VarChar(20)
   emailClient   String?    @map("email_client") @db.VarChar(255)
+  /// D12 : un client lié à des interventions n'est jamais supprimé, il est archivé (masqué des
+  /// listes, conservé pour l'historique et le reporting).
   archive       Boolean    @default(false)
   archiveLe     DateTime?  @map("archive_le") @db.Timestamptz(3)
   creeLe        DateTime   @default(now()) @map("cree_le") @db.Timestamptz(3)
@@ -140,7 +161,9 @@ model Adresse {
   complement  String?   @db.VarChar(255)
   codePostal  String    @map("code_postal") @db.Char(5)
   ville       String    @db.VarChar(100)
+  /// Digicode, étage, animal… : affiché au technicien pour qu'il accède au logement.
   infosAcces  String?   @map("infos_acces") @db.VarChar(500)
+  /// D12 : archivée plutôt que supprimée, car les interventions passées pointent sur elle.
   archive     Boolean   @default(false)
   archiveLe   DateTime? @map("archive_le") @db.Timestamptz(3)
   idClient    Int       @map("id_client")
@@ -153,9 +176,12 @@ model Adresse {
   @@map("adresse")
 }
 
+/// Séparé de Utilisateur : seuls les techniciens ont un téléphone professionnel, une couleur,
+/// des indisponibilités et des tournées (docs/modele-donnees.md, section 6).
 model Technicien {
   id              Int       @id @default(autoincrement()) @map("id_technicien")
   telephone       String    @db.VarChar(20)
+  /// #RRGGBB (CHECK de la migration), enregistrée en majuscules par l'API pour comparer les couleurs.
   couleurPlanning String    @map("couleur_planning") @db.VarChar(7)
   archive         Boolean   @default(false)
   archiveLe       DateTime? @map("archive_le") @db.Timestamptz(3)
@@ -168,6 +194,8 @@ model Technicien {
   @@map("technicien")
 }
 
+/// RG10 : aucune intervention ne peut être planifiée sur cette période (fin > debut, CHECK de la
+/// migration).
 model Indisponibilite {
   id           Int      @id @default(autoincrement()) @map("id_indisponibilite")
   debut        DateTime @db.Timestamptz(3)
@@ -183,6 +211,7 @@ model Indisponibilite {
 
 model Tournee {
   id           Int      @id @default(autoincrement()) @map("id_tournee")
+  /// Jour calendaire de La Réunion (type date, sans heure) : il ne dépend pas du fuseau du serveur.
   dateTournee  DateTime @map("date_tournee") @db.Date
   creeLe       DateTime @default(now()) @map("cree_le") @db.Timestamptz(3)
   idTechnicien Int      @map("id_technicien")
@@ -204,6 +233,7 @@ model Tournee {
 model TypeIntervention {
   id             Int    @id @default(autoincrement()) @map("id_type_intervention")
   libelle        String @unique @db.VarChar(100)
+  /// En minutes : recopiée dans l'intervention créée sans durée, puis modifiable sur celle-ci.
   dureeDefautMin Int    @map("duree_defaut_min")
 
   interventions Intervention[]
@@ -216,13 +246,19 @@ model Intervention {
   description        String             @db.VarChar(1000)
   urgence            Urgence
   statut             StatutIntervention @default(A_PLANIFIER)
+  /// En minutes, strictement positive (CHECK de la migration).
   dureeEstimeeMin    Int                @map("duree_estimee_min")
+  /// Obligatoire dès que l'intervention est planifiée (CHECK RG02 de la migration).
   debutPrevu         DateTime?          @map("debut_prevu") @db.Timestamptz(3)
-  // Colonne générée par PostgreSQL (debut_prevu + duree_estimee_min) : lecture seule.
-  // Le DEFAULT déclaré ici n'existe que pour Prisma ; la migration crée une colonne GENERATED ALWAYS.
+  /// Colonne générée par PostgreSQL (debut_prevu + duree_estimee_min) : lecture seule, ne jamais
+  /// l'écrire. Le DEFAULT déclaré ici n'existe que pour Prisma ; la migration crée une colonne
+  /// GENERATED ALWAYS.
   finPrevue          DateTime?          @default(dbgenerated()) @map("fin_prevue") @db.Timestamptz(3)
+  /// Rang dans la tournée, à partir de 1 (RG13) ; renseigné si et seulement si idTournee l'est
+  /// (CHECK de la migration).
   ordreTournee       Int?               @map("ordre_tournee")
   compteRendu        String?            @map("compte_rendu") @db.VarChar(2000)
+  /// Obligatoire et non vide quand le statut est ANNULEE (RG05, CHECK de la migration).
   motifAnnulation    String?            @map("motif_annulation") @db.VarChar(500)
   demarreeLe         DateTime?          @map("demarree_le") @db.Timestamptz(3)
   termineeLe         DateTime?          @map("terminee_le") @db.Timestamptz(3)
@@ -250,15 +286,16 @@ model Intervention {
   @@map("intervention")
 }
 
-// US33, ADR 0013 : table séparée pour que les listes d'interventions ne lisent jamais l'image.
-// Les CHECK (taille de l'image, format de l'empreinte, nom non vide) et le déclencheur qui refuse
-// toute mise à jour (RG32) sont écrits à la main dans la migration 20261125120000_signature_intervention.
+/// US33, ADR 0013 : table séparée pour que les listes d'interventions ne lisent jamais l'image.
+/// Les CHECK (taille de l'image, format de l'empreinte, nom non vide) et le déclencheur qui refuse
+/// toute mise à jour (RG32) sont écrits à la main dans la migration 20261125120000_signature_intervention.
 model SignatureIntervention {
   idIntervention Int      @id @map("id_intervention")
   image          Bytes    @db.ByteA
   nomSignataire  String   @map("nom_signataire") @db.VarChar(100)
-  // Égale à intervention.terminee_le : les deux viennent de la même lecture de l'horloge du serveur.
+  /// Égale à intervention.terminee_le : les deux viennent de la même lecture de l'horloge du serveur.
   signeeLe       DateTime @map("signee_le") @db.Timestamptz(3)
+  /// SHA-256 du contenu signé (RG34), recalculée à la lecture pour dire si la signature est intacte.
   empreinte      String   @db.Char(64)
   idAuteur       Int      @map("id_auteur")
 

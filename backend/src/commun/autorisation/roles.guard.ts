@@ -11,11 +11,14 @@ import { CLE_ROLES } from './roles.decorator.js';
 import type { RequeteAuthentifiee } from './utilisateur-connecte.js';
 
 /**
- * Contrôle des rôles, côté serveur, à chaque requête.
+ * Contrôle des rôles, côté serveur, à chaque requête : masquer un bouton dans l'interface n'est
+ * qu'un confort, la barrière de sécurité est ici.
  *
- * Il ne vérifie pas le jeton : l'authentification (card #13) le fait avant lui et place
- * l'utilisateur dans request.user. Tant qu'elle n'existe pas, request.user est vide et toutes
- * les routes protégées répondent 401 : on refuse par défaut plutôt que d'ouvrir l'accès.
+ * Il ne vérifie pas le jeton : AuthentificationGuard (APP_GUARD, #13) le fait avant lui et place
+ * l'utilisateur dans request.user. Si request.user manque quand même (route @Public qui porterait
+ * ce guard par erreur), il répond 401 : on refuse par défaut plutôt que d'ouvrir l'accès.
+ * Le rôle ne suffit pas : le service vérifie aussi le droit sur la ressource (le technicien ne
+ * touche qu'à ses interventions).
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
