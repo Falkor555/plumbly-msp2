@@ -51,6 +51,8 @@ services:
       TZ: ${TZ:-Indian/Reunion}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
       MONGODB_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/${MONGO_DB}?authSource=admin
+      # Obligatoire : sans secret, l'API refuse de démarrer plutôt que de signer avec une clé vide.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant dans .env}
       # Utilisé seulement par `docker compose exec backend npx prisma db seed`.
       SEED_MOT_DE_PASSE: ${SEED_MOT_DE_PASSE:-}
       # Un dossier monté depuis Windows ne transmet pas les événements fichiers au conteneur :

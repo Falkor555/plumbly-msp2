@@ -15,7 +15,7 @@ if (existsSync('.env')) {
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  // Préfixe api/v1 et limites du corps JSON, partagés avec l'application des tests.
+  // Helmet, cookies, préfixe api/v1 et limites du corps JSON : partagés avec les tests.
   configurerApplication(app);
   // Documentation interactive sur /api/docs, jamais exposée en production :
   // elle donnerait la carte complète de l'API, routes d'administration comprises.

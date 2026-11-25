@@ -4,6 +4,7 @@ import type { NextFunction, Response } from 'express';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
+import { AuthentificationGuard } from '../src/authentification/authentification.guard.js';
 import type {
   RequeteAuthentifiee,
   UtilisateurConnecte,
@@ -51,6 +52,8 @@ describe('planification des tournées (e2e)', () => {
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(AuthentificationGuard)
+      .useValue({ canActivate: () => true })
       .overrideProvider(Horloge)
       .useValue({ maintenant: () => MAINTENANT })
       .overrideProvider(JournalDesActions)

@@ -1,53 +1,40 @@
-import type { ReactElement } from 'react';
-import { PageClients } from './clients/PageClients';
-import { PageFicheClient } from './clients/PageFicheClient';
-import { BarreNavigation, type Rubrique } from './commun/BarreNavigation';
-import { lireIdentifiant } from './commun/identifiant';
-import { PageIntrouvable } from './commun/PageIntrouvable';
+import { BrowserRouter, Route, Routes } from 'react-router';
+import { PageConnexion } from './connexion/PageConnexion';
 import { PageMaTournee } from './ma-tournee/PageMaTournee';
+import { MiseEnPage } from './mise-en-page/MiseEnPage';
+import { PageMotDePasse } from './mot-de-passe/PageMotDePasse';
 import { PagePlanning } from './planning/PagePlanning';
+import { FournisseurSession } from './session/FournisseurSession';
+import { RedirectionAccueil } from './session/RedirectionAccueil';
+import { RouteProtegee } from './session/RouteProtegee';
 
-interface PageChoisie {
-  /** null pour la vue du technicien, qui n'a pas la navigation du gestionnaire. */
-  rubrique: Rubrique | null;
-  contenu: ReactElement;
-}
+const ROLES_BUREAU = ['ADMIN', 'GESTIONNAIRE'] as const;
+const ROLES_TERRAIN = ['TECHNICIEN'] as const;
 
-/*
- * Aiguillage provisoire, remplacé par le routeur de l'issue #9 : la page est choisie d'après le
- * chemin de l'adresse, et les liens <a href> ordinaires rechargent l'application.
- *   /ma-tournee      vue du technicien
- *   /clients         liste des clients
- *   /clients/:id     fiche d'un client (id entier positif, sinon « Page introuvable »)
- *   toute autre      planning du gestionnaire
+/**
+ * Routes de l'application (#9, #14). La protection des pages est un confort d'affichage :
+ * la sécurité est assurée par l'API (401 sans jeton, 403 pour un rôle non autorisé).
  */
-function choisirPage(chemin: string): PageChoisie {
-  if (chemin.startsWith('/ma-tournee')) return { rubrique: null, contenu: <PageMaTournee /> };
-  const [rubrique, ...suite] = chemin.split('/').filter(Boolean);
-  if (rubrique === 'clients') return { rubrique: 'clients', contenu: pageDesClients(suite) };
-  return { rubrique: 'planning', contenu: <PagePlanning /> };
-}
-
-/** L'identifiant est validé avant tout appel : /clients/abc n'interroge pas l'API. */
-function pageDesClients(suite: string[]): ReactElement {
-  if (suite.length === 0) return <PageClients />;
-  const id = suite.length === 1 ? lireIdentifiant(suite[0]) : null;
-  if (id === null) {
-    return (
-      <PageIntrouvable retour={{ href: '/clients', libelle: 'Retour à la liste des clients' }} />
-    );
-  }
-  return <PageFicheClient key={id} id={id} />;
-}
-
 export default function App() {
-  const chemin = window.location.pathname;
-  const { rubrique, contenu } = choisirPage(chemin);
-  if (rubrique === null) return contenu;
   return (
-    <>
-      <BarreNavigation rubrique={rubrique} chemin={chemin} />
-      {contenu}
-    </>
+    <BrowserRouter>
+      <FournisseurSession>
+        <Routes>
+          <Route path="/connexion" element={<PageConnexion />} />
+          <Route path="/mot-de-passe" element={<PageMotDePasse />} />
+          <Route element={<RouteProtegee roles={ROLES_BUREAU} />}>
+            <Route element={<MiseEnPage />}>
+              <Route path="/planning" element={<PagePlanning />} />
+            </Route>
+          </Route>
+          <Route element={<RouteProtegee roles={ROLES_TERRAIN} />}>
+            <Route element={<MiseEnPage />}>
+              <Route path="/ma-tournee" element={<PageMaTournee />} />
+            </Route>
+          </Route>
+          <Route path="*" element={<RedirectionAccueil />} />
+        </Routes>
+      </FournisseurSession>
+    </BrowserRouter>
   );
 }

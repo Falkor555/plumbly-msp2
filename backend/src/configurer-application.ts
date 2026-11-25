@@ -1,5 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 
 /*
  * Réglages HTTP communs à main.ts et à l'application des tests d'intégration
@@ -26,6 +28,12 @@ const ROUTES_D_IMPORT = new Set([
 ]);
 
 export function configurerApplication(app: NestExpressApplication): void {
+  // En-têtes de sécurité recommandés par l'OWASP : retire « X-Powered-By: Express »,
+  // interdit l'affichage dans une page tierce (clickjacking), empêche le navigateur de deviner
+  // le type d'une réponse, et limite les scripts exécutables au site lui-même (CSP, contre XSS).
+  app.use(helmet());
+  // Lecture des cookies : le jeton de rafraîchissement arrive dans le cookie refresh_token.
+  app.use(cookieParser());
   app.setGlobalPrefix(PREFIXE_API);
   app.useBodyParser('json', { limit: LIMITE_DE_L_IMPORT, type: estUnImportJson });
   app.useBodyParser('json', { limit: LIMITE_PAR_DEFAUT });

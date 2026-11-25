@@ -341,7 +341,7 @@ Réponse `204`.
 | `400` | Ancien mot de passe incorrect ; nouveau mot de passe non conforme ou identique à l'ancien |
 | `401` | Non connecté |
 
-Effets : mot de passe mis à jour ; `mdpAChanger` passe à `false` ; les autres sessions de l'utilisateur sont révoquées.
+Effets, dans une seule transaction : mot de passe mis à jour ; `mdpAChanger` passe à `false` ; **toutes** les sessions de l'utilisateur sont révoquées, la session en cours comprise. Le cookie de rafraîchissement n'étant envoyé qu'aux routes `/api/v1/auth`, cette route ne peut pas distinguer la session en cours ; tout couper est aussi le plus sûr si l'ancien mot de passe avait fuité. Le front renvoie l'utilisateur vers la connexion.
 
 Un ancien mot de passe incorrect renvoie `400` et non `401` : le front interprète un `401` comme une session expirée et déconnecterait l'utilisateur à tort.
 
@@ -413,7 +413,7 @@ Réponse `200` : l'objet Utilisateur mis à jour.
 
 | Erreur | Cas |
 | --- | --- |
-| `400` | Champ invalide |
+| `400` | Champ invalide ; un administrateur tente de retirer son propre rôle ADMIN |
 | `401` | Non connecté |
 | `403` | Rôle autre qu'ADMIN |
 | `404` | Compte inexistant |
@@ -1409,5 +1409,10 @@ Points que le contrat ne fixait pas, ou qu'il fixait autrement, tranchés à l'i
 - [ ] **Durée d'une intervention** : limites de 15 à 720 minutes à confirmer.
 - [x] **Démarrage d'une intervention** : uniquement le jour de sa tournée, à l'heure de La Réunion ; règle RG24 du cahier des charges (#17).
 - [x] **Swagger** : documentation interactive sur `/api/docs`, désactivée en production. Les corps de requête sont décrits à la main (`@ApiBody`) : la validation est écrite en fonctions (`*.validation.ts`), sans classes DTO dont Swagger pourrait tirer le schéma.
+- [ ] **Corps de requête dans Swagger** : les routes des clients (6) et des techniciens (3), et une route des interventions, n’ont pas de `@ApiBody` ; Swagger n’y propose donc pas de zone de saisie. L’API fonctionne, seule la documentation est incomplète.
+- [x] **Authentification** (card #13) : connexion, rafraîchissement avec rotation, déconnexion, profil, changement de mot de passe et gestion des comptes ; en-têtes de sécurité posés par Helmet.
+- [ ] **Journal des connexions et des comptes** : `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE` et `COMPTE_DESACTIVE` à enregistrer dans le journal des actions (card #27).
+- [ ] **Mot de passe oublié** (US04, Should) : `POST /auth/forgot-password` et `POST /auth/reset-password` ne sont pas développées ; elles dépendent de Mailpit.
+- [ ] **Mot de passe provisoire** : `mdpAChanger` n'est imposé que par le front ; l'API pourrait refuser les autres routes tant qu'il vaut `true`.
 - [ ] **Limiteur de débit** : l'import et l'export ne sont pas limités en nombre d'appels ; à traiter avec `@nestjs/throttler` en même temps que la connexion (#13).
 - [ ] **Import des types d'intervention** (Could) : non traité par US31.

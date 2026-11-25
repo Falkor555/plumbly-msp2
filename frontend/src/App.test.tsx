@@ -1,114 +1,203 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import App from './App';
-import { clientsDeTest, heleneDeTest, listePaginee, servirLesClients } from './test/clientsDeTest';
+import type { Profil } from './api/auth.api';
+import { effacerJetonAcces } from './api/jetonAcces';
 import { serveurApi, urlApi } from './test/msw/serveur';
 
-let requetes: string[];
+const SOPHIE: Profil = {
+  id: 3,
+  email: 'gestion@plumbly.test',
+  nom: 'Martin',
+  prenom: 'Sophie',
+  role: 'GESTIONNAIRE',
+  mdpAChanger: false,
+};
+const KARIM: Profil = {
+  id: 7,
+  email: 'karim.benali@plumbly.test',
+  nom: 'Benali',
+  prenom: 'Karim',
+  role: 'TECHNICIEN',
+  mdpAChanger: false,
+};
 
-beforeEach(() => {
-  requetes = [];
-  serveurApi.events.on('request:start', ({ request }) => {
-    requetes.push(`${request.method} ${new URL(request.url).pathname}`);
-  });
-  return () => serveurApi.events.removeAllListeners();
-});
+const sansSession = http.post(urlApi('/auth/refresh'), () =>
+  HttpResponse.json(
+    { statusCode: 401, message: 'Session expirée : se reconnecter.' },
+    { status: 401 },
+  ),
+);
+const sessionDe = (profil: Profil) => [
+  http.post(urlApi('/auth/refresh'), () =>
+    HttpResponse.json({ accessToken: 'jeton', expiresIn: 900 }),
+  ),
+  http.get(urlApi('/users/me'), () => HttpResponse.json(profil)),
+];
+const connexionReussie = (profil: Profil) =>
+  http.post(urlApi('/auth/login'), () =>
+    HttpResponse.json({ accessToken: 'jeton', expiresIn: 900, utilisateur: profil }),
+  );
+const refusDeConnexion = (statut: number, message: string) =>
+  http.post(urlApi('/auth/login'), () =>
+    HttpResponse.json({ statusCode: statut, message }, { status: statut }),
+  );
+const planningVide = http.get(urlApi('/tours'), () =>
+  HttpResponse.json({ du: '', au: '', techniciens: [] }),
+);
+const pasDeTournee = http.get(
+  urlApi('/tours/me/today'),
+  () => new HttpResponse(null, { status: 204 }),
+);
 
-afterEach(() => window.history.replaceState(null, '', '/'));
-
-function lienDeNavigation(nom: string): HTMLElement {
-  const navigation = screen.getByRole('navigation', { name: 'Navigation principale' });
-  return within(navigation).getByRole('link', { name: nom });
+function ouvrir(chemin: string) {
+  window.history.replaceState(null, '', chemin);
+  render(<App />);
 }
 
-describe('App (aiguillage provisoire en attendant le routeur de #9)', () => {
-  it('US23 : affiche le planning du gestionnaire par défaut, rubrique Planning en cours', async () => {
-    serveurApi.use(
-      http.get(urlApi('/tours'), () => HttpResponse.json({ du: '', au: '', techniciens: [] })),
-    );
+async function seConnecter(email: string, motDePasse = 'Plombier#2026!') {
+  await userEvent.type(await screen.findByLabelText('Adresse e-mail'), email);
+  await userEvent.type(screen.getByLabelText('Mot de passe'), motDePasse);
+  await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
+}
 
-    render(<App />);
+afterEach(() => {
+  window.history.replaceState(null, '', '/');
+  effacerJetonAcces();
+});
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Planning' })).toBeInTheDocument();
-    expect(await screen.findByText('Aucun technicien actif.')).toBeInTheDocument();
-    expect(lienDeNavigation('Planning')).toHaveAttribute('aria-current', 'page');
-    expect(lienDeNavigation('Clients')).not.toHaveAttribute('aria-current');
+describe('connexion et navigation (US01, US02, US24)', () => {
+  it('envoie vers la page de connexion sans session', async () => {
+    serveurApi.use(sansSession);
+    ouvrir('/planning');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Connexion' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/connexion');
   });
 
-  it('US24 : affiche la tournée du technicien sur /ma-tournee, sans la navigation du gestionnaire', async () => {
-    serveurApi.use(
-      http.get(urlApi('/tours/me/today'), () => new HttpResponse(null, { status: 204 })),
-    );
-    window.history.replaceState(null, '', '/ma-tournee');
+  it('connecte un gestionnaire et l’emmène au planning', async () => {
+    serveurApi.use(sansSession, connexionReussie(SOPHIE), planningVide);
+    ouvrir('/');
+    await seConnecter(SOPHIE.email);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Planning' })).toBeInTheDocument();
+    expect(screen.getByText('Sophie Martin')).toBeInTheDocument();
+  });
 
-    render(<App />);
-
+  it('connecte un technicien et l’emmène à sa tournée, sans lien vers le planning', async () => {
+    serveurApi.use(sansSession, connexionReussie(KARIM), pasDeTournee);
+    ouvrir('/');
+    await seConnecter(KARIM.email);
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Ma tournée du jour' }),
+      await screen.findByRole('heading', { level: 1, name: 'Ma tournée du jour' }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Vous n'avez pas de tournée aujourd'hui.")).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Navigation principale' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Planning' })).not.toBeInTheDocument();
   });
 
-  it('US08 : affiche la liste des clients sur /clients, rubrique Clients en cours', async () => {
-    servirLesClients(clientsDeTest());
-    window.history.replaceState(null, '', '/clients');
-
-    render(<App />);
-
-    expect(screen.getByRole('heading', { level: 1, name: 'Clients' })).toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: 'Hélène Payet' })).toHaveAttribute(
-      'href',
-      '/clients/7',
-    );
-    expect(lienDeNavigation('Clients')).toHaveAttribute('aria-current', 'page');
-    expect(lienDeNavigation('Planning')).not.toHaveAttribute('aria-current');
+  it('affiche « E-mail ou mot de passe incorrect » et reste sur la page', async () => {
+    serveurApi.use(sansSession, refusDeConnexion(401, 'E-mail ou mot de passe incorrect.'));
+    ouvrir('/connexion');
+    await seConnecter(SOPHIE.email, 'Mauvais#MotDePasse1');
+    expect(await screen.findByRole('alert')).toHaveTextContent('E-mail ou mot de passe incorrect.');
+    expect(window.location.pathname).toBe('/connexion');
   });
 
-  it('US09 : affiche la fiche du client dont l’identifiant est dans l’adresse', async () => {
-    serveurApi.use(
-      http.get(urlApi('/clients/7'), () => HttpResponse.json(heleneDeTest())),
-      http.get(urlApi('/clients/7/interventions'), () => HttpResponse.json(listePaginee([]))),
-    );
-    window.history.replaceState(null, '', '/clients/7');
+  it('signale le blocage après trop de tentatives (429)', async () => {
+    serveurApi.use(sansSession, refusDeConnexion(429, 'Trop de tentatives de connexion.'));
+    ouvrir('/connexion');
+    await seConnecter(SOPHIE.email);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Trop de tentatives');
+  });
 
-    render(<App />);
+  it('restaure la session au rechargement, sans repasser par la connexion', async () => {
+    serveurApi.use(...sessionDe(SOPHIE), planningVide);
+    ouvrir('/planning');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Planning' })).toBeInTheDocument();
+  });
 
+  it('renvoie un technicien vers sa tournée s’il ouvre le planning', async () => {
+    serveurApi.use(...sessionDe(KARIM), pasDeTournee);
+    ouvrir('/planning');
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Hélène Payet' }),
+      await screen.findByRole('heading', { level: 1, name: 'Ma tournée du jour' }),
     ).toBeInTheDocument();
-    expect(requetes).toContain('GET /api/v1/clients/7');
-    // Le lien Clients mène à la liste, pas à cette fiche : rubrique en cours, sans être la page.
-    expect(lienDeNavigation('Clients')).toHaveAttribute('aria-current', 'true');
-    expect(lienDeNavigation('Planning')).not.toHaveAttribute('aria-current');
+    expect(window.location.pathname).toBe('/ma-tournee');
   });
 
-  it.each([
-    ['des lettres', '/clients/abc'],
-    ['zéro', '/clients/0'],
-    ['un zéro de tête', '/clients/007'],
-    ['un nombre négatif', '/clients/-3'],
-    ['un nombre décimal', '/clients/1.5'],
-    ['un identifiant hors des entiers de l’API', '/clients/2147483648'],
-    ['un chemin plus long', '/clients/7/adresses'],
-  ])(
-    'US09 : affiche « Page introuvable » pour %s, sans aucun appel à l’API',
-    async (_cas, chemin) => {
-      window.history.replaceState(null, '', chemin);
+  it('déconnecte et revient à la page de connexion (US02)', async () => {
+    serveurApi.use(
+      ...sessionDe(SOPHIE),
+      planningVide,
+      http.post(urlApi('/auth/logout'), () => new HttpResponse(null, { status: 204 })),
+    );
+    ouvrir('/planning');
+    await screen.findByRole('heading', { level: 1, name: 'Planning' });
 
-      render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
 
-      expect(
-        screen.getByRole('heading', { level: 1, name: 'Page introuvable' }),
-      ).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Retour à la liste des clients' })).toHaveAttribute(
-        'href',
-        '/clients',
-      );
-      // Laisse partir une éventuelle requête avant de constater qu'il n'y en a eu aucune.
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(requetes).toEqual([]);
-    },
-  );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Connexion' })).toBeInTheDocument();
+  });
+});
+
+describe('mot de passe provisoire (US03)', () => {
+  const NOUVEAU = 'Nouveau#MotDePasse2';
+  const KARIM_PROVISOIRE: Profil = { ...KARIM, mdpAChanger: true };
+
+  async function remplir(actuel: string, nouveau: string, confirmation: string) {
+    await userEvent.type(await screen.findByLabelText('Mot de passe provisoire'), actuel);
+    await userEvent.type(screen.getByLabelText('Nouveau mot de passe'), nouveau);
+    await userEvent.type(screen.getByLabelText('Confirmer le nouveau mot de passe'), confirmation);
+  }
+
+  it('impose le changement avant toute autre page', async () => {
+    serveurApi.use(...sessionDe(KARIM_PROVISOIRE));
+    ouvrir('/ma-tournee');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Choisissez votre mot de passe' }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/mot-de-passe');
+  });
+
+  it('garde le bouton désactivé tant que la confirmation diffère', async () => {
+    serveurApi.use(...sessionDe(KARIM_PROVISOIRE));
+    ouvrir('/mot-de-passe');
+    await remplir('Provisoire#1', NOUVEAU, 'Autre#MotDePasse3');
+    expect(screen.getByText('Les deux mots de passe ne sont pas identiques.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enregistrer le mot de passe' })).toBeDisabled();
+  });
+
+  it('enregistre le nouveau mot de passe puis demande de se reconnecter', async () => {
+    serveurApi.use(
+      ...sessionDe(KARIM_PROVISOIRE),
+      http.patch(urlApi('/users/me/password'), () => new HttpResponse(null, { status: 204 })),
+    );
+    ouvrir('/mot-de-passe');
+    await remplir('Provisoire#1', NOUVEAU, NOUVEAU);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer le mot de passe' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Connexion' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Mot de passe modifié. Connectez-vous avec votre nouveau mot de passe.'),
+    ).toBeInTheDocument();
+  });
+
+  it('affiche le refus de l’API et reste sur la page', async () => {
+    serveurApi.use(
+      ...sessionDe(KARIM_PROVISOIRE),
+      http.patch(urlApi('/users/me/password'), () =>
+        HttpResponse.json(
+          { statusCode: 400, message: ['ancienMotDePasse est incorrect'], error: 'Bad Request' },
+          { status: 400 },
+        ),
+      ),
+    );
+    ouvrir('/mot-de-passe');
+    await remplir('Faux#MotDePasse1', NOUVEAU, NOUVEAU);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer le mot de passe' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('ancienMotDePasse est incorrect');
+    expect(window.location.pathname).toBe('/mot-de-passe');
+  });
 });

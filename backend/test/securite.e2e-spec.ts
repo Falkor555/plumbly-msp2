@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common/constants.js';
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum.js';
 import { MetadataScanner, ModulesContainer, Reflector } from '@nestjs/core';
-import { AppController } from '../src/app.controller.js';
+import { CLE_PUBLIC } from '../src/authentification/public.decorator.js';
 import { ClientsRepository } from '../src/clients/clients.repository.js';
 import { CLE_ROLES } from '../src/commun/autorisation/roles.decorator.js';
 import { RolesGuard } from '../src/commun/autorisation/roles.guard.js';
@@ -51,16 +51,25 @@ type Verbe = 'get' | 'post' | 'patch' | 'put' | 'delete';
 const reflecteur = new Reflector();
 
 /**
- * Seule route volontairement publique. Toute autre exception doit être ajoutée ici, avec sa
- * raison, pour que la relecture la voie.
+ * Seules routes volontairement publiques (marquées @Public, sans jeton d'accès). Toute autre
+ * exception doit être ajoutée ici, avec sa raison, pour que la relecture la voie.
  */
-const CONTROLEURS_PUBLICS: ReadonlyMap<Type, string> = new Map<Type, string>([
+const ROUTES_PUBLIQUES_AUTORISEES: ReadonlyMap<string, string> = new Map([
+  ['GET /', 'Message de bienvenue qui prouve que l’API répond ; ne lit ni n’écrit aucune donnée.'],
   [
-    AppController,
-    'GET /api/v1 renvoie un message de bienvenue qui prouve que l’API répond ; ' +
-      'elle ne lit ni n’écrit aucune donnée.',
+    'POST /auth/login',
+    'Connexion : l’utilisateur n’a pas encore de jeton ; 5 tentatives au plus en 15 minutes.',
+  ],
+  [
+    'POST /auth/refresh',
+    'Renouvellement d’un jeton expiré : la preuve est le cookie de rafraîchissement, vérifié par le service.',
   ],
 ]);
+
+/** Route marquée @Public : le guard d'authentification la laisse passer sans jeton. */
+function estPublique(route: RouteExposee): boolean {
+  return reflecteur.getAllAndOverride(CLE_PUBLIC, [route.gestionnaire, route.controleur]) === true;
+}
 
 /** Routes de tous les contrôleurs chargés par NestJS : un contrôleur ajouté demain y figure. */
 function routesDeLApplication(conteneur: ModulesContainer): RouteExposee[] {
@@ -133,8 +142,8 @@ function verbeDe(route: RouteExposee): Verbe {
 // routes au moment où il déclare ses cas, avant tout beforeAll.
 const application = await demarrerApplication(MAINTENANT);
 const ROUTES = routesDeLApplication(application.app.get(ModulesContainer));
-const ROUTES_PUBLIQUES = ROUTES.filter((route) => CONTROLEURS_PUBLICS.has(route.controleur));
-const ROUTES_PROTEGEES = ROUTES.filter((route) => !CONTROLEURS_PUBLICS.has(route.controleur));
+const ROUTES_PUBLIQUES = ROUTES.filter(estPublique);
+const ROUTES_PROTEGEES = ROUTES.filter((route) => !estPublique(route));
 
 afterAll(async () => {
   await viderLaBase(application.prisma);
@@ -142,9 +151,11 @@ afterAll(async () => {
 });
 
 describe('TS-01 : aucune route n’est ouverte par défaut', () => {
-  it('TS-01 : le parcours trouve plus de 30 routes, dont une seule publique : GET /', () => {
+  it('TS-01 : le parcours trouve plus de 30 routes, dont seulement les 3 publiques autorisées', () => {
     expect(ROUTES.length).toBeGreaterThan(30);
-    expect(ROUTES_PUBLIQUES.map(decrire)).toEqual(['GET / (AppController.getHello)']);
+    expect(ROUTES_PUBLIQUES.map(({ methode, chemin }) => `${methode} ${chemin}`).sort()).toEqual(
+      [...ROUTES_PUBLIQUES_AUTORISEES.keys()].sort(),
+    );
   });
 
   it('TS-01 : chaque route protégée pose RolesGuard et déclare ses rôles avec @Roles', () => {
@@ -297,9 +308,25 @@ const ROUTES_QUI_LISENT_UN_CORPS: RouteQuiLit[] = [
     profil: 'admin',
     url: (f) => `/intervention-types/${f.idType}`,
   },
+  { methode: 'POST', route: '/auth/login', profil: 'gestionnaire', url: () => '/auth/login' },
+  { methode: 'PATCH', route: '/users/me', profil: 'gestionnaire', url: () => '/users/me' },
+  {
+    methode: 'PATCH',
+    route: '/users/me/password',
+    profil: 'gestionnaire',
+    url: () => '/users/me/password',
+  },
+  { methode: 'POST', route: '/users', profil: 'admin', url: () => '/users' },
+  {
+    methode: 'PATCH',
+    route: '/users/:id',
+    profil: 'admin',
+    url: (f) => `/users/${f.technicien.id}`,
+  },
 ];
 
 const ROUTES_QUI_LISENT_LA_REQUETE: RouteQuiLit[] = [
+  { methode: 'GET', route: '/users', profil: 'admin', url: () => '/users' },
   { methode: 'GET', route: '/clients', profil: 'gestionnaire', url: () => '/clients' },
   {
     methode: 'GET',
@@ -461,7 +488,7 @@ describe('TS-05 : un champ inconnu est refusé sur chaque route', () => {
     }
   }
 
-  it('TS-05 : la matrice couvre toutes les routes qui lisent un corps (20) ou une requête (8)', () => {
+  it('TS-05 : la matrice couvre toutes les routes qui lisent un corps (25) ou une requête (9)', () => {
     expect(decrireLaMatrice(ROUTES_QUI_LISENT_UN_CORPS)).toEqual(
       routesQuiLisent(RouteParamtypes.BODY),
     );
@@ -469,7 +496,7 @@ describe('TS-05 : un champ inconnu est refusé sur chaque route', () => {
       routesQuiLisent(RouteParamtypes.QUERY),
     );
     expect([ROUTES_QUI_LISENT_UN_CORPS.length, ROUTES_QUI_LISENT_LA_REQUETE.length]).toEqual([
-      20, 8,
+      25, 9,
     ]);
   });
 
