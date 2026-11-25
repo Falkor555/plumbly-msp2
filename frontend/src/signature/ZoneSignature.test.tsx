@@ -1,45 +1,9 @@
 import { createRef } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { IMAGE_PNG_DE_TEST as IMAGE, simulerCanvas } from '../test/canvas';
 import { type PoigneeZoneSignature, ZoneSignature } from './ZoneSignature';
-
-/*
- * jsdom n'a ni canvas ni capture du pointeur : le contexte 2D, l'export PNG et le cadre affiché
- * sont simulés. Le cadre fait 300 × 100 px : un point de l'écran vaut le double dans le canvas.
- */
-
-const IMAGE = 'data:image/png;base64,iVBORw0KGgo=';
-
-function simulerCanvas() {
-  const pinceau = {
-    beginPath: vi.fn(),
-    arc: vi.fn(),
-    fill: vi.fn(),
-    moveTo: vi.fn(),
-    lineTo: vi.fn(),
-    stroke: vi.fn(),
-    clearRect: vi.fn(),
-  };
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
-    pinceau as unknown as CanvasRenderingContext2D,
-  );
-  const exporter = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(IMAGE);
-  vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({
-    left: 0,
-    top: 0,
-    width: 300,
-    height: 100,
-  } as DOMRect);
-  return { pinceau, exporter };
-}
-
-beforeEach(() => {
-  Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-    value: vi.fn(),
-    configurable: true,
-  });
-});
 
 function afficher(desactivee = false) {
   const onChangement = vi.fn();

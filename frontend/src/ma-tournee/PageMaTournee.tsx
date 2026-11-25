@@ -1,11 +1,15 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { interventionsApi } from '../api/interventions.api';
 import { tourneesApi } from '../api/tournees.api';
 import type { Intervention, StatutIntervention, Tournee } from '../api/types';
-import { jourMetier, libelleJourLong } from '../commun/dates';
+import { heureMetier, jourMetier, libelleJourLong } from '../commun/dates';
 import { lienItineraire, lienTelephone } from '../commun/liens';
+import { messageErreur } from '../commun/messageErreur';
 import { useChargement } from '../commun/useChargement';
 import { BadgesIntervention } from '../planning/BadgesIntervention';
 import { creneau, nombreDInterventions } from '../planning/presentation';
+import { FenetreCloture } from '../signature/FenetreCloture';
+import { FenetreCompteRendu } from './FenetreCompteRendu';
 
 /** L'étape en cours est mise en avant ; celles qui sont finies passent au second plan. */
 const CLASSES_ETAPE: Record<StatutIntervention, string> = {
@@ -16,13 +20,31 @@ const CLASSES_ETAPE: Record<StatutIntervention, string> = {
   ANNULEE: 'bg-gray-50 text-gris-texte',
 };
 
-/** US24 : la tournée du jour du technicien connecté, pensée pour le téléphone. */
+const BOUTON_PRINCIPAL =
+  'flex h-11 w-full items-center justify-center rounded bg-sarcelle px-4 font-semibold text-white hover:bg-sarcelle-profonde focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle disabled:cursor-not-allowed disabled:opacity-50';
+const BOUTON_SECONDAIRE =
+  'flex h-11 w-full items-center justify-center rounded border border-gray-300 bg-white px-4 font-semibold text-sarcelle-profonde hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle';
+
+type FenetreOuverte = { type: 'cloture' | 'compte rendu'; intervention: Intervention };
+
+/**
+ * US24 : la tournée du jour du technicien connecté, pensée pour le téléphone. US17, US18 et
+ * US33 : chaque étape propose l'action de son statut ; la tournée est relue après chacune.
+ */
 export function PageMaTournee() {
+  const [fenetre, setFenetre] = useState<FenetreOuverte | null>(null);
   const charger = useCallback(
     (signal: AbortSignal) => tourneesApi.consulterMaTourneeDuJour(signal),
     [],
   );
   const { etat, recharger } = useChargement<Tournee | null>(charger);
+  const fermerFenetre = useCallback(
+    (modifiee: boolean) => {
+      setFenetre(null);
+      if (modifiee) recharger();
+    },
+    [recharger],
+  );
   const jour =
     etat.statut === 'pret' && etat.donnees ? etat.donnees.dateTournee : jourMetier(new Date());
 
@@ -61,16 +83,36 @@ export function PageMaTournee() {
           </p>
           <ol className="space-y-3">
             {etat.donnees.interventions.map((intervention, rang) => (
-              <EtapeTournee key={intervention.id} intervention={intervention} numero={rang + 1} />
+              <EtapeTournee
+                key={intervention.id}
+                intervention={intervention}
+                numero={rang + 1}
+                onDemarree={recharger}
+                onOuvrir={(type) => setFenetre({ type, intervention })}
+              />
             ))}
           </ol>
         </>
+      )}
+
+      {fenetre?.type === 'cloture' && (
+        <FenetreCloture intervention={fenetre.intervention} onFermer={fermerFenetre} />
+      )}
+      {fenetre?.type === 'compte rendu' && (
+        <FenetreCompteRendu intervention={fenetre.intervention} onFermer={fermerFenetre} />
       )}
     </main>
   );
 }
 
-function EtapeTournee({ intervention, numero }: { intervention: Intervention; numero: number }) {
+interface PropsEtape {
+  intervention: Intervention;
+  numero: number;
+  onDemarree: () => void;
+  onOuvrir: (fenetre: FenetreOuverte['type']) => void;
+}
+
+function EtapeTournee({ intervention, numero, onDemarree, onOuvrir }: PropsEtape) {
   const { adresse, client } = intervention;
   return (
     <li className={`rounded-lg border border-bordure ${CLASSES_ETAPE[intervention.statut]}`}>
@@ -126,7 +168,89 @@ function EtapeTournee({ intervention, numero }: { intervention: Intervention; nu
         >
           Appeler le client · {client.telephone}
         </a>
+        <ActionsEtape intervention={intervention} onDemarree={onDemarree} onOuvrir={onOuvrir} />
       </div>
     </li>
+  );
+}
+
+/** L'action que permet le statut de l'étape (cycle de vie, cahier des charges 5.1). */
+function ActionsEtape({ intervention, onDemarree, onOuvrir }: Omit<PropsEtape, 'numero'>) {
+  switch (intervention.statut) {
+    case 'PLANIFIEE':
+      return <BoutonDemarrer intervention={intervention} onDemarree={onDemarree} />;
+    case 'EN_COURS':
+      return (
+        <button type="button" onClick={() => onOuvrir('cloture')} className={BOUTON_PRINCIPAL}>
+          Terminer l'intervention
+        </button>
+      );
+    case 'TERMINEE':
+      return <EtapeTerminee intervention={intervention} onOuvrir={onOuvrir} />;
+    default:
+      return null;
+  }
+}
+
+/** US17 et RG24 : le refus de l'API (tournée qui n'est pas celle du jour) s'affiche à côté. */
+function BoutonDemarrer({
+  intervention,
+  onDemarree,
+}: Pick<PropsEtape, 'intervention' | 'onDemarree'>) {
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+
+  async function demarrer() {
+    setErreur(null);
+    setEnvoiEnCours(true);
+    try {
+      await interventionsApi.demarrer(intervention.id);
+      onDemarree();
+    } catch (cause) {
+      setErreur(messageErreur(cause, 'Démarrage impossible'));
+      setEnvoiEnCours(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <button type="button" onClick={demarrer} disabled={envoiEnCours} className={BOUTON_PRINCIPAL}>
+        {envoiEnCours ? 'Démarrage en cours…' : 'Démarrer'}
+      </button>
+      {erreur && (
+        <p
+          role="alert"
+          className="rounded border border-erreur/30 bg-red-50 px-3 py-2 whitespace-pre-line text-erreur"
+        >
+          {erreur}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** US18 et RG33 : compte rendu modifiable tant que le client n'a pas signé, définitif ensuite. */
+function EtapeTerminee({ intervention, onOuvrir }: Pick<PropsEtape, 'intervention' | 'onOuvrir'>) {
+  const { signature, compteRendu } = intervention;
+  return (
+    <div className="space-y-2">
+      <div className="rounded border border-bordure bg-white px-3 py-2">
+        <p className="font-semibold text-anthracite">Compte rendu</p>
+        <p className="whitespace-pre-line">{compteRendu ?? 'Aucun compte rendu.'}</p>
+      </div>
+      {signature ? (
+        <p className="font-semibold text-succes">
+          Signée par {signature.nomSignataire} à {heureMetier(signature.signeeLe)}
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onOuvrir('compte rendu')}
+          className={BOUTON_SECONDAIRE}
+        >
+          Compléter le compte rendu
+        </button>
+      )}
+    </div>
   );
 }
