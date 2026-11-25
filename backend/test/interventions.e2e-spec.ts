@@ -8,6 +8,7 @@ import {
   requetesEn,
   viderLaBase,
 } from './support/application-de-test.js';
+import { enDataUrl, fabriquerPng } from './support/fabriquer-png.js';
 
 /*
  * Tests d'intégration des interventions (issue #17) : routes HTTP, machine à états, droits,
@@ -961,6 +962,431 @@ describe('interventions (e2e)', () => {
       await prisma.intervention.deleteMany({ where: { adresse: { idClient: client.id } } });
       await prisma.adresse.deleteMany({ where: { idClient: client.id } });
       await prisma.client.delete({ where: { id: client.id } });
+    });
+  });
+
+  describe('signature du client à la clôture (US33)', () => {
+    const PNG = fabriquerPng();
+    const IMAGE = enDataUrl(PNG);
+    const COMPTE_RENDU = 'Joint du siphon remplacé, plus de fuite.';
+    const SIGNATURE = { nomSignataire: 'Jean Dupont', image: IMAGE };
+    const CORPS_SIGNE = { compteRendu: COMPTE_RENDU, signature: SIGNATURE };
+
+    /** Intervention en cours dans la tournée du jour du technicien. */
+    async function enCours(technicien = fixtures.kevin): Promise<number> {
+      return creerIntervention({
+        statut: 'EN_COURS',
+        idTournee: await creerTournee(technicien),
+        ordreTournee: 1,
+        debutPrevu: a('08:00'),
+        demarreeLe: a('08:05'),
+      });
+    }
+
+    function terminer(id: number, corps: object, utilisateur = fixtures.kevin.compte) {
+      return en(utilisateur).post(`/interventions/${id}/complete`).send(corps);
+    }
+
+    /** Intervention terminée et signée par l'API, comme sur le terrain. */
+    async function signee(): Promise<number> {
+      const id = await enCours();
+      await terminer(id, CORPS_SIGNE).expect(200);
+      journal.enregistrer.mockClear();
+      return id;
+    }
+
+    /**
+     * Intervention au statut voulu, dans la tournée de Kévin quand le statut l'exige. Une
+     * intervention annulée l'est par l'API, qui renseigne le motif obligatoire (RG05).
+     */
+    async function interventionAuStatut(statut: StatutIntervention): Promise<number> {
+      if (statut === 'A_PLANIFIER' || statut === 'ANNULEE') {
+        const id = await creerIntervention();
+        if (statut === 'ANNULEE') {
+          await en(fixtures.gestionnaire)
+            .post(`/interventions/${id}/cancel`)
+            .send({ motif: 'Client absent' })
+            .expect(200);
+          journal.enregistrer.mockClear();
+        }
+        return id;
+      }
+      return creerIntervention({
+        statut,
+        idTournee: await creerTournee(fixtures.kevin),
+        ordreTournee: 1,
+        debutPrevu: a('08:00'),
+      });
+    }
+
+    function signaturesEnBase() {
+      return application.prisma.signatureIntervention.findMany();
+    }
+
+    /** Aucune trace d'une clôture refusée : ni signature, ni changement, ni journal. */
+    async function verifierRienDEcrit(id: number): Promise<void> {
+      expect(await signaturesEnBase()).toEqual([]);
+      const intervention = await application.prisma.intervention.findUniqueOrThrow({
+        where: { id },
+      });
+      expect(intervention).toMatchObject({ statut: 'EN_COURS', termineeLe: null });
+      expect(journal.enregistrer).not.toHaveBeenCalled();
+    }
+
+    describe('POST /interventions/:id/complete avec signature', () => {
+      it('termine l’intervention et enregistre la signature à l’heure de la clôture', async () => {
+        const id = await enCours();
+
+        const reponse = await terminer(id, CORPS_SIGNE).expect(200);
+
+        expect(reponse.body).toMatchObject({
+          statut: 'TERMINEE',
+          compteRendu: COMPTE_RENDU,
+          termineeLe: MAINTENANT.toISOString(),
+          signature: { nomSignataire: 'Jean Dupont', signeeLe: MAINTENANT.toISOString() },
+        });
+        expect(reponse.body.signature.signeeLe).toBe(reponse.body.termineeLe);
+        const lignes = await signaturesEnBase();
+        expect(lignes).toHaveLength(1);
+        expect(lignes[0]).toMatchObject({
+          idIntervention: id,
+          nomSignataire: 'Jean Dupont',
+          signeeLe: MAINTENANT,
+          idAuteur: fixtures.kevin.compte.id,
+        });
+        expect(lignes[0].empreinte).toMatch(/^[0-9a-f]{64}$/);
+        expect(Buffer.compare(Buffer.from(lignes[0].image), PNG)).toBe(0);
+      });
+
+      it('journalise STATUT_MODIFIE puis SIGNATURE_ENREGISTREE, sans image ni nom', async () => {
+        const id = await enCours();
+
+        await terminer(id, CORPS_SIGNE).expect(200);
+
+        const [{ empreinte }] = await signaturesEnBase();
+        const actions = journal.enregistrer.mock.calls.map(([action]) => action);
+        expect(actions).toEqual([
+          {
+            type: 'STATUT_MODIFIE',
+            auteur: { id: fixtures.kevin.compte.id, role: 'TECHNICIEN' },
+            interventionId: id,
+            ancienStatut: 'EN_COURS',
+            nouveauStatut: 'TERMINEE',
+          },
+          {
+            type: 'SIGNATURE_ENREGISTREE',
+            auteur: { id: fixtures.kevin.compte.id, role: 'TECHNICIEN' },
+            interventionId: id,
+            empreinte,
+          },
+        ]);
+        const texte = JSON.stringify(actions);
+        expect(texte).not.toContain('Jean Dupont');
+        expect(texte).not.toContain(PNG.toString('base64').slice(0, 40));
+      });
+
+      it('sans signature, termine comme avant, avec signature à null', async () => {
+        const id = await enCours();
+
+        const reponse = await terminer(id, { compteRendu: 'Fuite réparée.' }).expect(200);
+
+        expect(reponse.body).toMatchObject({ statut: 'TERMINEE', signature: null });
+        expect(await signaturesEnBase()).toEqual([]);
+        expect(journal.enregistrer).toHaveBeenCalledTimes(1);
+      });
+
+      it.each<[string, StatutIntervention, string]>([
+        ['à planifier', 'A_PLANIFIER', 'Impossible de terminer une intervention à planifier.'],
+        ['planifiée', 'PLANIFIEE', 'Impossible de terminer une intervention planifiée.'],
+        ['annulée', 'ANNULEE', 'Impossible de terminer une intervention annulée.'],
+        ['déjà terminée', 'TERMINEE', 'Impossible de terminer une intervention terminée.'],
+      ])(
+        'refuse en 400 une signature sur une intervention %s',
+        async (_libelle, statut, message) => {
+          const id = await interventionAuStatut(statut);
+
+          const reponse = await terminer(id, CORPS_SIGNE).expect(400);
+
+          expect(reponse.body.message).toBe(message);
+          expect(await signaturesEnBase()).toEqual([]);
+          expect(journal.enregistrer).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([
+        ['un technicien collègue', () => fixtures.mathieu.compte],
+        ['un gestionnaire', () => fixtures.gestionnaire],
+      ])('répond 403 à %s qui fait signer, sans rien écrire', async (_cas, utilisateur) => {
+        const id = await enCours();
+
+        await terminer(id, CORPS_SIGNE, utilisateur()).expect(403);
+
+        await verifierRienDEcrit(id);
+      });
+
+      it('RG32 : une deuxième clôture signée est refusée et la première signature reste', async () => {
+        const id = await signee();
+        const [avant] = await signaturesEnBase();
+
+        await terminer(id, {
+          compteRendu: 'Autre texte',
+          signature: {
+            nomSignataire: 'Quelqu’un d’autre',
+            image: enDataUrl(fabriquerPng({ largeur: 400 })),
+          },
+        }).expect(400);
+
+        expect(await signaturesEnBase()).toEqual([avant]);
+        const intervention = await application.prisma.intervention.findUniqueOrThrow({
+          where: { id },
+        });
+        expect(intervention.compteRendu).toBe(COMPTE_RENDU);
+        expect(journal.enregistrer).not.toHaveBeenCalled();
+      });
+
+      it('RG31 : refuse une signature sans compte rendu, sans rien écrire', async () => {
+        const id = await enCours();
+
+        const reponse = await terminer(id, { signature: SIGNATURE }).expect(400);
+
+        expect(reponse.body.message).toEqual(['compteRendu est obligatoire']);
+        await verifierRienDEcrit(id);
+      });
+
+      it('refuse une signature à null, sans rien écrire', async () => {
+        const id = await enCours();
+
+        const reponse = await terminer(id, { compteRendu: 'Ok', signature: null }).expect(400);
+
+        expect(reponse.body.message).toEqual(['signature ne peut pas être null']);
+        await verifierRienDEcrit(id);
+      });
+
+      it.each([
+        [
+          'une image JPEG',
+          enDataUrl(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]), 'data:image/jpeg;base64,'),
+        ],
+        [
+          'une image SVG',
+          enDataUrl(
+            Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),
+            'data:image/svg+xml;base64,',
+          ),
+        ],
+        [
+          'un texte en base64 annoncé comme PNG',
+          enDataUrl(Buffer.from('<html><body>Ceci n’est pas une image</body></html>')),
+        ],
+      ])('refuse %s en 400, sans rien écrire (revue de sécurité)', async (_cas, image) => {
+        const id = await enCours();
+
+        const reponse = await terminer(id, {
+          compteRendu: COMPTE_RENDU,
+          signature: { nomSignataire: 'Jean Dupont', image },
+        }).expect(400);
+
+        expect(reponse.body.message).toEqual(['La signature doit être une image PNG valide.']);
+        await verifierRienDEcrit(id);
+      });
+
+      it('refuse en 400 une image de 49 153 octets, sans rien écrire', async () => {
+        const id = await enCours();
+
+        const reponse = await terminer(id, {
+          compteRendu: COMPTE_RENDU,
+          signature: {
+            nomSignataire: 'Jean Dupont',
+            image: enDataUrl(fabriquerPng({ taille: 49_153 })),
+          },
+        }).expect(400);
+
+        expect(reponse.body.message).toEqual(['La signature dépasse 48 Ko.']);
+        await verifierRienDEcrit(id);
+      });
+
+      it('accepte une image de 49 152 octets et un compte rendu de 2 000 caractères', async () => {
+        const id = await enCours();
+
+        await terminer(id, {
+          compteRendu: 'é'.repeat(2000),
+          signature: {
+            nomSignataire: 'Jean Dupont',
+            image: enDataUrl(fabriquerPng({ taille: 49_152 })),
+          },
+        }).expect(200);
+
+        const [ligne] = await signaturesEnBase();
+        expect(ligne.image).toHaveLength(49_152);
+      });
+
+      it('répond 413 à un corps de plus de 100 Ko, sans rien écrire', async () => {
+        const id = await enCours();
+
+        await terminer(id, {
+          compteRendu: COMPTE_RENDU,
+          signature: {
+            nomSignataire: 'Jean Dupont',
+            image: `data:image/png;base64,${'A'.repeat(110_000)}`,
+          },
+        }).expect(413);
+
+        await verifierRienDEcrit(id);
+      });
+    });
+
+    describe('GET /interventions/:id/signature', () => {
+      it.each([
+        ['au gestionnaire', () => fixtures.gestionnaire],
+        ['à l’administrateur', () => fixtures.admin],
+        ['au technicien de la tournée', () => fixtures.kevin.compte],
+      ])('renvoie la signature intacte %s', async (_cas, utilisateur) => {
+        const id = await signee();
+        const [{ empreinte }] = await signaturesEnBase();
+
+        const reponse = await en(utilisateur()).get(`/interventions/${id}/signature`).expect(200);
+
+        expect(reponse.body).toEqual({
+          nomSignataire: 'Jean Dupont',
+          signeeLe: MAINTENANT.toISOString(),
+          auteur: { id: fixtures.kevin.compte.id, nom: 'Hoarau', prenom: 'Kévin' },
+          empreinte,
+          integre: true,
+          image: IMAGE,
+        });
+      });
+
+      it('répond 403 au technicien collègue, même pour une intervention non signée', async () => {
+        const signeeParKevin = await signee();
+        const { idTournee } = await application.prisma.intervention.findUniqueOrThrow({
+          where: { id: signeeParKevin },
+        });
+        const nonSignee = await creerIntervention({
+          statut: 'EN_COURS',
+          idTournee: idTournee ?? undefined,
+          ordreTournee: 2,
+          debutPrevu: a('10:00'),
+        });
+
+        await en(fixtures.mathieu.compte)
+          .get(`/interventions/${signeeParKevin}/signature`)
+          .expect(403);
+        await en(fixtures.mathieu.compte).get(`/interventions/${nonSignee}/signature`).expect(403);
+      });
+
+      it('répond 404 pour une intervention terminée sans signature', async () => {
+        const id = await enCours();
+        await terminer(id, {}).expect(200);
+
+        const reponse = await en(fixtures.gestionnaire)
+          .get(`/interventions/${id}/signature`)
+          .expect(404);
+
+        expect(reponse.body.message).toBe('Cette intervention n’a pas été signée.');
+      });
+
+      it('répond 404 pour une intervention inexistante', async () => {
+        const reponse = await en(fixtures.gestionnaire)
+          .get('/interventions/9999/signature')
+          .expect(404);
+
+        expect(reponse.body.message).toBe('Intervention introuvable.');
+      });
+
+      it('RG34 : signale un compte rendu modifié en SQL direct, hors de l’API', async () => {
+        const id = await signee();
+        await application.prisma.$executeRaw`
+          UPDATE intervention SET compte_rendu = 'Texte réécrit' WHERE id_intervention = ${id}`;
+
+        const reponse = await en(fixtures.gestionnaire)
+          .get(`/interventions/${id}/signature`)
+          .expect(200);
+
+        expect(reponse.body.integre).toBe(false);
+      });
+    });
+
+    describe('signature définitive (RG32, RG33)', () => {
+      it('refuse en 400 de modifier le compte rendu d’une intervention signée', async () => {
+        const id = await signee();
+
+        const reponse = await en(fixtures.kevin.compte)
+          .patch(`/interventions/${id}/report`)
+          .send({ compteRendu: 'Autre texte' })
+          .expect(400);
+
+        expect(reponse.body.message).toBe(
+          'Le compte rendu d’une intervention signée ne se modifie plus.',
+        );
+        const intervention = await application.prisma.intervention.findUniqueOrThrow({
+          where: { id },
+        });
+        expect(intervention.compteRendu).toBe(COMPTE_RENDU);
+      });
+
+      it('US18 inchangée : le compte rendu d’une intervention terminée sans signature se modifie', async () => {
+        const id = await enCours();
+        await terminer(id, { compteRendu: 'Premier texte' }).expect(200);
+
+        await en(fixtures.kevin.compte)
+          .patch(`/interventions/${id}/report`)
+          .send({ compteRendu: 'Texte complété' })
+          .expect(200);
+      });
+
+      it('le déclencheur refuse toute mise à jour de la signature en SQL direct', async () => {
+        const id = await signee();
+
+        await expect(
+          application.prisma.$executeRaw`
+            UPDATE signature_intervention SET nom_signataire = 'Autre' WHERE id_intervention = ${id}`,
+        ).rejects.toThrow(/une signature est définitive/);
+        const [ligne] = await signaturesEnBase();
+        expect(ligne.nomSignataire).toBe('Jean Dupont');
+      });
+
+      it('la suppression reste possible, pour l’anonymisation RGPD', async () => {
+        const id = await signee();
+
+        await application.prisma.$executeRaw`
+          DELETE FROM signature_intervention WHERE id_intervention = ${id}`;
+
+        expect(await signaturesEnBase()).toEqual([]);
+      });
+    });
+
+    describe('résumé dans l’objet Intervention, jamais l’image', () => {
+      const RESUME = { nomSignataire: 'Jean Dupont', signeeLe: MAINTENANT.toISOString() };
+      const DEBUT_DE_L_IMAGE = PNG.toString('base64').slice(0, 40);
+
+      it('GET /interventions renvoie le résumé de la signature, ou null', async () => {
+        const id = await signee();
+        const autre = await creerIntervention();
+
+        const reponse = await en(fixtures.gestionnaire).get('/interventions').expect(200);
+
+        const signatures = Object.fromEntries(
+          reponse.body.data.map((intervention: { id: number; signature: unknown }) => [
+            intervention.id,
+            intervention.signature,
+          ]),
+        );
+        expect(signatures).toEqual({ [id]: RESUME, [autre]: null });
+        expect(reponse.text).not.toContain(DEBUT_DE_L_IMAGE);
+        expect(reponse.text).not.toContain('"image"');
+      });
+
+      it('GET /tours/me/today renvoie le résumé de la signature à son technicien', async () => {
+        const id = await signee();
+
+        const reponse = await en(fixtures.kevin.compte).get('/tours/me/today').expect(200);
+
+        expect(reponse.body.interventions).toEqual([
+          expect.objectContaining({ id, signature: RESUME }),
+        ]);
+        expect(reponse.text).not.toContain(DEBUT_DE_L_IMAGE);
+        expect(reponse.text).not.toContain('"image"');
+      });
     });
   });
 });
