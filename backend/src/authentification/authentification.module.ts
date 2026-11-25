@@ -1,8 +1,15 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { Horloge } from '../commun/horloge.js';
+import { AuthentificationController } from './authentification.controller.js';
 import { AuthentificationGuard } from './authentification.guard.js';
+import { AuthentificationRepository } from './authentification.repository.js';
+import { AuthentificationService } from './authentification.service.js';
 import { DUREE_JETON_ACCES_SECONDES, lireSecretJwt } from './jetons.js';
+
+const QUINZE_MINUTES_MS = 15 * 60 * 1000;
 
 @Module({
   imports: [
@@ -15,8 +22,17 @@ import { DUREE_JETON_ACCES_SECONDES, lireSecretJwt } from './jetons.js';
         verifyOptions: { algorithms: ['HS256'] },
       }),
     }),
+    // Appliqué uniquement aux routes marquées @UseGuards(ThrottlerGuard) : la connexion.
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: QUINZE_MINUTES_MS, limit: 5 }],
+      errorMessage: 'Trop de tentatives de connexion : réessayer dans 15 minutes.',
+    }),
   ],
+  controllers: [AuthentificationController],
   providers: [
+    AuthentificationRepository,
+    AuthentificationService,
+    Horloge,
     AuthentificationGuard,
     // useExisting plutôt que useClass : les tests peuvent remplacer AuthentificationGuard.
     { provide: APP_GUARD, useExisting: AuthentificationGuard },

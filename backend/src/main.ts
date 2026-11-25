@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
 import { configurerSwagger } from './configurer-swagger.js';
 
@@ -13,6 +14,8 @@ if (existsSync('.env')) {
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  // Lecture des cookies : le jeton de rafraîchissement arrive dans le cookie refresh_token.
+  app.use(cookieParser());
   app.setGlobalPrefix('api/v1');
   // Documentation interactive sur /api/docs, jamais exposée en production :
   // elle donnerait la carte complète de l'API, routes d'administration comprises.
