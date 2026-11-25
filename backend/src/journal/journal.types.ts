@@ -35,6 +35,18 @@ export interface InterventionAnnulee {
   motif: string;
 }
 
+/**
+ * US33 : signature du client enregistrée à la clôture. Ni l'image ni le nom du signataire
+ * (données personnelles) : l'empreinte suffit à rapprocher l'entrée de la signature en base.
+ */
+export interface SignatureEnregistree {
+  type: 'SIGNATURE_ENREGISTREE';
+  auteur: AuteurJournal;
+  interventionId: number;
+  /** SHA-256 hexadécimal du contenu signé (RG34). */
+  empreinte: string;
+}
+
 export interface ConnexionReussie {
   type: 'CONNEXION_REUSSIE';
   auteur: AuteurJournal;
@@ -64,6 +76,7 @@ export interface CompteDesactive {
 export type ActionJournalisee =
   | StatutModifie
   | InterventionAnnulee
+  | SignatureEnregistree
   | ConnexionReussie
   | ConnexionEchouee
   | CompteCree

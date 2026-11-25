@@ -80,6 +80,19 @@ Types indiqués au niveau logique. Les identifiants sont des entiers auto-incré
 
 La fin prévue est une donnée dérivée : elle n'apparaît pas dans le MCD, mais elle est ajoutée au niveau logique comme **colonne générée** (`GENERATED ALWAYS AS … STORED`). PostgreSQL la recalcule à chaque modification : elle ne peut jamais contredire le début et la durée, et elle peut être indexée pour détecter les chevauchements de créneaux (RG09).
 
+### 2.2 bis Signature d'intervention (US33, ADR 0013)
+
+| Code | Libellé | Type | Contraintes | Entité |
+| --- | --- | --- | --- | --- |
+| id_intervention | Intervention signée | Entier | Clé primaire et clé étrangère vers `intervention` | Signature d'intervention |
+| image | Image de la signature | Binaire (`BYTEA`) | Obligatoire, PNG, 48 Ko maximum | Signature d'intervention |
+| nom_signataire | Nom de la personne qui signe | Texte (100) | Obligatoire, non vide | Signature d'intervention |
+| signee_le | Date et heure serveur de la signature | Date-heure | Obligatoire, égale à `terminee_le` | Signature d'intervention |
+| empreinte | Empreinte SHA-256 du contenu signé | Texte (64) | Obligatoire, 64 caractères hexadécimaux | Signature d'intervention |
+| id_auteur | Compte qui a enregistré la signature | Entier | Clé étrangère vers `utilisateur` | Signature d'intervention |
+
+La table est séparée d'`intervention` pour que les listes ne chargent jamais l'image. Une ligne n'est jamais mise à jour (déclencheur `BEFORE UPDATE`).
+
 ### 2.3 Clients, techniciens et tournées (Arnaud, à valider)
 
 | Code | Libellé | Type | Contraintes | Entité |
@@ -202,6 +215,7 @@ Notation : nom de table en italique, clé primaire en **gras**, clé étrangère
 - *type_intervention* (**id_type_intervention**, libelle, duree_defaut_min)
 - *tournee* (**id_tournee**, date_tournee, cree_le, #id_technicien, #id_createur)
 - *intervention* (**id_intervention**, description, urgence, statut, duree_estimee_min, debut_prevu, fin_prevue, ordre_tournee, compte_rendu, motif_annulation, demarree_le, terminee_le, annulee_le, cree_le, maj_le, #id_adresse, #id_type_intervention, #id_createur, #id_tournee)
+- *signature_intervention* (**#id_intervention**, image, nom_signataire, signee_le, empreinte, #id_auteur)
 
 Dans `intervention` et `tournee`, `#id_createur` référence `utilisateur(id_utilisateur)`. Dans `intervention`, `fin_prevue` est une colonne calculée. `#id_tournee` peut être vide (intervention non planifiée).
 
@@ -342,6 +356,8 @@ erDiagram
 | client | PARTICULIER ⇒ `nom_client` renseigné ; PROFESSIONNEL ⇒ `raison_sociale` renseignée | CHECK | Identité du client |
 | toutes | Clés étrangères en `ON DELETE RESTRICT` | FOREIGN KEY | D12 : on archive au lieu de supprimer |
 | jetons | Clé étrangère en `ON DELETE CASCADE` | FOREIGN KEY | Les jetons disparaissent avec le compte |
+| signature_intervention | `octet_length(image) <= 49152` ; `empreinte ~ '^[0-9a-f]{64}$'` ; `btrim(nom_signataire) <> ''` | CHECK | RG35, RG34, RG31 |
+| signature_intervention | Mise à jour refusée | TRIGGER `BEFORE UPDATE` | RG32 : une signature est définitive. La suppression reste permise (anonymisation RGPD) : une suppression suivie d'une nouvelle insertion n'est pas détectée par l'empreinte (ADR 0013) |
 
 Prisma ne gère pas directement les contraintes `CHECK`, les contraintes `DEFERRABLE` ni les colonnes générées : elles seront ajoutées en SQL dans la migration générée par Prisma (card #8).
 
@@ -401,7 +417,7 @@ Le journal des actions est stocké dans MongoDB, dans la collection `journal_act
 | --- | --- | --- | --- |
 | `_id` | ObjectId | Oui | Identifiant généré par MongoDB |
 | `date` | Date | Oui | Date et heure de l'action |
-| `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE` |
+| `action` | Chaîne | Oui | Type d'action : `STATUT_MODIFIE`, `INTERVENTION_ANNULEE`, `SIGNATURE_ENREGISTREE` (empreinte dans `contexte`, ni image ni nom du signataire), `CONNEXION_REUSSIE`, `CONNEXION_ECHOUEE`, `COMPTE_CREE`, `COMPTE_DESACTIVE` |
 | `auteur` | Objet | Non | Utilisateur qui a agi : `{ id, role }` ; absent pour une connexion échouée |
 | `entite` | Objet | Oui | Élément concerné : `{ type, id }`, par exemple `{ "type": "intervention", "id": 42 }` ; `id` vaut `null` pour une connexion échouée sur un e-mail qui ne correspond à aucun compte (`{ "type": "utilisateur", "id": null }`) |
 | `avant` | Objet | Non | Valeurs modifiées avant l'action |

@@ -4,10 +4,12 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { enDataUrl, fabriquerPng } from '../../test/support/fabriquer-png.js';
 import type { UtilisateurConnecte } from '../commun/autorisation/utilisateur-connecte.js';
 import type { Horloge } from '../commun/horloge.js';
 import type { StatutIntervention } from '../generated/prisma/client.ts';
 import type { JournalDesActions } from '../journal/journal-des-actions.js';
+import { calculerEmpreinte } from './empreinte-signature.js';
 import type { InterventionDetaillee } from './intervention-detaillee.js';
 import type {
   AdresseUtilisable,
@@ -15,8 +17,10 @@ import type {
   InterventionVerrouillee,
   OperationsDeCreation,
   OperationsSurIntervention,
+  SignatureLue,
 } from './interventions.repository.js';
 import { InterventionsService } from './interventions.service.js';
+import { lireImagePng } from './signature-png.js';
 
 // Lundi 7 décembre 2026, 9 h à La Réunion.
 const MAINTENANT = new Date('2026-12-07T09:00:00+04:00');
@@ -101,6 +105,7 @@ function interventionDetaillee(
           },
         }
       : null,
+    signature: null,
   };
 }
 
@@ -131,6 +136,9 @@ function creerService({
   idTourneeLue = etat?.idTournee,
   dateTournee = '2026-12-07',
   maintenant = MAINTENANT,
+  signee = false,
+  signatureLue = null,
+  echecALaValidation = false,
 }: {
   adresse?: AdresseUtilisable | null;
   dureeParDefaut?: number | null;
@@ -141,6 +149,12 @@ function creerService({
   idTourneeLue?: number | null;
   dateTournee?: string;
   maintenant?: Date;
+  /** Une signature existe déjà pour l'intervention verrouillée (RG33). */
+  signee?: boolean;
+  /** Signature relue par GET …/signature ; null si l'intervention n'est pas signée. */
+  signatureLue?: SignatureLue | null;
+  /** La transaction échoue au moment d'être validée, après toutes les écritures. */
+  echecALaValidation?: boolean;
 } = {}) {
   // Suit l'ordre des appels : verrous, écritures, validation de la transaction, journal.
   const evenements: string[] = [];
@@ -180,16 +194,22 @@ function creerService({
     demarrer: vi.fn(noter('démarrage', undefined)),
     terminer: vi.fn(noter('fin', undefined)),
     enregistrerCompteRendu: vi.fn(noter('compte rendu', undefined)),
+    estSignee: vi.fn(noter('lecture de la signature', signee)),
+    enregistrerSignature: vi.fn(noter('signature', undefined)),
   };
   const depot = {
     rechercher: vi.fn().mockResolvedValue({ interventions: [], total: 0 }),
     trouver: vi.fn().mockResolvedValue(intervention),
+    trouverSignature: vi.fn().mockResolvedValue(signatureLue),
     creerIntervention: vi.fn((travail: (operations: OperationsDeCreation) => Promise<number>) =>
       travail(creation),
     ),
     modifierIntervention: vi.fn(
       async <T>(travail: (operations: OperationsSurIntervention) => Promise<T>) => {
         const resultat = await travail(operations);
+        if (echecALaValidation) {
+          throw new Error('Échec de la validation de la transaction');
+        }
         evenements.push('transaction validée');
         return resultat;
       },
@@ -707,5 +727,221 @@ describe('InterventionsService : compte rendu (US18)', () => {
     await expect(
       service.completerCompteRendu(42, { compteRendu: 'Texte' }, MATHIEU),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('InterventionsService : signature du client (US33)', () => {
+  const IMAGE = lireImagePng(enDataUrl(fabriquerPng()));
+  const FIN_SIGNEE = {
+    compteRendu: 'Joint du siphon remplacé',
+    signature: { image: IMAGE, nomSignataire: 'Jean Dupont' },
+  };
+  const EMPREINTE = calculerEmpreinte({
+    idIntervention: 42,
+    compteRendu: 'Joint du siphon remplacé',
+    nomSignataire: 'Jean Dupont',
+    signeeLe: MAINTENANT,
+    idAuteur: KEVIN.id,
+    image: IMAGE,
+  });
+
+  describe('terminer avec une signature (RG30, RG34)', () => {
+    it('enregistre la signature dans la transaction de la clôture, à la même heure', async () => {
+      const { service, operations, evenements } = creerService({ etat: verrouillee('EN_COURS') });
+
+      await service.terminer(42, FIN_SIGNEE, KEVIN);
+
+      expect(operations.terminer).toHaveBeenCalledWith(42, {
+        le: MAINTENANT,
+        compteRendu: 'Joint du siphon remplacé',
+      });
+      expect(operations.enregistrerSignature).toHaveBeenCalledWith({
+        idIntervention: 42,
+        image: IMAGE,
+        nomSignataire: 'Jean Dupont',
+        signeeLe: MAINTENANT,
+        empreinte: EMPREINTE,
+        idAuteur: KEVIN.id,
+      });
+      expect(evenements).toEqual([
+        'verrou intervention',
+        'fin',
+        'signature',
+        'transaction validée',
+        'journal',
+        'journal',
+      ]);
+    });
+
+    it('journalise SIGNATURE_ENREGISTREE après STATUT_MODIFIE, sans image ni nom', async () => {
+      const { service, journal } = creerService({ etat: verrouillee('EN_COURS') });
+
+      await service.terminer(42, FIN_SIGNEE, KEVIN);
+
+      expect(journal.enregistrer).toHaveBeenCalledTimes(2);
+      expect(journal.enregistrer).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ type: 'STATUT_MODIFIE', nouveauStatut: 'TERMINEE' }),
+      );
+      expect(journal.enregistrer).toHaveBeenNthCalledWith(2, {
+        type: 'SIGNATURE_ENREGISTREE',
+        auteur: { id: KEVIN.id, role: 'TECHNICIEN' },
+        interventionId: 42,
+        empreinte: EMPREINTE,
+      });
+      expect(JSON.stringify(journal.enregistrer.mock.calls)).not.toContain('Jean Dupont');
+    });
+
+    it('n’enregistre aucune signature et journalise seulement le statut sans signature', async () => {
+      const { service, operations, journal } = creerService({ etat: verrouillee('EN_COURS') });
+
+      await service.terminer(42, { compteRendu: 'Joint changé' }, KEVIN);
+
+      expect(operations.enregistrerSignature).not.toHaveBeenCalled();
+      expect(journal.enregistrer).toHaveBeenCalledTimes(1);
+      expect(journal.enregistrer).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'STATUT_MODIFIE' }),
+      );
+    });
+
+    it('ne journalise rien si la transaction échoue à la validation', async () => {
+      const { service, journal } = creerService({
+        etat: verrouillee('EN_COURS'),
+        echecALaValidation: true,
+      });
+
+      await expect(service.terminer(42, FIN_SIGNEE, KEVIN)).rejects.toThrow(
+        'Échec de la validation de la transaction',
+      );
+      expect(journal.enregistrer).not.toHaveBeenCalled();
+    });
+
+    it.each<[StatutIntervention, string]>([
+      ['PLANIFIEE', 'Impossible de terminer une intervention planifiée.'],
+      ['A_PLANIFIER', 'Impossible de terminer une intervention à planifier.'],
+      ['ANNULEE', 'Impossible de terminer une intervention annulée.'],
+      ['TERMINEE', 'Impossible de terminer une intervention terminée.'],
+    ])(
+      'refuse en 400 une signature sur une intervention %s, sans rien écrire',
+      async (statut, message) => {
+        const { service, operations, journal } = creerService({ etat: verrouillee(statut) });
+
+        await expect(service.terminer(42, FIN_SIGNEE, KEVIN)).rejects.toThrow(message);
+        expect(operations.enregistrerSignature).not.toHaveBeenCalled();
+        expect(journal.enregistrer).not.toHaveBeenCalled();
+      },
+    );
+
+    it('répond 403 au collègue qui fait signer, sans rien écrire', async () => {
+      const { service, operations, journal } = creerService({ etat: verrouillee('EN_COURS') });
+
+      await expect(service.terminer(42, FIN_SIGNEE, MATHIEU)).rejects.toThrow(ForbiddenException);
+      expect(operations.enregistrerSignature).not.toHaveBeenCalled();
+      expect(journal.enregistrer).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('compte rendu d’une intervention signée (RG33)', () => {
+    it('refuse en 400 de le modifier, sans rien écrire', async () => {
+      const { service, operations } = creerService({ etat: verrouillee('TERMINEE'), signee: true });
+
+      await expect(
+        service.completerCompteRendu(42, { compteRendu: 'Autre texte' }, KEVIN),
+      ).rejects.toThrow('Le compte rendu d’une intervention signée ne se modifie plus.');
+      expect(operations.enregistrerCompteRendu).not.toHaveBeenCalled();
+    });
+
+    it('vérifie la signature sous le verrou de l’intervention, avant d’écrire', async () => {
+      const { service, operations, evenements } = creerService({ etat: verrouillee('TERMINEE') });
+
+      await service.completerCompteRendu(42, { compteRendu: 'Texte' }, KEVIN);
+
+      expect(operations.estSignee).toHaveBeenCalledWith(42);
+      expect(evenements).toEqual([
+        'verrou intervention',
+        'lecture de la signature',
+        'compte rendu',
+        'transaction validée',
+      ]);
+    });
+  });
+
+  describe('consulterSignature (RG34, RG35)', () => {
+    const LUE: SignatureLue = {
+      image: Uint8Array.from(IMAGE),
+      nomSignataire: 'Jean Dupont',
+      signeeLe: MAINTENANT,
+      empreinte: EMPREINTE,
+      auteur: { id: KEVIN.id, nom: 'Hoarau', prenom: 'Kévin' },
+      compteRendu: 'Joint du siphon remplacé',
+    };
+
+    it('renvoie la signature intacte au gestionnaire, image en data URL', async () => {
+      const { service } = creerService({
+        intervention: interventionDetaillee('TERMINEE'),
+        signatureLue: LUE,
+      });
+
+      const signature = await service.consulterSignature(42, GESTIONNAIRE);
+
+      expect(signature).toEqual({
+        nomSignataire: 'Jean Dupont',
+        signeeLe: MAINTENANT,
+        auteur: { id: KEVIN.id, nom: 'Hoarau', prenom: 'Kévin' },
+        empreinte: EMPREINTE,
+        integre: true,
+        image: enDataUrl(IMAGE),
+      });
+    });
+
+    it('la renvoie au technicien de la tournée', async () => {
+      const { service } = creerService({
+        intervention: interventionDetaillee('TERMINEE'),
+        signatureLue: LUE,
+      });
+
+      await expect(service.consulterSignature(42, KEVIN)).resolves.toMatchObject({ integre: true });
+    });
+
+    it.each<[string, Partial<SignatureLue>]>([
+      ['le compte rendu a changé', { compteRendu: 'Joint du siphon remplacé.' }],
+      ['le compte rendu a été effacé', { compteRendu: null }],
+      ['l’image a changé', { image: Uint8Array.from(fabriquerPng({ largeur: 601 })) }],
+    ])('signale un contenu modifié quand %s', async (_cas, modification) => {
+      const { service } = creerService({
+        intervention: interventionDetaillee('TERMINEE'),
+        signatureLue: { ...LUE, ...modification },
+      });
+
+      await expect(service.consulterSignature(42, GESTIONNAIRE)).resolves.toMatchObject({
+        integre: false,
+      });
+    });
+
+    it('répond 403 à un autre technicien, sans lire la signature', async () => {
+      const { service, depot } = creerService({
+        intervention: interventionDetaillee('TERMINEE'),
+        signatureLue: LUE,
+      });
+
+      await expect(service.consulterSignature(42, MATHIEU)).rejects.toThrow(ForbiddenException);
+      expect(depot.trouverSignature).not.toHaveBeenCalled();
+    });
+
+    it('répond 404 pour une intervention inexistante', async () => {
+      const { service } = creerService({ intervention: null });
+
+      await expect(service.consulterSignature(99, GESTIONNAIRE)).rejects.toThrow(
+        new NotFoundException('Intervention introuvable.'),
+      );
+    });
+
+    it('répond 404 pour une intervention qui n’a pas été signée', async () => {
+      const { service } = creerService({ intervention: interventionDetaillee('TERMINEE') });
+
+      await expect(service.consulterSignature(42, GESTIONNAIRE)).rejects.toThrow(
+        new NotFoundException('Cette intervention n’a pas été signée.'),
+      );
+    });
   });
 });

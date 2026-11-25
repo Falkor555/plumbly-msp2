@@ -44,6 +44,7 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 | US27 | Tableau de bord | Délai moyen de traitement | Administrateur | S | #21 |
 | US28 | Tableau de bord | Interventions en retard | Gestionnaire | S | #21 |
 | US29 | Tableau de bord | Export CSV | Administrateur | C | — |
+| US33 | Interventions | Faire signer le client à la clôture | Technicien | S | #17, #18 |
 
 ---
 
@@ -204,6 +205,20 @@ Ce document détaille les 29 user stories de Plumbly, regroupées en 6 epics. Ch
 
 - **Étant donné** la fiche d'une intervention, **quand** j'ouvre l'historique, **alors** chaque changement apparaît avec la date, l'auteur, l'ancien et le nouveau statut (RG07).
 - **Étant donné** un changement de statut, **quand** il est enregistré, **alors** une entrée est ajoutée au journal des actions dans MongoDB.
+
+### US33 — Faire signer le client à la clôture · Should
+
+**En tant que** technicien, **je veux** faire signer le client sur mon mobile au moment où je termine une intervention **afin que** la gestionnaire ait une confirmation de réalisation par le client.
+
+La signature est dessinée au doigt sur l'écran du technicien. Elle ne crée pas de nouveau statut : l'intervention passe à « terminée » comme dans l'US17, avec une preuve associée. C'est une signature électronique simple, présentée comme une confirmation de réalisation et non comme une signature qualifiée (ADR 0013).
+
+- **Étant donné** une intervention « en cours » qui m'est affectée, un compte rendu saisi, le nom du signataire et une signature dessinée, **quand** je valide, **alors** l'intervention passe à « terminée » et la signature est enregistrée avec l'horodatage du serveur, dans la même opération (RG30, RG31).
+- **Étant donné** la zone de signature vide, **quand** j'appuie sur « Valider », **alors** la validation est refusée avec un message.
+- **Étant donné** une signature dessinée et pas encore validée, **quand** j'appuie sur « Effacer », **alors** la zone redevient vide.
+- **Étant donné** un client absent ou qui refuse de signer, **quand** je termine sans signature, **alors** l'intervention passe à « terminée » sans signature, comme dans l'US17.
+- **Étant donné** une intervention à planifier, planifiée, annulée, déjà terminée, ou affectée à un collègue, **quand** j'essaie d'enregistrer une signature, **alors** c'est refusé (RG03, RG30).
+- **Étant donné** une intervention signée, **quand** j'essaie de modifier son compte rendu ou sa signature, **alors** c'est refusé (RG32, RG33).
+- **Étant donné** une intervention signée, **quand** la gestionnaire ouvre sa fiche, **alors** elle voit la signature, le nom du signataire, la date et l'heure, le technicien, et si le contenu signé est intact (RG34).
 
 ---
 

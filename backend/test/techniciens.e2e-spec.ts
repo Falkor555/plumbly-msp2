@@ -67,7 +67,7 @@ describe('techniciens (e2e)', () => {
 
   beforeEach(async () => {
     await application.prisma.$executeRaw`
-      TRUNCATE TABLE intervention, tournee, indisponibilite, technicien RESTART IDENTITY`;
+      TRUNCATE TABLE signature_intervention, intervention, tournee, indisponibilite, technicien RESTART IDENTITY`;
   });
 
   afterAll(async () => {

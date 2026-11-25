@@ -67,8 +67,9 @@ export function requetesEn(app: INestApplication<App>, utilisateur?: Utilisateur
 export async function viderLaBase(prisma: PrismaService): Promise<void> {
   await prisma.$executeRaw`
     TRUNCATE TABLE
-      intervention, tournee, indisponibilite, technicien, adresse, client,
-      type_intervention, jeton_rafraichissement, jeton_reinitialisation, utilisateur
+      signature_intervention, intervention, tournee, indisponibilite, technicien,
+      adresse, client, type_intervention, jeton_rafraichissement, jeton_reinitialisation,
+      utilisateur
     RESTART IDENTITY`;
 }
 

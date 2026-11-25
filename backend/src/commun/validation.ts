@@ -82,6 +82,7 @@ const FORMAT_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FORMAT_TELEPHONE = /^0\d{9}$/;
 const FORMAT_CODE_POSTAL = /^\d{5}$/;
 const FORMAT_COULEUR = /^#[0-9A-F]{6}$/;
+const DEMI_PAIRE_ISOLEE = /[\uD800-\uDFFF]/u;
 const LONGUEUR_EMAIL_MAXIMUM = 255;
 // Au-delà, ce n'est plus un numéro saisi avec des espaces : inutile de le nettoyer.
 const LONGUEUR_TELEPHONE_SAISI_MAXIMUM = 20;
@@ -182,7 +183,7 @@ export function lireTexte(
     erreurs.push(`${nom} doit être un texte`);
     return undefined;
   }
-  if (contientUnCaractereNul(valeur)) {
+  if (contientUnCaractereNul(valeur) || contientUneDemiPaireIsolee(valeur)) {
     erreurs.push(`${nom} contient un caractère non autorisé`);
     return undefined;
   }
@@ -204,6 +205,17 @@ export function lireTexte(
  */
 function contientUnCaractereNul(texte: string): boolean {
   return texte.includes('\u0000');
+}
+
+/**
+ * Moitié d'emoji (demi-paire de substitution UTF-16 sans sa jumelle), par exemple un texte coupé
+ * au milieu d'un emoji. Elle n'a pas d'équivalent en UTF-8 : le pilote PostgreSQL la remplace
+ * sans le dire par U+FFFD, et la base ne garde pas le texte reçu. Pour une signature (US33),
+ * l'empreinte calculée sur le texte reçu ne correspondrait plus jamais au texte enregistré.
+ * Avec le drapeau u, l'expression ne reconnaît que les demi-paires isolées, pas les emojis entiers.
+ */
+function contientUneDemiPaireIsolee(texte: string): boolean {
+  return DEMI_PAIRE_ISOLEE.test(texte);
 }
 
 /** Valeur d'une énumération, par exemple typeClient. */

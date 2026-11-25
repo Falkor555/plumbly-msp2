@@ -1,5 +1,6 @@
 import type { Pagination } from '../commun/validation.js';
 import type { StatutIntervention, TypeClient, Urgence } from '../generated/prisma/client.ts';
+import type { ImagePng } from './signature-png.js';
 
 // ---------- Données reçues, une fois validées ----------
 
@@ -49,9 +50,26 @@ export interface Annulation {
   motif: string;
 }
 
-/** POST /interventions/:id/complete : compte rendu facultatif. */
-export interface FinDIntervention {
+/** Signature du client envoyée avec la clôture (US33), image déjà vérifiée (RG35). */
+export interface SignatureRecue {
+  image: ImagePng;
+  nomSignataire: string;
+}
+
+/**
+ * POST /interventions/:id/complete : compte rendu facultatif, sauf avec une signature (RG31).
+ * Le type le garantit : une fin signée a toujours un compte rendu.
+ */
+export type FinDIntervention = FinSansSignature | FinSignee;
+
+export interface FinSansSignature {
   compteRendu?: string;
+  signature?: never;
+}
+
+export interface FinSignee {
+  compteRendu: string;
+  signature: SignatureRecue;
 }
 
 /** PATCH /interventions/:id/report */
@@ -94,4 +112,22 @@ export interface InterventionApi {
     technicien: { id: number; nom: string; prenom: string };
   } | null;
   createur: { id: number; nom: string; prenom: string };
+  /** null tant que le client n'a pas signé ; jamais l'image (US33). */
+  signature: ResumeSignature | null;
+}
+
+export interface ResumeSignature {
+  nomSignataire: string;
+  signeeLe: Date;
+}
+
+/** GET /interventions/:id/signature (US33). */
+export interface SignatureApi extends ResumeSignature {
+  /** Compte qui a enregistré la signature, avec ses nom et prénom actuels. */
+  auteur: { id: number; nom: string; prenom: string };
+  empreinte: string;
+  /** Faux si l'empreinte recalculée sur les données actuelles diffère (RG34). */
+  integre: boolean;
+  /** data:image/png;base64,… */
+  image: string;
 }

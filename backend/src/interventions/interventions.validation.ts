@@ -21,8 +21,10 @@ import {
   type FinDIntervention,
   type ModificationIntervention,
   type NouvelleIntervention,
+  type SignatureRecue,
   TRIS_INTERVENTIONS,
 } from './interventions.types.js';
+import { type ImagePng, ImagePngRefusee, lireImagePng } from './signature-png.js';
 
 /*
  * Validation des données reçues par les routes des interventions (contrat d'API, section 6.3).
@@ -32,6 +34,8 @@ import {
 const LONGUEUR_DESCRIPTION = 1000;
 const LONGUEUR_MOTIF = 500;
 const LONGUEUR_COMPTE_RENDU = 2000;
+const LONGUEUR_NOM_SIGNATAIRE = 100;
+const CHAMPS_SIGNATURE: readonly string[] = ['image', 'nomSignataire'];
 const STATUTS = Object.values(StatutIntervention);
 const URGENCES = Object.values(Urgence);
 
@@ -94,15 +98,23 @@ export function lireDemarrage(corps: unknown): void {
   lireObjet(corps ?? {}, []);
 }
 
-/** POST /interventions/:id/complete : compte rendu facultatif ; le corps peut être absent. */
+/**
+ * POST /interventions/:id/complete : compte rendu facultatif ; le corps peut être absent.
+ * Avec une signature (US33), le compte rendu devient obligatoire (RG31).
+ */
 export function lireFinDIntervention(corps: unknown): FinDIntervention {
-  const champs = lireObjet(corps ?? {}, ['compteRendu']);
+  const champs = lireObjet(corps ?? {}, ['compteRendu', 'signature']);
   const erreurs: string[] = [];
   const compteRendu = lireTexte(champs, 'compteRendu', erreurs, {
-    obligatoire: false,
+    obligatoire: estUnObjet(champs.signature),
     maximum: LONGUEUR_COMPTE_RENDU,
   });
+  const signature =
+    champs.signature === undefined ? undefined : lireSignature(champs.signature, erreurs);
   signalerErreurs(erreurs);
+  if (signature !== undefined) {
+    return { compteRendu: compteRendu as string, signature };
+  }
   return typeof compteRendu === 'string' ? { compteRendu } : {};
 }
 
@@ -139,6 +151,64 @@ export function lireFiltresInterventions(requete: Record<string, unknown>): Filt
 }
 
 // ---------- Outils ----------
+
+/**
+ * Objet signature de POST /complete. lireObjet n'est pas utilisé ici : il lève dès la première
+ * erreur, avec un message qui parle du corps de la requête. Les erreurs de la signature sont
+ * ajoutées aux autres, préfixées par « signature. », pour être renvoyées dans un seul 400.
+ */
+function lireSignature(valeur: unknown, erreurs: string[]): SignatureRecue | undefined {
+  if (valeur === null) {
+    erreurs.push('signature ne peut pas être null');
+    return undefined;
+  }
+  if (!estUnObjet(valeur)) {
+    erreurs.push('signature doit être un objet');
+    return undefined;
+  }
+  const inconnus = Object.keys(valeur).filter((cle) => !CHAMPS_SIGNATURE.includes(cle));
+  if (inconnus.length > 0) {
+    erreurs.push(...inconnus.map((cle) => `Le champ signature.${cle} n’est pas autorisé`));
+    return undefined;
+  }
+  const champs: Champs = {
+    'signature.nomSignataire': valeur.nomSignataire,
+    'signature.image': valeur.image,
+  };
+  const nomSignataire = lireTexte(champs, 'signature.nomSignataire', erreurs, {
+    obligatoire: true,
+    maximum: LONGUEUR_NOM_SIGNATAIRE,
+  });
+  const image = lireImage(champs['signature.image'], erreurs);
+  if (typeof nomSignataire !== 'string' || image === undefined) {
+    return undefined;
+  }
+  return { nomSignataire, image };
+}
+
+function lireImage(valeur: unknown, erreurs: string[]): ImagePng | undefined {
+  if (valeur === undefined || valeur === null) {
+    erreurs.push('signature.image est obligatoire');
+    return undefined;
+  }
+  if (typeof valeur !== 'string') {
+    erreurs.push('signature.image doit être un texte');
+    return undefined;
+  }
+  try {
+    return lireImagePng(valeur);
+  } catch (erreur) {
+    if (erreur instanceof ImagePngRefusee) {
+      erreurs.push(erreur.message);
+      return undefined;
+    }
+    throw erreur;
+  }
+}
+
+function estUnObjet(valeur: unknown): valeur is Champs {
+  return typeof valeur === 'object' && valeur !== null && !Array.isArray(valeur);
+}
 
 function lireChampsIntervention(
   champs: Champs,

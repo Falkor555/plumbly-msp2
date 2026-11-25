@@ -45,7 +45,7 @@ describe('types d’intervention (e2e)', () => {
 
   beforeEach(async () => {
     await application.prisma.$executeRaw`
-      TRUNCATE TABLE intervention, adresse, client, type_intervention RESTART IDENTITY`;
+      TRUNCATE TABLE signature_intervention, intervention, adresse, client, type_intervention RESTART IDENTITY`;
   });
 
   afterAll(async () => {

@@ -118,6 +118,22 @@ describe('lireTexte', () => {
     ]);
   });
 
+  it.each([
+    ['au début d’un emoji', 'Fuite réparée \ud83d'],
+    ['à la fin d’un emoji', '\ude00 Fuite réparée'],
+  ])(
+    'refuse une moitié d’emoji isolée (%s), que la base enregistrerait autrement',
+    (_cas, texte) => {
+      expect(lecture(obligatoire, { nomClient: texte }).erreurs).toEqual([
+        'nomClient contient un caractère non autorisé',
+      ]);
+    },
+  );
+
+  it('accepte un emoji entier', () => {
+    expect(lecture(obligatoire, { nomClient: 'Hoarau 😀' }).valeur).toBe('Hoarau 😀');
+  });
+
   it('accepte null pour effacer un champ effaçable', () => {
     const effacable = lecteur({ obligatoire: false, maximum: 100, effacable: true });
 

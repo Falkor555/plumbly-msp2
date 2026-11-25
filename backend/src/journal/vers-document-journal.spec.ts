@@ -51,6 +51,29 @@ describe('versDocumentJournal', () => {
     });
   });
 
+  it('SIGNATURE_ENREGISTREE : empreinte dans le contexte de l’intervention, rien d’autre', () => {
+    const empreinte = 'a'.repeat(64);
+    const action = {
+      type: 'SIGNATURE_ENREGISTREE' as const,
+      auteur: TECHNICIEN,
+      interventionId: 42,
+      empreinte,
+      // Surplus qu'un appelant pourrait passer par erreur : il ne doit pas entrer dans MongoDB.
+      nomSignataire: 'Jean Dupont',
+      image: 'data:image/png;base64,iVBORw0KGgo=',
+    };
+
+    const document = versDocumentJournal(action, DATE);
+
+    expect(document).toEqual({
+      date: DATE,
+      action: 'SIGNATURE_ENREGISTREE',
+      auteur: { id: 7, role: 'TECHNICIEN' },
+      entite: { type: 'intervention', id: 42 },
+      contexte: { empreinte },
+    });
+  });
+
   it('CONNEXION_REUSSIE : l’entité est l’utilisateur qui se connecte', () => {
     const document = versDocumentJournal({ type: 'CONNEXION_REUSSIE', auteur: TECHNICIEN }, DATE);
 

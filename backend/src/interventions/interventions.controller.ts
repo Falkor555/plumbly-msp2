@@ -19,6 +19,7 @@ import {
   ApiNotFoundResponse,
   ApiOperation,
   ApiParam,
+  ApiPayloadTooLargeResponse,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -32,7 +33,11 @@ import {
 } from '../commun/autorisation/utilisateur-connecte.js';
 import { lireIdentifiant, type PageApi } from '../commun/validation.js';
 import { InterventionsService } from './interventions.service.js';
-import { type InterventionApi, TRIS_INTERVENTIONS } from './interventions.types.js';
+import {
+  type InterventionApi,
+  type SignatureApi,
+  TRIS_INTERVENTIONS,
+} from './interventions.types.js';
 import {
   lireAnnulation,
   lireCompteRendu,
@@ -85,6 +90,15 @@ const EXEMPLE_INTERVENTION = {
     technicien: { id: 2, nom: 'Benali', prenom: 'Karim' },
   },
   createur: { id: 3, nom: 'Martin', prenom: 'Sophie' },
+  signature: null,
+};
+
+// Tronquée : une vraie signature fait plusieurs dizaines de milliers de caractères.
+const EXEMPLE_IMAGE = 'data:image/png;base64,iVBORw0KGgo…';
+
+const EXEMPLE_RESUME_SIGNATURE = {
+  nomSignataire: 'Jean Dupont',
+  signeeLe: '2026-11-25T08:58:40.000Z',
 };
 
 /**
@@ -350,15 +364,38 @@ export class InterventionsController {
   @HttpCode(HttpStatus.OK)
   @Roles('TECHNICIEN')
   @ApiOperation({
-    summary: 'Terminer une intervention (US17, US18)',
+    summary: 'Terminer une intervention, signée ou non par le client (US17, US18, US33)',
     description:
-      'En cours → terminée (RG03), avec un compte rendu facultatif. Journal STATUT_MODIFIE. ' +
-      'Droits : le technicien de la tournée.',
+      'En cours → terminée (RG03), avec un compte rendu facultatif. Avec `signature`, le compte ' +
+      'rendu devient obligatoire (RG31) et la signature est enregistrée dans la même ' +
+      'transaction, horodatée par le serveur (`signeeLe` = `termineeLe`) avec une empreinte ' +
+      'SHA-256 (RG30, RG34). Journal STATUT_MODIFIE, puis SIGNATURE_ENREGISTREE (ni image ni ' +
+      'nom du signataire). Droits : le technicien de la tournée.',
   })
   @ApiParam(PARAMETRE_ID)
   @ApiBody({
     required: false,
-    schema: { type: 'object', properties: { compteRendu: CORPS_COMPTE_RENDU } },
+    schema: {
+      type: 'object',
+      properties: {
+        compteRendu: CORPS_COMPTE_RENDU,
+        signature: {
+          type: 'object',
+          required: ['image', 'nomSignataire'],
+          description: 'Facultatif (US33). Absent : clôture sans signature.',
+          properties: {
+            image: {
+              type: 'string',
+              description:
+                'data:image/png;base64,… ; PNG de 48 Ko au plus, 100 à 1 200 px de large, ' +
+                '50 à 600 px de haut (RG35)',
+              example: EXEMPLE_IMAGE,
+            },
+            nomSignataire: { type: 'string', minLength: 1, maxLength: 100, example: 'Jean Dupont' },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 200,
@@ -369,14 +406,19 @@ export class InterventionsController {
         demarreeLe: '2026-11-25T08:03:12.000Z',
         termineeLe: '2026-11-25T08:58:40.000Z',
         compteRendu: CORPS_COMPTE_RENDU.example,
+        signature: EXEMPLE_RESUME_SIGNATURE,
       },
     },
   })
   @ApiBadRequestResponse({
-    description: 'Intervention qui n’est pas en cours ; compte rendu trop long',
+    description:
+      'Intervention qui n’est pas en cours (y compris une seconde clôture, même simultanée) ; ' +
+      'compte rendu trop long ; signature sans compte rendu ; nom du signataire manquant ou ' +
+      'trop long ; image qui n’est pas un PNG, trop lourde ou aux dimensions hors limites',
   })
   @ApiForbiddenResponse({ description: 'Utilisateur qui n’est pas le technicien de la tournée' })
   @ApiNotFoundResponse({ description: 'Intervention inexistante' })
+  @ApiPayloadTooLargeResponse({ description: 'Corps de requête de plus de 100 Ko' })
   terminer(
     @Param('id') id: string,
     @Body() corps: unknown,
@@ -391,6 +433,7 @@ export class InterventionsController {
     summary: 'Compléter le compte rendu (US18)',
     description:
       'Seule modification permise après « terminée » : le texte remplace le précédent. ' +
+      'Refusée une fois l’intervention signée par le client (RG33). ' +
       'Droits : le technicien de la tournée.',
   })
   @ApiParam(PARAMETRE_ID)
@@ -414,7 +457,9 @@ export class InterventionsController {
     },
   })
   @ApiBadRequestResponse({
-    description: 'Intervention qui n’est pas terminée ; texte vide ou trop long',
+    description:
+      'Intervention qui n’est pas terminée ; intervention signée, dont le compte rendu est ' +
+      'définitif (RG33) ; texte vide ou trop long',
   })
   @ApiForbiddenResponse({ description: 'Utilisateur qui n’est pas le technicien de la tournée' })
   @ApiNotFoundResponse({ description: 'Intervention inexistante' })
@@ -428,5 +473,38 @@ export class InterventionsController {
       lireCompteRendu(corps),
       utilisateur,
     );
+  }
+
+  @Get(':id/signature')
+  @Roles('ADMIN', 'GESTIONNAIRE', 'TECHNICIEN')
+  @ApiOperation({
+    summary: 'Consulter la signature du client et vérifier son empreinte (US33)',
+    description:
+      'L’empreinte est recalculée avec les données actuelles, dont le compte rendu : `integre` ' +
+      'vaut false si elle ne correspond plus à celle enregistrée (RG34). L’image est renvoyée en ' +
+      'data URL, pour une balise <img> (une adresse d’image n’enverrait pas le jeton d’accès). ' +
+      'Droits : ADMIN, GESTIONNAIRE, et le technicien de la tournée (RG35).',
+  })
+  @ApiParam(PARAMETRE_ID)
+  @ApiResponse({
+    status: 200,
+    description: 'Signature de l’intervention',
+    schema: {
+      example: {
+        ...EXEMPLE_RESUME_SIGNATURE,
+        auteur: { id: 7, nom: 'Benali', prenom: 'Karim' },
+        empreinte: '3f8a…c21e',
+        integre: true,
+        image: EXEMPLE_IMAGE,
+      },
+    },
+  })
+  @ApiForbiddenResponse({ description: 'Technicien qui n’est pas celui de la tournée' })
+  @ApiNotFoundResponse({ description: 'Intervention inexistante ; intervention sans signature' })
+  consulterSignature(
+    @Param('id') id: string,
+    @UtilisateurCourant() utilisateur: UtilisateurConnecte,
+  ): Promise<SignatureApi> {
+    return this.service.consulterSignature(lireIdentifiant(id), utilisateur);
   }
 }

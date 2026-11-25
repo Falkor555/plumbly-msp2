@@ -12,6 +12,7 @@ import {
   requetesEn,
   viderLaBase,
 } from './support/application-de-test.js';
+import { enDataUrl, fabriquerPng } from './support/fabriquer-png.js';
 
 /*
  * Tests d'intégration du journal des actions (#27) : planification réelle dans PostgreSQL,
@@ -24,7 +25,16 @@ const MARDI = '2026-12-08';
 const NOM_COLLECTION = 'journal_actions';
 // Port 1 : réservé, aucun serveur n'y écoute. La connexion est refusée.
 const URL_MONGODB_INJOIGNABLE = 'mongodb://127.0.0.1:1/plumbly_test?directConnection=true';
-const CHAMPS_PERSONNELS = ['email', 'motDePasse', 'motDePasseHash', 'nom', 'prenom', 'telephone'];
+const CHAMPS_PERSONNELS = [
+  'email',
+  'motDePasse',
+  'motDePasseHash',
+  'nom',
+  'prenom',
+  'telephone',
+  'nomSignataire',
+  'image',
+];
 
 interface Donnees {
   admin: UtilisateurConnecte;
@@ -242,6 +252,50 @@ describe('journal des actions dans MongoDB (e2e)', () => {
     expect(cles.filter((cle) => CHAMPS_PERSONNELS.includes(cle))).toEqual([]);
   });
 
+  it('une clôture signée écrit SIGNATURE_ENREGISTREE, sans l’image ni le nom du signataire (US33)', async () => {
+    await application.prisma.intervention.update({
+      where: { id: donnees.idIntervention },
+      data: {
+        statut: StatutIntervention.EN_COURS,
+        idTournee: donnees.idTournee,
+        ordreTournee: 1,
+        debutPrevu: new Date(mardiA('08:00')),
+        demarreeLe: new Date(mardiA('08:05')),
+      },
+    });
+    const image = enDataUrl(fabriquerPng());
+
+    await requetesEn(application.app, donnees.technicien)
+      .post(`/interventions/${donnees.idIntervention}/complete`)
+      .send({ compteRendu: 'Joint remplacé.', signature: { nomSignataire: 'Jean Dupont', image } })
+      .expect(200);
+
+    const { empreinte } = await application.prisma.signatureIntervention.findUniqueOrThrow({
+      where: { idIntervention: donnees.idIntervention },
+    });
+    const documents = await journal.find({}).sort({ _id: 1 }).toArray();
+    expect(documents.map((document) => document.action)).toEqual([
+      'STATUT_MODIFIE',
+      'SIGNATURE_ENREGISTREE',
+    ]);
+    expect(documents[1]).toEqual({
+      _id: expect.anything(),
+      date: MAINTENANT,
+      action: 'SIGNATURE_ENREGISTREE',
+      auteur: { id: donnees.technicien.id, role: 'TECHNICIEN' },
+      entite: { type: 'intervention', id: donnees.idIntervention },
+      contexte: { empreinte },
+    });
+    const texte = JSON.stringify(documents);
+    expect(texte).not.toContain('Jean Dupont');
+    expect(texte).not.toContain(image.slice(22, 62));
+    expect(documents.flatMap(clesDe).filter((cle) => CHAMPS_PERSONNELS.includes(cle))).toEqual([]);
+
+    const historiqueLu = await historique(donnees.idIntervention, donnees.gestionnaire).expect(200);
+    expect(historiqueLu.body).toContainEqual(
+      expect.objectContaining({ action: 'SIGNATURE_ENREGISTREE', contexte: { empreinte } }),
+    );
+  });
   it('crée au démarrage les index du modèle de données, dont le TTL partiel des connexions', async () => {
     const index = await journal.listIndexes().toArray();
 

@@ -26,6 +26,11 @@ export function versDocumentJournal(action: ActionJournalisee, date: Date): Docu
         apres: { statut: 'ANNULEE' },
         contexte: { motif: action.motif },
       };
+    case 'SIGNATURE_ENREGISTREE':
+      return {
+        ...enTete(action.type, date, action.auteur, intervention(action.interventionId)),
+        contexte: { empreinte: action.empreinte },
+      };
     case 'CONNEXION_REUSSIE':
       return enTete(action.type, date, action.auteur, utilisateur(action.auteur.id));
     case 'CONNEXION_ECHOUEE':
