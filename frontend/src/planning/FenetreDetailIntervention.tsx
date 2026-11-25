@@ -2,6 +2,7 @@ import { useId, useRef, type ReactNode } from 'react';
 import type { Intervention } from '../api/types';
 import { Fenetre } from '../commun/Fenetre';
 import { lienTelephone } from '../commun/liens';
+import { BlocSignature } from '../signature/BlocSignature';
 import { BadgesIntervention } from './BadgesIntervention';
 import { creneau } from './presentation';
 
@@ -12,7 +13,9 @@ interface Props {
 
 /**
  * US23 : détail d'une intervention du planning, en lecture seule. Construit avec les données
- * du planning déjà chargé : aucun appel à l'API.
+ * du planning déjà chargé, sauf la signature du client (US33) : pour une intervention signée,
+ * le bloc « Signature du client » la lit à l'ouverture (GET /interventions/:id/signature), car
+ * l'image n'est jamais dans le planning. Une intervention non signée ne fait aucun appel.
  */
 export function FenetreDetailIntervention({ intervention, onFermer }: Props) {
   const idTitre = useId();
@@ -20,7 +23,12 @@ export function FenetreDetailIntervention({ intervention, onFermer }: Props) {
   const { client, adresse } = intervention;
 
   return (
-    <Fenetre idTitre={idTitre} onFermer={onFermer} focusInitial={boutonFermer}>
+    <Fenetre
+      idTitre={idTitre}
+      onFermer={onFermer}
+      focusInitial={boutonFermer}
+      className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto"
+    >
       <header className="flex items-start gap-3 border-b border-bordure px-6 py-4">
         <div className="min-w-0 flex-1">
           <h2 id={idTitre} className="text-lg font-semibold">
@@ -63,6 +71,11 @@ export function FenetreDetailIntervention({ intervention, onFermer }: Props) {
         {adresse.infosAcces && <Rubrique titre="Accès">{adresse.infosAcces}</Rubrique>}
         <Rubrique titre="Description">{intervention.description}</Rubrique>
       </dl>
+      {intervention.signature && (
+        <div className="border-t border-bordure px-6 py-4">
+          <BlocSignature idIntervention={intervention.id} />
+        </div>
+      )}
     </Fenetre>
   );
 }
