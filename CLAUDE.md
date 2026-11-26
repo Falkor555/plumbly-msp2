@@ -87,7 +87,8 @@ Relancer seulement les tests en échec pendant une correction :
   Tailwind de `index.css` (`bg-sarcelle`, `text-anthracite`…), pas de couleur en dur.
 - **Accessibilité** : contraste du texte d'au moins **4,5:1** sur son fond (le calculer, surtout
   pour un texte coloré sur fond clair) ; libellés et rôles ARIA utilisables par Testing Library.
-- Pas de routeur pour l'instant (#9, Loïc) : `App.tsx` aiguille à la main.
+- Routes déclarées dans `App.tsx` (React Router, #9 et #14) ; `RouteProtegee` n'est qu'un confort
+  d'affichage : la sécurité reste côté API (401, 403).
 
 ## Tests
 
@@ -119,10 +120,10 @@ Relancer seulement les tests en échec pendant une correction :
 ## Ce qui appartient à Loïc
 
 Authentification et rôles côté API (**#13** : JWT, argon2, `/auth/*`, `/users/*`), pages de
-connexion et routes protégées (#14), initialisation du routeur et du layout front (#9), tests
-d'intégration de l'API (#12), maquettes connexion/interventions (#26). Ne pas implémenter ces
-parties sans accord : en attendant #13, `request.user` est vide et les routes protégées
-répondent 401, c'est voulu (`commun/autorisation/roles.guard.ts`).
+connexion et routes protégées (**#14**), routeur et layout du front (**#9**), toutes fusionnées ;
+tests d'intégration de l'API (#12), maquettes connexion/interventions (#26). Ne pas modifier ces
+parties sans accord. Depuis #13, `AuthentificationGuard` (APP_GUARD) vérifie le jeton sur
+toutes les routes et remplit `request.user` ; une route sans jeton porte `@Public()`.
 
 ## Interdits
 
