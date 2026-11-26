@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import type { Client, TypeClient } from '../api/types';
+import { type ErreursSaisie, nombreDErreurs } from '../commun/saisie';
 import {
   type ChampTexteClient,
-  type ErreursSaisie,
-  nombreDErreurs,
   type SaisieAdresse,
   type SaisieClient,
   saisieDeLAdresse,

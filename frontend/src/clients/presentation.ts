@@ -5,17 +5,10 @@ export const LIBELLES_TYPE_CLIENT: Record<TypeClient, string> = {
   PROFESSIONNEL: 'Professionnel',
 };
 
-/** Même gabarit que les badges du planning (BadgesIntervention). */
-export const BADGE =
-  'inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset';
-
 export const CLASSES_TYPE_CLIENT: Record<TypeClient, string> = {
   PARTICULIER: 'bg-white text-gris-texte ring-bordure',
   PROFESSIONNEL: 'bg-sarcelle-claire text-sarcelle-profonde ring-sarcelle/20',
 };
-
-/** Gris neutre, comme une intervention annulée : la fiche n'est plus active mais reste lisible. */
-export const CLASSES_ARCHIVE = 'bg-gray-100 text-gris-texte ring-bordure';
 
 /** Tris acceptés par GET /clients (backend/src/clients/clients.types.ts), dans l'ordre du menu. */
 export const OPTIONS_TRI_CLIENTS: { valeur: TriClients; libelle: string }[] = [
@@ -36,15 +29,6 @@ export function nombreDeClients(nombre: number): string {
  */
 export function villePrincipale(client: Pick<Client, 'adresses'>): string | null {
   return client.adresses.find((adresse) => !adresse.archive)?.ville ?? null;
-}
-
-/**
- * « 0692 12 34 56 » pour « 0692123456 », la forme que l'API enregistre (10 chiffres). Un numéro
- * d'une autre forme est rendu tel quel plutôt que d'être déformé.
- */
-export function telephoneLisible(telephone: string): string {
-  if (!/^\d{10}$/.test(telephone)) return telephone;
-  return `${telephone.slice(0, 4)} ${telephone.slice(4).replace(/(\d{2})(?=\d)/g, '$1 ')}`;
 }
 
 /**

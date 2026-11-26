@@ -1,17 +1,19 @@
 import { type ReactNode, type Ref, useId } from 'react';
-import { BOUTON_DESTRUCTIF, BOUTON_SECONDAIRE, LIEN } from '../commun/classes';
-import type { ActionFiche } from './FenetreDeLaFiche';
+import { BOUTON_DESTRUCTIF, BOUTON_SECONDAIRE, LIEN } from './classes';
 
-/* Briques communes à l'en-tête et aux sections de la fiche client (US09, US10). */
+/* Briques communes à l'en-tête et aux sections des fiches client et technicien (US09 à US11). */
 
 /** Lien de la fiche : celui du texte, en gras pour se détacher des valeurs affichées. */
 export const LIEN_FICHE = `${LIEN} font-semibold`;
 
 const CARTE = 'rounded-lg border border-bordure bg-white';
 
-/** Actions d'un client en service ; absentes pour un client archivé. */
-export interface ActionsDeLaFiche {
-  ouvrir: (action: ActionFiche) => void;
+/**
+ * Actions d'une fiche en service ; absentes pour une fiche archivée. A : les fenêtres que la fiche
+ * peut ouvrir (ActionFiche pour un client, ActionFicheTechnicien pour un technicien).
+ */
+export interface ActionsDeLaFiche<A> {
+  ouvrir: (action: A) => void;
   /**
    * Vrai pendant la relecture qui suit une écriture : la fiche affichée est périmée (adresse déjà
    * archivée, client déjà archivé) et une nouvelle action serait refusée par l'API.
@@ -49,10 +51,19 @@ export function Section({ titre, action, refTitre, children }: PropsSection) {
   );
 }
 
-interface PropsBouton {
-  actions: ActionsDeLaFiche;
+export function Rubrique({ titre, children }: { titre: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-gris-texte">{titre}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
+interface PropsBouton<A> {
+  actions: ActionsDeLaFiche<A>;
   /** Fenêtre que le bouton ouvre. */
-  action: ActionFiche;
+  action: A;
   destructif?: boolean;
   /** Raison propre au bouton de rester inactif (RG21), en plus d'une relecture en cours. */
   inactif?: boolean;
@@ -65,14 +76,14 @@ interface PropsBouton {
  * Bouton d'action de la fiche. Inactif, il reste focalisable (aria-disabled) et n'ouvre rien : le
  * focus rendu par une fenêtre qui se ferme n'est ainsi jamais perdu pendant la relecture.
  */
-export function BoutonDeLaFiche({
+export function BoutonDeLaFiche<A>({
   actions,
   action,
   destructif = false,
   inactif = false,
   idExplication,
   children,
-}: PropsBouton) {
+}: PropsBouton<A>) {
   const desactive = inactif || actions.inactives;
   return (
     <button

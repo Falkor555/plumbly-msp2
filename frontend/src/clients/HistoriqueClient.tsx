@@ -3,7 +3,7 @@ import { clientsApi } from '../api/clients.api';
 import type { Intervention, ListePaginee, StatutIntervention } from '../api/types';
 import { AlerteChargement } from '../commun/AlerteChargement';
 import { AnnonceDuTotal } from '../commun/AnnonceDuTotal';
-import { CELLULE_TABLEAU, ENTETE_TABLEAU } from '../commun/classes';
+import { BADGE, CELLULE_TABLEAU, ENTETE_TABLEAU } from '../commun/classes';
 import { dateHeureMetier } from '../commun/dates';
 import { Pagination } from '../commun/Pagination';
 import { useChargement } from '../commun/useChargement';
@@ -14,7 +14,7 @@ import {
   nombreDInterventions,
   nomComplet,
 } from '../planning/presentation';
-import { adresseSurUneLigne, BADGE } from './presentation';
+import { adresseSurUneLigne } from './presentation';
 
 /** Une fiche se lit d'un coup d'œil : l'historique avance par dix. */
 const TAILLE_PAGE_HISTORIQUE = 10;

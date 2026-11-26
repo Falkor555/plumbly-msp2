@@ -1,7 +1,5 @@
 import { type Ref, useId } from 'react';
-
-const CHAMP =
-  'mt-1 block w-full rounded border border-gray-300 bg-white px-2 py-2 text-sm focus:border-sarcelle focus:ring-3 focus:ring-sarcelle/15 focus:outline-none disabled:bg-gray-50 aria-invalid:border-erreur';
+import { CHAMP_DE_SAISIE } from './classes';
 
 interface Props {
   libelle: string;
@@ -65,7 +63,7 @@ export function ChampSaisie({
         aria-invalid={erreur ? true : undefined}
         aria-describedby={descriptions || undefined}
         onChange={(evenement) => onChanger(evenement.target.value)}
-        className={CHAMP}
+        className={CHAMP_DE_SAISIE}
       />
       {aide && (
         <p id={idAide} className="mt-1 text-xs text-gris-texte">

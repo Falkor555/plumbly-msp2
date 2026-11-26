@@ -1,18 +1,20 @@
-import { type Ref, type RefObject, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { type Ref, useCallback, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { clientsApi } from '../api/clients.api';
 import type { Client } from '../api/types';
 import { AlerteChargement } from '../commun/AlerteChargement';
+import { BADGE, CLASSES_ARCHIVE } from '../commun/classes';
 import { dateMetier } from '../commun/dates';
+import { type ActionsDeLaFiche, BoutonDeLaFiche, LIEN_FICHE } from '../commun/ElementsDeLaFiche';
 import { lireIdentifiant } from '../commun/identifiant';
 import { PageIntrouvable } from '../commun/PageIntrouvable';
 import { useArriveeSurLaPage } from '../commun/useArriveeSurLaPage';
 import { useChargement } from '../commun/useChargement';
+import { useFocusApresRelecture } from '../commun/useFocusApresRelecture';
 import { useReessai } from '../commun/useReessai';
 import { ZoneAnnonce } from '../commun/ZoneAnnonce';
-import { type ActionsDeLaFiche, BoutonDeLaFiche, LIEN_FICHE } from './ElementsDeLaFiche';
 import { type ActionFiche, FenetreDeLaFiche } from './FenetreDeLaFiche';
-import { BADGE, CLASSES_ARCHIVE, CLASSES_TYPE_CLIENT, LIBELLES_TYPE_CLIENT } from './presentation';
+import { CLASSES_TYPE_CLIENT, LIBELLES_TYPE_CLIENT } from './presentation';
 import { SectionAdresses } from './SectionAdresses';
 import { SectionCoordonnees } from './SectionCoordonnees';
 import { SectionHistorique } from './SectionHistorique';
@@ -105,7 +107,7 @@ function ContenuFiche({ client, relectureEnCours, onModifie }: PropsContenu) {
   const titre = useRef<HTMLHeadingElement>(null);
   const titreAdresses = useRef<HTMLHeadingElement>(null);
   const focaliserApresRelecture = useFocusApresRelecture(client);
-  const actions: ActionsDeLaFiche | undefined = client.archive
+  const actions: ActionsDeLaFiche<ActionFiche> | undefined = client.archive
     ? undefined
     : {
         ouvrir: (choisie) => {
@@ -142,30 +144,11 @@ function ContenuFiche({ client, relectureEnCours, onModifie }: PropsContenu) {
   );
 }
 
-/**
- * Focus à poser une fois la fiche relue. Après un archivage, le bouton qui avait ouvert la fenêtre
- * disparaît avec la relecture : sans cela, le focus retomberait sur le document et l'utilisateur
- * au clavier devrait retraverser la page (RGAA 12.8). La cible est un titre resté en place.
- */
-function useFocusApresRelecture(client: Client): (cible: RefObject<HTMLElement | null>) => void {
-  const cibleEnAttente = useRef<RefObject<HTMLElement | null> | null>(null);
-  // Effet de mise en page : le focus change dans la mise à jour même qui retire le bouton. Un
-  // effet ordinaire ne passerait qu'après l'affichage, laissant un moment le focus au document.
-  useLayoutEffect(() => {
-    // La fiche relue est un nouvel objet : l'effet ne passe qu'une fois la relecture arrivée.
-    cibleEnAttente.current?.current?.focus();
-    cibleEnAttente.current = null;
-  }, [client]);
-  return useCallback((cible) => {
-    cibleEnAttente.current = cible;
-  }, []);
-}
-
 interface PropsEnTete {
   client: Client;
   refTitre: Ref<HTMLHeadingElement>;
   /** Absentes pour un client archivé. */
-  actions?: ActionsDeLaFiche;
+  actions?: ActionsDeLaFiche<ActionFiche>;
 }
 
 function EnTeteFiche({ client, refTitre, actions }: PropsEnTete) {

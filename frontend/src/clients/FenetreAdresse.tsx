@@ -1,14 +1,13 @@
 import { type FormEvent, useId, useRef, useState } from 'react';
 import { clientsApi } from '../api/clients.api';
 import type { Adresse } from '../api/types';
+import { BoutonsDuFormulaire } from '../commun/BoutonsDuFormulaire';
 import { Fenetre } from '../commun/Fenetre';
+import { ResumeDesErreurs } from '../commun/ResumeDesErreurs';
+import { type ErreursSaisie, nombreDErreurs } from '../commun/saisie';
 import { useSoumission } from '../commun/useSoumission';
-import { BoutonsDuFormulaire } from './BoutonsDuFormulaire';
 import { ChampsAdresse } from './ChampsAdresse';
-import { ResumeDesErreurs } from './ResumeDesErreurs';
 import {
-  type ErreursSaisie,
-  nombreDErreurs,
   type SaisieAdresse,
   saisieDeLAdresse,
   validerAdresse,

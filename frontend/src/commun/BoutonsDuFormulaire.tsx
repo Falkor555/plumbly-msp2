@@ -1,5 +1,5 @@
 import type { Ref } from 'react';
-import { BOUTON_PRINCIPAL, BOUTON_SECONDAIRE } from '../commun/classes';
+import { BOUTON_PRINCIPAL, BOUTON_SECONDAIRE } from './classes';
 
 interface Props {
   /** Libellé du bouton d'envoi, qui dit aussi quand l'envoi est en cours. */

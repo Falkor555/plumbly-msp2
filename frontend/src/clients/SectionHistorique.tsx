@@ -1,4 +1,4 @@
-import { Section } from './ElementsDeLaFiche';
+import { Section } from '../commun/ElementsDeLaFiche';
 import { HistoriqueClient } from './HistoriqueClient';
 
 /** Historique des interventions du client (US09), consultable même une fois le client archivé. */

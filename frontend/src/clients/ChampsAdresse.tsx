@@ -1,6 +1,7 @@
 import type { Ref } from 'react';
 import { ChampSaisie } from '../commun/ChampSaisie';
-import { type ErreursSaisie, LONGUEURS_CLIENT, type SaisieAdresse } from './validationClient';
+import type { ErreursSaisie } from '../commun/saisie';
+import { LONGUEURS_CLIENT, type SaisieAdresse } from './validationClient';
 
 interface Props {
   saisie: SaisieAdresse;

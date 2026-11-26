@@ -7,6 +7,8 @@ import type {
   NouvelleAdresse,
   TypeClient,
 } from '../api/types';
+import type { ErreursSaisie } from '../commun/saisie';
+import { telephoneAEnvoyer, verifierTelephone } from '../commun/telephone';
 
 /*
  * Saisie des formulaires client et adresse (US06, US07, US10). La validation reprend les règles de
@@ -20,8 +22,6 @@ export const LONGUEURS_CLIENT = {
   nom: 100,
   raisonSociale: 150,
   email: 255,
-  // Au-delà, l'API refuse le numéro sans le nettoyer (normaliserTelephone).
-  telephoneSaisi: 20,
   rue: 255,
   complement: 255,
   codePostal: 5,
@@ -50,23 +50,15 @@ export interface SaisieAdresse {
   infosAcces: string;
 }
 
-/** Message d'erreur par champ ; un champ absent est valide. */
-export type ErreursSaisie<T> = Partial<Record<keyof T, string>>;
-
 type ChampFacultatifClient = 'nomClient' | 'prenomClient' | 'raisonSociale' | 'emailClient';
 
 const FORMAT_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const FORMAT_TELEPHONE = /^0\d{9}$/;
 const FORMAT_CODE_POSTAL = /^\d{5}$/;
 
 export const MESSAGES_CLIENT = {
   nomObligatoire: 'Saisissez le nom : il est obligatoire pour un particulier.',
   raisonSocialeObligatoire:
     'Saisissez la raison sociale : elle est obligatoire pour un professionnel.',
-  telephoneObligatoire:
-    'Saisissez le téléphone : 10 chiffres commençant par 0, par exemple 0692 12 34 56.',
-  telephoneInvalide:
-    'Le téléphone doit contenir 10 chiffres commençant par 0 (espaces et points acceptés), par exemple 0692 12 34 56.',
   emailInvalide: 'Saisissez une adresse e-mail valide, par exemple nom@exemple.re.',
   rueObligatoire: 'Saisissez la rue : elle est obligatoire.',
   codePostalObligatoire: 'Saisissez le code postal : 5 chiffres, par exemple 97400.',
@@ -77,17 +69,6 @@ export const MESSAGES_CLIENT = {
 /** « Raccourcissez la rue : 255 caractères au plus. » */
 export function messageTropLong(designation: string, maximum: number): string {
   return `Raccourcissez ${designation} : ${maximum} caractères au plus.`;
-}
-
-/** Numéro à 10 chiffres sans ses espaces ni ses points, ou null s'il n'est pas valide. */
-export function normaliserTelephone(saisie: string): string | null {
-  if (saisie.length > LONGUEURS_CLIENT.telephoneSaisi) return null;
-  const chiffres = saisie.replace(/[ .]/g, '');
-  return FORMAT_TELEPHONE.test(chiffres) ? chiffres : null;
-}
-
-export function nombreDErreurs<T>(erreurs: ErreursSaisie<T>): number {
-  return Object.values(erreurs).filter((message) => message !== undefined).length;
 }
 
 /**
@@ -236,11 +217,6 @@ function verifierTexte(
   return texte.length > maximum ? messageTropLong(designation, maximum) : undefined;
 }
 
-function verifierTelephone(saisie: string): string | undefined {
-  if (saisie.trim() === '') return MESSAGES_CLIENT.telephoneObligatoire;
-  return normaliserTelephone(saisie) === null ? MESSAGES_CLIENT.telephoneInvalide : undefined;
-}
-
 function verifierEmail(saisie: string): string | undefined {
   const texte = saisie.trim();
   if (texte === '') return undefined;
@@ -254,11 +230,6 @@ function verifierCodePostal(saisie: string): string | undefined {
   const texte = saisie.trim();
   if (texte === '') return MESSAGES_CLIENT.codePostalObligatoire;
   return FORMAT_CODE_POSTAL.test(texte) ? undefined : MESSAGES_CLIENT.codePostalInvalide;
-}
-
-/** Le numéro sans espaces ni points ; un numéro invalide (déjà signalé) part tel quel. */
-function telephoneAEnvoyer(saisie: string): string {
-  return normaliserTelephone(saisie) ?? saisie.trim();
 }
 
 function estFacultatif(champ: ChampTexteClient): champ is ChampFacultatifClient {

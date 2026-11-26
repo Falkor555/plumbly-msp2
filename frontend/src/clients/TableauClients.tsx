@@ -1,14 +1,8 @@
 import { Link } from 'react-router';
 import type { Client } from '../api/types';
-import { CELLULE_TABLEAU, ENTETE_TABLEAU, LIEN } from '../commun/classes';
-import {
-  BADGE,
-  CLASSES_ARCHIVE,
-  CLASSES_TYPE_CLIENT,
-  LIBELLES_TYPE_CLIENT,
-  telephoneLisible,
-  villePrincipale,
-} from './presentation';
+import { BADGE, CELLULE_TABLEAU, CLASSES_ARCHIVE, ENTETE_TABLEAU, LIEN } from '../commun/classes';
+import { telephoneLisible } from '../commun/telephone';
+import { CLASSES_TYPE_CLIENT, LIBELLES_TYPE_CLIENT, villePrincipale } from './presentation';
 
 interface Props {
   clients: Client[];

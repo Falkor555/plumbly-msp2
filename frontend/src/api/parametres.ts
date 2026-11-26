@@ -20,6 +20,9 @@ export const TAILLE_PAGE_MAX = 100;
 /** L'API réduit la recherche puis exige au moins 2 caractères (lireRecherche). */
 export const LONGUEUR_MIN_RECHERCHE = 2;
 
+/** L'API refuse une recherche de plus de 100 caractères (lireRecherche). */
+export const LONGUEUR_MAX_RECHERCHE = 100;
+
 interface CriteresCommuns {
   recherche?: string;
   archives?: boolean;

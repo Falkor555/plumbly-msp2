@@ -15,6 +15,7 @@ import {
 } from './test/clientsDeTest';
 import { enregistrerLesRequetes } from './test/msw/requetesRecues';
 import { serveurApi, urlApi } from './test/msw/serveur';
+import { karimDeTest, servirLesTechniciens, techniciensDeTest } from './test/techniciensDeTest';
 
 const SOPHIE: Profil = {
   id: 3,
@@ -347,6 +348,82 @@ describe('écrans clients dans l’application (US08, US09)', () => {
       await screen.findByRole('heading', { level: 1, name: 'Boulangerie Técher' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('status', { name: 'Confirmation' })).toBeEmptyDOMElement();
+  });
+});
+
+describe('écrans techniciens dans l’application (US11)', () => {
+  function navigationPrincipale(): HTMLElement {
+    return screen.getByRole('navigation', { name: 'Navigation principale' });
+  }
+
+  it('US11 : un gestionnaire connecté voit la liste des techniciens, signalée dans la navigation', async () => {
+    serveurApi.use(...sessionDe(SOPHIE));
+    servirLesTechniciens(techniciensDeTest());
+
+    ouvrir('/techniciens');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Techniciens' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Karim Benali' })).toBeInTheDocument();
+    const navigation = navigationPrincipale();
+    expect(within(navigation).getByRole('link', { name: 'Techniciens' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(navigation).getByRole('link', { name: 'Clients' })).not.toHaveAttribute(
+      'aria-current',
+    );
+  });
+
+  it('US11 : le lien « Techniciens » reste actif sur la fiche d’un technicien', async () => {
+    serveurApi.use(
+      ...sessionDe(SOPHIE),
+      http.get(urlApi('/technicians/2'), () => HttpResponse.json(karimDeTest())),
+    );
+
+    ouvrir('/techniciens/2');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Karim Benali' }),
+    ).toBeInTheDocument();
+    expect(
+      within(navigationPrincipale()).getByRole('link', { name: 'Techniciens' }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
+  it.each([
+    ['qui n’est pas un nombre', '/techniciens/abc'],
+    ['nul', '/techniciens/0'],
+  ])(
+    'US11 : un identifiant de fiche %s affiche « Page introuvable », le focus sur son contenu, sans interroger l’API',
+    async (_cas, chemin) => {
+      serveurApi.use(...sessionDe(SOPHIE));
+      const lectures = enregistrerLesRequetes('get', '/technicians/:id', () =>
+        HttpResponse.json(karimDeTest()),
+      );
+
+      ouvrir(chemin);
+
+      const titre = await screen.findByRole('heading', { level: 1, name: 'Page introuvable' });
+      expect(screen.getByRole('main')).toContainElement(titre);
+      expect(screen.getByRole('main')).toHaveFocus();
+      expect(
+        screen.getByRole('link', { name: 'Retour à la liste des techniciens' }),
+      ).toHaveAttribute('href', '/techniciens');
+      expect(lectures).toHaveLength(0);
+    },
+  );
+
+  it('US11 : renvoie un technicien vers sa tournée s’il ouvre la liste des techniciens', async () => {
+    serveurApi.use(...sessionDe(KARIM), pasDeTournee);
+
+    ouvrir('/techniciens');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Ma tournée du jour' }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/ma-tournee');
   });
 });
 

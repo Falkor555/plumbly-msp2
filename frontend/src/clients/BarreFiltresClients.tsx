@@ -1,13 +1,9 @@
 import { useId } from 'react';
+import { LONGUEUR_MAX_RECHERCHE } from '../api/parametres';
 import type { TriClients, TypeClient } from '../api/types';
+import { CHAMP_DE_FILTRE } from '../commun/classes';
 import { LIBELLES_TYPE_CLIENT, OPTIONS_TRI_CLIENTS } from './presentation';
 import type { FiltresDeLaListe } from './useFiltresClients';
-
-const CHAMP =
-  'mt-1 block h-9 rounded border border-gray-300 bg-white px-2 text-sm focus:border-sarcelle focus:ring-3 focus:ring-sarcelle/15 focus:outline-none';
-
-/** L'API refuse une recherche de plus de 100 caractères (lireRecherche). */
-const LONGUEUR_MAX_RECHERCHE = 100;
 
 const TYPES: TypeClient[] = ['PARTICULIER', 'PROFESSIONNEL'];
 
@@ -41,7 +37,7 @@ export function BarreFiltresClients({ saisie, saisir, criteres, changerCriteres 
           maxLength={LONGUEUR_MAX_RECHERCHE}
           onChange={(evenement) => saisir(evenement.target.value)}
           aria-describedby={idAide}
-          className={`${CHAMP} w-full`}
+          className={`${CHAMP_DE_FILTRE} w-full`}
         />
         <p id={idAide} className="mt-1 text-xs text-gris-texte">
           Nom, téléphone ou ville, au moins 2 caractères.
@@ -54,7 +50,7 @@ export function BarreFiltresClients({ saisie, saisir, criteres, changerCriteres 
           onChange={(evenement) =>
             changerCriteres({ typeClient: TYPES.find((type) => type === evenement.target.value) })
           }
-          className={CHAMP}
+          className={CHAMP_DE_FILTRE}
         >
           <option value="">Tous</option>
           {TYPES.map((type) => (
@@ -69,7 +65,7 @@ export function BarreFiltresClients({ saisie, saisir, criteres, changerCriteres 
         <select
           value={criteres.tri}
           onChange={(evenement) => changerCriteres({ tri: triChoisi(evenement.target.value) })}
-          className={CHAMP}
+          className={CHAMP_DE_FILTRE}
         >
           {OPTIONS_TRI_CLIENTS.map(({ valeur, libelle }) => (
             <option key={valeur} value={valeur}>

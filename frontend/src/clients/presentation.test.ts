@@ -5,7 +5,6 @@ import {
   identiteDuClient,
   nombreDeClients,
   separerAdresses,
-  telephoneLisible,
   villePrincipale,
 } from './presentation';
 
@@ -36,16 +35,6 @@ describe('présentation des clients', () => {
   it('US08 : n’invente pas de ville sans adresse en service', () => {
     expect(villePrincipale({ adresses: [] })).toBeNull();
     expect(villePrincipale({ adresses: [fabriquerAdresse({ id: 1, archive: true })] })).toBeNull();
-  });
-
-  it.each([
-    ['0692123456', '0692 12 34 56'],
-    ['0262414243', '0262 41 42 43'],
-    ['069212345', '069212345'],
-    ['+262692123456', '+262692123456'],
-    ['', ''],
-  ])('US08 : écrit le téléphone %s sous la forme « %s »', (telephone, attendu) => {
-    expect(telephoneLisible(telephone)).toBe(attendu);
   });
 
   it('US09 : sépare les adresses en service des archivées, dans l’ordre reçu', () => {

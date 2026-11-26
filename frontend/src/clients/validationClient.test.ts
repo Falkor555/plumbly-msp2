@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { MESSAGES_TELEPHONE } from '../commun/telephone';
 import { fabriquerAdresse, heleneDeTest } from '../test/clientsDeTest';
 import {
   MESSAGES_CLIENT,
   messageTropLong,
-  normaliserTelephone,
   type SaisieAdresse,
   type SaisieClient,
   saisieDeLAdresse,
@@ -90,7 +90,7 @@ describe('validation du client (US06)', () => {
     [`0692123456${' '.repeat(11)}`, 'de plus de 20 caractères'],
   ])('US06 : refuse le téléphone « %s » (%s)', (telephone) => {
     expect(validerClient(particulier({ telephone }))).toEqual({
-      telephone: MESSAGES_CLIENT.telephoneInvalide,
+      telephone: MESSAGES_TELEPHONE.invalide,
     });
   });
 
@@ -275,12 +275,5 @@ describe('corps envoyés à l’API', () => {
       infosAcces: 'Code 9999',
     });
     expect(versModificationAdresse(initiale, saisieDeLAdresse(initiale))).toEqual({});
-  });
-});
-
-describe('normalisation du téléphone', () => {
-  it('US06 : retire les espaces et les points, comme l’API', () => {
-    expect(normaliserTelephone('06.92 12.34 56')).toBe('0692123456');
-    expect(normaliserTelephone('0692-12-34-56')).toBeNull();
   });
 });

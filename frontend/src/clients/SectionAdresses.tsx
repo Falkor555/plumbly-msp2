@@ -1,13 +1,14 @@
 import { type ReactNode, type Ref, useId } from 'react';
 import type { Adresse } from '../api/types';
 import { dateMetier } from '../commun/dates';
-import { type ActionsDeLaFiche, BoutonDeLaFiche, Section } from './ElementsDeLaFiche';
+import { type ActionsDeLaFiche, BoutonDeLaFiche, Section } from '../commun/ElementsDeLaFiche';
+import type { ActionFiche } from './FenetreDeLaFiche';
 import { separerAdresses } from './presentation';
 
 interface Props {
   adresses: Adresse[];
   /** Absentes pour un client archivé : ses adresses ne se modifient plus (RG22). */
-  actions?: ActionsDeLaFiche;
+  actions?: ActionsDeLaFiche<ActionFiche>;
   /** Titre de la section, cible du focus après l'archivage d'une adresse. */
   refTitre: Ref<HTMLHeadingElement>;
 }
@@ -46,7 +47,7 @@ export function SectionAdresses({ adresses, actions, refTitre }: Props) {
 interface PropsListe {
   titre: string;
   adresses: Adresse[];
-  actions?: ActionsDeLaFiche;
+  actions?: ActionsDeLaFiche<ActionFiche>;
   /** RG21 : il ne reste qu'une adresse en service, qui ne peut donc pas être archivée. */
   derniereEnService?: boolean;
 }
@@ -98,7 +99,7 @@ function CarteAdresse({ adresse, children }: { adresse: Adresse; children?: Reac
 
 interface PropsActionsAdresse {
   adresse: Adresse;
-  actions: ActionsDeLaFiche;
+  actions: ActionsDeLaFiche<ActionFiche>;
   derniereEnService: boolean;
 }
 

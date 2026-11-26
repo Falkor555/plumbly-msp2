@@ -72,7 +72,12 @@ export function Fenetre({
   );
 }
 
-/** Tab sur le dernier élément revient au premier, Maj+Tab sur le premier va au dernier. */
+/**
+ * Tab sur le dernier élément revient au premier, Maj+Tab sur le premier va au dernier. Maj+Tab
+ * part aussi au dernier depuis un élément placé avant le premier : le titre ou la fenêtre, qui
+ * reçoivent le focus hors de l'ordre de tabulation (tabIndex={-1}). Le navigateur passerait sinon
+ * à l'élément qui précède la fenêtre, sur la page derrière le voile.
+ */
 function garderLeFocus(evenement: KeyboardEvent, fenetre: HTMLElement): void {
   const elements = [...fenetre.querySelectorAll<HTMLElement>(FOCALISABLES)];
   if (elements.length === 0) {
@@ -86,7 +91,11 @@ function garderLeFocus(evenement: KeyboardEvent, fenetre: HTMLElement): void {
   const dernier = elements[elements.length - 1];
   const actif = document.activeElement;
   const horsDeLaFenetre = !fenetre.contains(actif);
-  if (evenement.shiftKey && (actif === premier || horsDeLaFenetre)) {
+  // Un ancêtre précède ses descendants : la fenêtre elle-même compte comme placée avant le premier.
+  const avantLePremier =
+    actif !== null &&
+    (premier.compareDocumentPosition(actif) & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+  if (evenement.shiftKey && (actif === premier || horsDeLaFenetre || avantLePremier)) {
     evenement.preventDefault();
     dernier.focus();
   } else if (!evenement.shiftKey && (actif === dernier || horsDeLaFenetre)) {

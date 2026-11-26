@@ -9,6 +9,8 @@ import { PagePlanning } from './planning/PagePlanning';
 import { FournisseurSession } from './session/FournisseurSession';
 import { RedirectionAccueil } from './session/RedirectionAccueil';
 import { RouteProtegee } from './session/RouteProtegee';
+import { PageFicheTechnicien } from './techniciens/PageFicheTechnicien';
+import { PageTechniciens } from './techniciens/PageTechniciens';
 
 const ROLES_BUREAU = ['ADMIN', 'GESTIONNAIRE'] as const;
 const ROLES_TERRAIN = ['TECHNICIEN'] as const;
@@ -29,6 +31,8 @@ export default function App() {
               <Route path="/planning" element={<PagePlanning />} />
               <Route path="/clients" element={<PageClients />} />
               <Route path="/clients/:id" element={<PageFicheClient />} />
+              <Route path="/techniciens" element={<PageTechniciens />} />
+              <Route path="/techniciens/:id" element={<PageFicheTechnicien />} />
             </Route>
           </Route>
           <Route element={<RouteProtegee roles={ROLES_TERRAIN} />}>

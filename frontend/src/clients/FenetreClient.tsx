@@ -1,17 +1,18 @@
 import { type FormEvent, type Ref, useId, useRef } from 'react';
 import { clientsApi } from '../api/clients.api';
 import type { Client, TypeClient } from '../api/types';
+import { BoutonsDuFormulaire } from '../commun/BoutonsDuFormulaire';
 import { ChampSaisie } from '../commun/ChampSaisie';
 import { Fenetre } from '../commun/Fenetre';
+import { ResumeDesErreurs } from '../commun/ResumeDesErreurs';
+import type { ErreursSaisie } from '../commun/saisie';
+import { AIDE_TELEPHONE, LONGUEUR_TELEPHONE_SAISI } from '../commun/telephone';
 import { useSoumission } from '../commun/useSoumission';
-import { BoutonsDuFormulaire } from './BoutonsDuFormulaire';
 import { ChampsAdresse } from './ChampsAdresse';
 import { LIBELLES_TYPE_CLIENT } from './presentation';
-import { ResumeDesErreurs } from './ResumeDesErreurs';
 import { useSaisieClient } from './useSaisieClient';
 import {
   type ChampTexteClient,
-  type ErreursSaisie,
   LONGUEURS_CLIENT,
   type SaisieAdresse,
   type SaisieClient,
@@ -193,8 +194,8 @@ function ChampsIdentite({
         obligatoire
         type="tel"
         inputMode="tel"
-        aide="10 chiffres commençant par 0 ; espaces et points acceptés."
-        longueurMax={LONGUEURS_CLIENT.telephoneSaisi}
+        aide={AIDE_TELEPHONE}
+        longueurMax={LONGUEUR_TELEPHONE_SAISI}
         {...champ('telephone')}
       />
       <ChampSaisie

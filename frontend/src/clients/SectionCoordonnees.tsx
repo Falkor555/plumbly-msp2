@@ -1,15 +1,22 @@
-import type { ReactNode } from 'react';
 import type { Client } from '../api/types';
+import {
+  type ActionsDeLaFiche,
+  BoutonDeLaFiche,
+  LIEN_FICHE,
+  Rubrique,
+  Section,
+} from '../commun/ElementsDeLaFiche';
 import { lienTelephone } from '../commun/liens';
-import { type ActionsDeLaFiche, BoutonDeLaFiche, LIEN_FICHE, Section } from './ElementsDeLaFiche';
-import { identiteDuClient, telephoneLisible } from './presentation';
+import { telephoneLisible } from '../commun/telephone';
+import type { ActionFiche } from './FenetreDeLaFiche';
+import { identiteDuClient } from './presentation';
 
 const NON_RENSEIGNE = <span className="text-gris-texte">Non renseigné</span>;
 
 interface Props {
   client: Client;
   /** Absentes pour un client archivé : ses coordonnées ne se modifient plus (RG22). */
-  actions?: ActionsDeLaFiche;
+  actions?: ActionsDeLaFiche<ActionFiche>;
 }
 
 /** Coordonnées du client (US09), modifiables tant qu'il est en service (US10). */
@@ -47,14 +54,5 @@ export function SectionCoordonnees({ client, actions }: Props) {
         </Rubrique>
       </dl>
     </Section>
-  );
-}
-
-function Rubrique({ titre, children }: { titre: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs font-medium text-gris-texte">{titre}</dt>
-      <dd>{children}</dd>
-    </div>
   );
 }
