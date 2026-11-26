@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { messageErreur } from './messageErreur';
 
 export interface Soumission {
@@ -33,7 +33,10 @@ export function useSoumission(contexteErreur: string): Soumission {
     formulaire.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
   }, [refus]);
 
-  useEffect(() => {
+  // Effet de mise en page : le focus revient dans la mise à jour même qui réactive les boutons.
+  // Cette mise à jour vient d'une réponse réseau, et react-dom 19 diffère alors un effet ordinaire
+  // dans une tâche du Scheduler : un test lirait le focus avant qu'il soit posé.
+  useLayoutEffect(() => {
     // Le bouton cliqué, désactivé pendant l'envoi, a perdu le focus au profit du document : il
     // revient dans la fenêtre une fois les boutons réactivés, sans quoi le clavier serait perdu.
     if (echecs === 0) return;

@@ -403,6 +403,35 @@ describe('import des clients : analyse puis confirmation (US31)', () => {
     expect(imports).toHaveLength(0);
   });
 
+  it('US31 : un refus de l’analyse après un changement de séparateur ramène à l’étape 1, focus sur son titre, le fichier gardé', async () => {
+    const utilisateur = userEvent.setup();
+    servirLesClients(clientsDeTest());
+    servirLAnalyse();
+    const imports = servirLImport();
+    afficherALAdresse(<PageClients />, '/clients');
+    await analyserLeFichier(utilisateur);
+    const message = 'Aucune colonne pour le champ obligatoire telephone';
+    serveurApi.use(http.post(urlApi('/clients/import/analysis'), refus(400, [message])));
+
+    await utilisateur.selectOptions(
+      within(fenetre()).getByRole('combobox', { name: 'Séparateur des colonnes' }),
+      'Virgule (,)',
+    );
+
+    // Le refus porte sur tout le fichier : il se corrige à l'étape du fichier, dont le titre est
+    // annoncé dès la réponse de l'API, sans attendre un geste de l'utilisateur.
+    await screen.findByRole('dialog', { name: ETAPE_1 });
+    expect(screen.getByRole('heading', { level: 2, name: ETAPE_1 })).toHaveFocus();
+    const alerte = within(fenetre()).getByRole('alert');
+    expect(alerte).toHaveTextContent(message);
+    expect(alerte).toHaveTextContent(/Renommez la colonne dans votre fichier/);
+    expect(within(fenetre()).getByText('clients.csv')).toBeInTheDocument();
+    expect(
+      within(fenetre()).getByRole('combobox', { name: 'Séparateur des colonnes' }),
+    ).toHaveDisplayValue('Virgule (,)');
+    expect(imports).toHaveLength(0);
+  });
+
   it('US31 : la réponse en retard d’une analyse dépassée n’écrase ni l’analyse affichée ni la correspondance importée', async () => {
     const utilisateur = userEvent.setup();
     servirLesClients(clientsDeTest());

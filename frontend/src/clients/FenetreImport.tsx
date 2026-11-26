@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
 import { BOUTON_SECONDAIRE } from '../commun/classes';
 import { Fenetre } from '../commun/Fenetre';
 import { CompteRenduImport } from './CompteRenduImport';
@@ -30,8 +30,17 @@ export function FenetreImport({ onFermer }: Props) {
   const importEnCours = assistant.enCours === 'import';
   const fermer = () => onFermer(rapport !== null);
   const numeroDEtape = `Étape ${ETAPES[etape].numero} sur 3`;
+  const etapeAffichee = useRef(etape);
 
-  useEffect(() => {
+  // Effet de mise en page : le titre prend le focus dans la mise à jour même qui change d'étape.
+  // L'étape change à la réponse de l'API (analyse, import, refus), et react-dom 19 diffère alors
+  // un effet ordinaire dans une tâche du Scheduler : un test lirait le focus avant qu'il soit posé.
+  useLayoutEffect(() => {
+    // À l'ouverture, c'est Fenetre qui pose le focus initial, dans un effet ordinaire, après avoir
+    // retenu l'élément à qui le rendre à la fermeture : posé ici avant elle, le titre prendrait
+    // cette place et le bouton « Importer » ne retrouverait pas le focus.
+    if (etapeAffichee.current === etape) return;
+    etapeAffichee.current = etape;
     titre.current?.focus();
   }, [etape]);
 
