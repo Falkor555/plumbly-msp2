@@ -107,7 +107,10 @@ export function PageMotDePasse() {
               {REGLES_MOT_DE_PASSE.map((regle) => {
                 const respectee = regle.estRespectee(nouveau);
                 return (
-                  <li key={regle.libelle} className={respectee ? 'text-succes' : 'text-gris-texte'}>
+                  <li
+                    key={regle.libelle}
+                    className={respectee ? 'text-succes-texte' : 'text-gris-texte'}
+                  >
                     <span aria-hidden="true">{respectee ? '✓' : '○'}</span> {regle.libelle}
                     <span className="sr-only">{respectee ? ' : respectée' : ' : à respecter'}</span>
                   </li>
@@ -132,14 +135,14 @@ export function PageMotDePasse() {
               className={CHAMP}
             />
             {confirmationDifferente && (
-              <p id={`${id}-difference`} className="mt-1 text-sm text-erreur">
+              <p id={`${id}-difference`} className="mt-1 text-sm text-erreur-texte">
                 Les deux mots de passe ne sont pas identiques.
               </p>
             )}
           </div>
 
           {erreur !== null && (
-            <p role="alert" className="text-sm whitespace-pre-line text-erreur">
+            <p role="alert" className="text-sm whitespace-pre-line text-erreur-texte">
               {erreur}
             </p>
           )}

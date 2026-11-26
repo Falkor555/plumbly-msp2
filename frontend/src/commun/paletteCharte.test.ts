@@ -43,6 +43,17 @@ function classesHorsCharte(source: string): string[] {
   ];
 }
 
+/*
+ * Les couleurs d'état de base (succès, alerte, erreur) n'atteignent pas 4,5:1 sur tous leurs
+ * fonds : elles servent aux bordures, anneaux et icônes, et un texte prend la variante « -texte »
+ * (index.css). L'info (4,7:1 sur son fond) reste admise en texte. Variantes comprises (hover:…).
+ */
+const TEXTE_EN_COULEUR_D_ETAT_DE_BASE = /(?<![\w-])text-(?:succes|alerte|erreur)(?![\w-])/g;
+
+function textesEnCouleurDEtatDeBase(source: string): string[] {
+  return source.match(TEXTE_EN_COULEUR_D_ETAT_DE_BASE) ?? [];
+}
+
 function estUneException(fichier: string, classe: string): boolean {
   return EXCEPTIONS.some(
     (exception) => exception.fichier === fichier && exception.classe === classe,
@@ -59,6 +70,25 @@ describe('palette de couleurs des sources', () => {
 
     expect(Object.keys(SOURCES).length).toBeGreaterThan(20);
     expect(interdites).toEqual([]);
+  });
+
+  it('RGAA 3.2 : aucun texte n’emploie la couleur d’état de base succès, alerte ou erreur (#64)', () => {
+    const interdites = Object.entries(SOURCES).flatMap(([fichier, source]) =>
+      textesEnCouleurDEtatDeBase(source).map((classe) => `${fichier} : ${classe}`),
+    );
+
+    expect(interdites).toEqual([]);
+  });
+
+  it('RGAA 3.2 : relève text-erreur et ses variantes, mais pas text-erreur-texte ni border-erreur', () => {
+    // Assemblées, pour que la règle ci-dessus ne relève pas ce fichier s'il était lu un jour.
+    const classe = (...morceaux: string[]): string => morceaux.join('-');
+    const source = `"${classe('text', 'erreur')} hover:${classe('text', 'succes')} text-erreur-texte border-erreur ring-succes/20 text-info"`;
+
+    expect(textesEnCouleurDEtatDeBase(source)).toEqual([
+      classe('text', 'erreur'),
+      classe('text', 'succes'),
+    ]);
   });
 
   it.each(EXCEPTIONS)(

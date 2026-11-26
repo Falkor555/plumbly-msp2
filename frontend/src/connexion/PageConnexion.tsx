@@ -107,7 +107,7 @@ export function PageConnexion() {
           </div>
 
           {erreur !== null && (
-            <p role="alert" className="text-sm whitespace-pre-line text-erreur">
+            <p role="alert" className="text-sm whitespace-pre-line text-erreur-texte">
               {erreur}
             </p>
           )}

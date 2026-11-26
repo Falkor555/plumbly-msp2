@@ -304,7 +304,7 @@ function EtapeTerminee({ intervention, onOuvrir }: Pick<PropsEtape, 'interventio
       </div>
       {signature ? (
         <p className="flex items-center gap-2 font-semibold text-anthracite">
-          <span aria-hidden="true" className="text-succes">
+          <span aria-hidden="true" className="text-succes-texte">
             ✓
           </span>
           Signée par {signature.nomSignataire} à {heureMetier(signature.signeeLe)}
