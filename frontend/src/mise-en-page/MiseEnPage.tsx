@@ -28,6 +28,9 @@ export function MiseEnPage() {
               <NavLink to="/planning" className={LIEN}>
                 Planning
               </NavLink>
+              <NavLink to="/interventions" className={LIEN}>
+                Interventions
+              </NavLink>
             </nav>
           )}
           <div className="ml-auto flex items-center gap-3">

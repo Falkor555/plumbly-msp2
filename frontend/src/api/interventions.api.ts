@@ -1,10 +1,41 @@
 import { api } from './clientHttp';
-import type { FinDIntervention, Intervention, ListePaginee, SignatureIntervention } from './types';
+import type {
+  DateIso,
+  FinDIntervention,
+  Intervention,
+  ListePaginee,
+  SignatureIntervention,
+  StatutIntervention,
+  Urgence,
+} from './types';
 
 /** Le contrat plafonne une page à 100 éléments (docs/api.md, section 4). */
 const TAILLE_PAGE_MAX = 100;
 
+/** Taille d'une page de la liste du bureau : la valeur par défaut du contrat. */
+const TAILLE_PAGE = 20;
+
+/** Filtres de GET /interventions (US15), tous facultatifs et combinables. */
+export interface FiltresInterventions {
+  recherche?: string;
+  statut?: StatutIntervention;
+  urgence?: Urgence;
+  du?: DateIso;
+  au?: DateIso;
+  page: number;
+}
+
 export const interventionsApi = {
+  /** US15 : liste filtrée et paginée, les plus urgentes d'abord (tri par défaut, RG18). */
+  lister: (
+    filtres: FiltresInterventions,
+    signal?: AbortSignal,
+  ): Promise<ListePaginee<Intervention>> =>
+    api.get<ListePaginee<Intervention>>('/interventions', {
+      parametres: { ...filtres, limit: TAILLE_PAGE },
+      signal,
+    }),
+
   /**
    * Interventions en attente d'affectation, les plus urgentes d'abord (tri par défaut, RG18).
    * Route de l'issue #17 (Loïc) : tant qu'elle n'existe pas côté back-end, seuls les tests
