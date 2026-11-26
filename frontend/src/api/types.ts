@@ -133,3 +133,42 @@ export interface Affectation {
   /** Rang voulu ; à défaut, l'intervention passe en dernier. */
   ordreTournee?: number;
 }
+
+/** Adresse d'intervention d'un client (docs/api.md, 6.5). */
+export interface AdresseClient {
+  id: number;
+  rue: string;
+  complement: string | null;
+  codePostal: string;
+  ville: string;
+  infosAcces: string | null;
+  archive: boolean;
+}
+
+/** GET /clients : chaque client arrive avec ses adresses non archivées. */
+export interface Client {
+  id: number;
+  typeClient: TypeClient;
+  nomAffiche: string;
+  telephone: string;
+  adresses: AdresseClient[];
+}
+
+/** GET /intervention-types (docs/api.md, 6.4). */
+export interface TypeIntervention {
+  id: number;
+  libelle: string;
+  dureeDefautMin: number;
+}
+
+/** Corps de POST /interventions (US14) : le client est déduit de l'adresse. */
+export interface NouvelleIntervention {
+  adresseId: number;
+  typeInterventionId: number;
+  description: string;
+  urgence: Urgence;
+  dureeEstimeeMin: number;
+}
+
+/** Corps de PATCH /interventions/:id (US16) : seuls les champs changés sont envoyés. */
+export type ModificationIntervention = Partial<Omit<NouvelleIntervention, 'adresseId'>>;
