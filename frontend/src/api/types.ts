@@ -145,7 +145,11 @@ export interface Pagination {
 
 // ---------- Clients (docs/api.md, section 6.5 ; backend/src/clients/clients.types.ts) ----------
 
-export interface Adresse {
+/**
+ * Adresse d'intervention d'un client (docs/api.md, 6.5), telle que le choix du client d'une
+ * intervention (US14) la lit : sans la date d'archivage.
+ */
+export interface AdresseClient {
   id: number;
   rue: string;
   complement: string | null;
@@ -153,6 +157,10 @@ export interface Adresse {
   ville: string;
   infosAcces: string | null;
   archive: boolean;
+}
+
+/** Adresse complète renvoyée par l'API. */
+export interface Adresse extends AdresseClient {
   archiveLe: DateHeureIso | null;
 }
 
@@ -341,3 +349,24 @@ export interface NouvelleIndisponibilite {
   fin: DateHeureIso;
   motif?: string;
 }
+
+// ---------- Interventions du bureau (#18, docs/api.md, sections 6.3 et 6.4) ----------
+
+/** GET /intervention-types (docs/api.md, 6.4). */
+export interface TypeIntervention {
+  id: number;
+  libelle: string;
+  dureeDefautMin: number;
+}
+
+/** Corps de POST /interventions (US14) : le client est déduit de l'adresse. */
+export interface NouvelleIntervention {
+  adresseId: number;
+  typeInterventionId: number;
+  description: string;
+  urgence: Urgence;
+  dureeEstimeeMin: number;
+}
+
+/** Corps de PATCH /interventions/:id (US16) : seuls les champs changés sont envoyés. */
+export type ModificationIntervention = Partial<Omit<NouvelleIntervention, 'adresseId'>>;

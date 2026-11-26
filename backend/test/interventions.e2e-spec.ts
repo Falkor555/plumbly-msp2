@@ -145,7 +145,7 @@ describe('interventions (e2e)', () => {
   }
 
   describe('POST /interventions : créer (US14)', () => {
-    it('crée l’intervention à planifier, avec la durée du type, le client déduit de l’adresse et le créateur connecté', async () => {
+    it('TI03 et RG01 : crée l’intervention à planifier, avec la durée du type, le client déduit de l’adresse et le créateur connecté', async () => {
       const reponse = await en(fixtures.gestionnaire)
         .post('/interventions')
         .send({
@@ -551,6 +551,19 @@ describe('interventions (e2e)', () => {
       expect(reponse.body.message).toBe('Impossible de démarrer une intervention à planifier.');
     });
 
+    it('TI06 : refuse en 400 de terminer directement une intervention à planifier, sans rien changer', async () => {
+      const id = await creerIntervention();
+
+      const reponse = await en(fixtures.kevin.compte)
+        .post(`/interventions/${id}/complete`)
+        .send({})
+        .expect(400);
+
+      expect(reponse.body.message).toBe('Impossible de terminer une intervention à planifier.');
+      const inchangee = await application.prisma.intervention.findUniqueOrThrow({ where: { id } });
+      expect(inchangee).toMatchObject({ statut: 'A_PLANIFIER', termineeLe: null });
+    });
+
     it('terminer une intervention planifiée', async () => {
       const id = await planifiee(await creerTournee(fixtures.kevin), 1, '10:00');
 
@@ -573,7 +586,7 @@ describe('interventions (e2e)', () => {
       expect(reponse.body.message).toBe('Impossible d’annuler une intervention terminée.');
     });
 
-    it('modifier une intervention annulée', async () => {
+    it('RG06 : modifier une intervention annulée', async () => {
       const id = await creerIntervention();
       await en(fixtures.gestionnaire)
         .post(`/interventions/${id}/cancel`)
@@ -821,7 +834,7 @@ describe('interventions (e2e)', () => {
       ['avec un motif fait d’espaces', { motif: '   ' }],
       ['avec un motif de 501 caractères', { motif: 'a'.repeat(501) }],
       ['avec un caractère NUL (400 et non 500)', { motif: 'Client\u0000absent' }],
-    ])('refuse en 400 une annulation %s, sans rien changer', async (_cas, corps) => {
+    ])('TI08 et RG05 : refuse en 400 une annulation %s, sans rien changer', async (_cas, corps) => {
       const id = await creerIntervention();
 
       await en(fixtures.gestionnaire).post(`/interventions/${id}/cancel`).send(corps).expect(400);

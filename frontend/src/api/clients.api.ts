@@ -23,6 +23,12 @@ import type {
   ReponseAnalyse,
 } from './types';
 
+/**
+ * Choix du client d'une intervention (US14) : assez pour reconnaître le bon client ; au-delà, on
+ * demande d'affiner la recherche.
+ */
+export const NOMBRE_CLIENTS_PROPOSES = 10;
+
 /** Même nom que celui que donne l'API (nomDuFichierCsv), au cas où l'en-tête serait illisible. */
 export function nomDuFichierExport(instant: Date): string {
   return `clients-${jourMetier(instant)}.csv`;
@@ -97,4 +103,11 @@ export const clientsApi = {
   /** US31 : enregistre les lignes valides selon la stratégie choisie pour les doublons (RG28). */
   importer: (demande: DemandeImport): Promise<RapportImport> =>
     api.post<RapportImport>('/clients/import', demande),
+
+  /** US08 et US14 : recherche sur le nom, le téléphone et la ville (2 caractères minimum). */
+  rechercher: (recherche: string, signal?: AbortSignal): Promise<ListePaginee<Client>> =>
+    api.get<ListePaginee<Client>>('/clients', {
+      parametres: { recherche, limit: NOMBRE_CLIENTS_PROPOSES },
+      signal,
+    }),
 };

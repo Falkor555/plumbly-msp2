@@ -28,6 +28,9 @@ export function MiseEnPage() {
               <NavLink to="/planning" className={LIEN}>
                 Planning
               </NavLink>
+              <NavLink to="/interventions" className={LIEN}>
+                Interventions
+              </NavLink>
               {/* Sans « end » : le lien reste actif sur la fiche d'un client (/clients/:id). */}
               <NavLink to="/clients" className={LIEN}>
                 Clients
