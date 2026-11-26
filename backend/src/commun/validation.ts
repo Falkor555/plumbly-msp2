@@ -92,7 +92,12 @@ const LONGUEUR_RECHERCHE_MAXIMUM = 100;
 const ELEMENTS_PAR_PAGE_PAR_DEFAUT = 20;
 const ELEMENTS_PAR_PAGE_MAXIMUM = 100;
 
-/** Objet JSON dont tous les champs sont connus ; sinon 400 qui nomme les champs refusés. */
+/**
+ * Objet JSON dont tous les champs sont connus ; sinon 400 qui nomme les champs refusés.
+ * Liste blanche stricte : un champ non prévu (statut, idCreateur…) est refusé au lieu d'être
+ * ignoré, pour qu'il ne puisse jamais atteindre le service ni la base, et pour qu'une faute de
+ * frappe côté client se voie tout de suite au lieu de passer pour une absence de valeur.
+ */
 export function lireObjet(valeur: unknown, champsAutorises: readonly string[]): Champs {
   if (typeof valeur !== 'object' || valeur === null || Array.isArray(valeur)) {
     throw new BadRequestException(['Le corps de la requête doit être un objet JSON']);

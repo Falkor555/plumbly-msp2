@@ -53,7 +53,8 @@ async function envoyer(chemin: string, options: OptionsRequete): Promise<Respons
       signal: options.signal,
     });
   } catch (erreur) {
-    // Une annulation volontaire (TanStack Query, démontage d'un composant) n'est pas une panne réseau.
+    // Une annulation volontaire (démontage d'un composant, période du planning changée) n'est pas
+    // une panne réseau.
     if (erreur instanceof DOMException && erreur.name === 'AbortError') throw erreur;
     throw new ErreurReseau(erreur);
   }
@@ -100,6 +101,12 @@ async function envoyerEnSession(chemin: string, options: OptionsRequete): Promis
   return reponse;
 }
 
+/**
+ * Avec telecharger(), seule porte d'entrée réseau du front : les écrans n'appellent jamais fetch
+ * eux-mêmes, pour que le jeton, le renouvellement de session et la forme des erreurs (ErreurApi,
+ * ErreurReseau) soient traités au même endroit, sans qu'un écran ait à connaître le format brut
+ * de NestJS.
+ */
 export async function requete<T>(chemin: string, options: OptionsRequete = {}): Promise<T> {
   return lireCorps<T>(await envoyerEnSession(chemin, options));
 }
