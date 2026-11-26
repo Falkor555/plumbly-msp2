@@ -393,6 +393,9 @@ describe('écrans techniciens dans l’application (US11)', () => {
     serveurApi.use(
       ...sessionDe(SOPHIE),
       http.get(urlApi('/technicians/2'), () => HttpResponse.json(karimDeTest())),
+      // La fiche lit aussi les indisponibilités dès qu'elle s'affiche : sans ce handler, la
+      // lecture partait non simulée quand le test durait assez pour la voir partir (#66).
+      http.get(urlApi('/technicians/2/unavailabilities'), () => HttpResponse.json([])),
     );
 
     ouvrir('/techniciens/2');

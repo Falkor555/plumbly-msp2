@@ -20,8 +20,8 @@ import { PageTechniciens } from './PageTechniciens';
 
 afterEach(() => effacerJetonAcces());
 
-function afficherLaListe(): void {
-  afficherAvecSession(<PageTechniciens />, GESTIONNAIRE_DE_TEST, '/techniciens');
+async function afficherLaListe(): Promise<void> {
+  await afficherAvecSession(<PageTechniciens />, GESTIONNAIRE_DE_TEST, '/techniciens');
 }
 
 async function attendreLaListe(): Promise<void> {
@@ -72,7 +72,7 @@ describe('liste des techniciens (US11)', () => {
   it('US11 : affiche les techniciens en service avec leur pastille, leur e-mail et leur téléphone', async () => {
     const recues = servirLesTechniciens(techniciensDeTest());
 
-    afficherLaListe();
+    await afficherLaListe();
     await attendreLaListe();
 
     expect(screen.getByRole('heading', { level: 1, name: 'Techniciens' })).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe('liste des techniciens (US11)', () => {
   it('US11 : la pastille reprend la couleur du planning, avec des initiales noires sur fond clair et blanches sur fond foncé', async () => {
     servirLesTechniciens(techniciensDeTest());
 
-    afficherLaListe();
+    await afficherLaListe();
     await attendreLaListe();
 
     const clair = within(ligneDe('Loïc Grondin')).getByText('LG');
@@ -122,7 +122,7 @@ describe('liste des techniciens (US11)', () => {
   it('US11 : signale un technicien dont le compte utilisateur est désactivé', async () => {
     servirLesTechniciens(techniciensDeTest());
 
-    afficherLaListe();
+    await afficherLaListe();
     await attendreLaListe();
 
     expect(within(ligneDe('Mickaël Hoarau')).getByText('Compte désactivé')).toBeInTheDocument();
@@ -132,7 +132,7 @@ describe('liste des techniciens (US11)', () => {
   it('US11 : la recherche « loic » part une seule fois, après le délai de frappe, et retrouve Loïc Grondin', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesTechniciens(techniciensDeTest());
-    afficherLaListe();
+    await afficherLaListe();
     await attendreLaListe();
 
     await utilisateur.type(champRecherche(), 'loic');
@@ -151,7 +151,7 @@ describe('liste des techniciens (US11)', () => {
   it('US11 : une recherche d’un seul caractère, même entouré d’espaces, n’interroge pas l’API', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesTechniciens(techniciensDeTest());
-    afficherLaListe();
+    await afficherLaListe();
     await attendreLaListe();
 
     await utilisateur.type(champRecherche(), ' k ');
@@ -163,7 +163,7 @@ describe('liste des techniciens (US11)', () => {
 
   it('US11 : limite la recherche à 100 caractères et explique ce qu’elle couvre', async () => {
     servirLesTechniciens(techniciensDeTest());
-    afficherLaListe();
+    await afficherLaListe();
     await attendreLaListe();
 
     expect(champRecherche()).toHaveAttribute('maxLength', '100');
@@ -173,7 +173,7 @@ describe('liste des techniciens (US11)', () => {
   it('US11 : « Inclure les archivés » envoie archives=true et signale le technicien archivé', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesTechniciens(techniciensDeTest());
-    afficherLaListe();
+    await afficherLaListe();
     await attendreLaListe();
 
     await utilisateur.click(screen.getByRole('checkbox', { name: 'Inclure les archivés' }));
@@ -194,7 +194,7 @@ describe('liste des techniciens (US11)', () => {
   it('US11 : « Nom, de Z à A » envoie tri=-nom et inverse l’ordre de la liste', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesTechniciens(techniciensDeTest());
-    afficherLaListe();
+    await afficherLaListe();
     await attendreLaListe();
     expect(screen.getByLabelText('Trier par')).toHaveValue('nom');
 
@@ -209,7 +209,7 @@ describe('liste des techniciens (US11)', () => {
   it('US11 : pagine par 20 ; changer le tri depuis la page 2 revient à la page 1', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesTechniciens(vingtCinqTechniciens());
-    afficherLaListe();
+    await afficherLaListe();
     await attendreLaListe();
     expect(within(navigationDesPages()).getByText('Page 1 sur 2')).toBeInTheDocument();
 
@@ -228,7 +228,7 @@ describe('liste des techniciens (US11)', () => {
   it('US11 : distingue une liste vide d’une recherche sans résultat', async () => {
     const utilisateur = userEvent.setup();
     servirLesTechniciens([]);
-    afficherLaListe();
+    await afficherLaListe();
 
     expect(await messageAffiche('Aucun technicien enregistré pour le moment.')).toBeInTheDocument();
     expect(zoneDuTotal()).toHaveTextContent('Aucun technicien enregistré pour le moment.');
@@ -244,7 +244,7 @@ describe('liste des techniciens (US11)', () => {
   it('US11 : une liste vide, archivés inclus et sans recherche, dit qu’aucun technicien n’est enregistré', async () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesTechniciens([]);
-    afficherLaListe();
+    await afficherLaListe();
     await messageAffiche('Aucun technicien enregistré pour le moment.');
 
     await utilisateur.click(screen.getByRole('checkbox', { name: 'Inclure les archivés' }));
@@ -266,7 +266,7 @@ describe('liste des techniciens (US11)', () => {
     const utilisateur = userEvent.setup();
     const recues = servirLesTechniciens(techniciensDeTest());
     serveurApi.use(http.get(urlApi('/technicians'), () => HttpResponse.error(), { once: true }));
-    afficherLaListe();
+    await afficherLaListe();
 
     const alerte = await screen.findByRole('alert');
 

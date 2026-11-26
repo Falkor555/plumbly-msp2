@@ -70,7 +70,7 @@ async function ouvrirLaFiche({
   let courante = indisponibilites;
   serveurApi.use(http.get(urlApi('/technicians/2'), () => HttpResponse.json(technicien)));
   const lectures = enregistrerLesRequetes('get', CHEMIN_LISTE, () => HttpResponse.json(courante));
-  afficherAvecSession(
+  await afficherAvecSession(
     <PageFicheTechnicien maintenant={() => maintenant} />,
     GESTIONNAIRE_DE_TEST,
     '/techniciens/2',
@@ -303,7 +303,7 @@ describe('liste des indisponibilités (US12)', () => {
         { once: true },
       ),
     );
-    afficherAvecSession(
+    await afficherAvecSession(
       <PageFicheTechnicien maintenant={() => MAINTENANT} />,
       GESTIONNAIRE_DE_TEST,
       '/techniciens/2',

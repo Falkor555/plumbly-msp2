@@ -44,7 +44,7 @@ async function ouvrirLaListe(
   techniciens: FicheTechnicien[] = techniciensDeTest(),
 ): Promise<URLSearchParams[]> {
   const lectures = servirLesTechniciens(techniciens);
-  afficherAvecSession(<PageTechniciens />, profil, '/techniciens');
+  await afficherAvecSession(<PageTechniciens />, profil, '/techniciens');
   await screen.findByRole('link', { name: 'Karim Benali' });
   return lectures;
 }
@@ -182,7 +182,7 @@ describe('création par l’administrateur (US11)', () => {
     fiches.push(fabriquerTechnicien({ id: 30, utilisateurId: 14, nom: 'Roche', prenom: 'Julie' }));
     const comptesLus = servirLesComptes(comptes);
     const lectures = servirLesTechniciens(fiches);
-    afficherAvecSession(<PageTechniciens />, ADMINISTRATEUR_DE_TEST, '/techniciens');
+    await afficherAvecSession(<PageTechniciens />, ADMINISTRATEUR_DE_TEST, '/techniciens');
     await screen.findByRole('table');
 
     const fenetre = await ouvrirLaCreation(utilisateur);
