@@ -1,7 +1,9 @@
 import type { DateIso, Intervention } from '../api/types';
 import { versInstant } from '../commun/dates';
+import { UTILISATEUR_ID_TECHNICIEN_CONNECTE } from '../simulation/comptesDemonstration';
 import {
   fabriquerIntervention,
+  fabriquerTechnicienDeDemonstration,
   type JeuDeDemonstration,
   planifier,
 } from '../simulation/donneesDemonstration';
@@ -45,18 +47,20 @@ export function creerJeuDeTerrain(jour: DateIso = JOUR_DE_TERRAIN): JeuDeDemonst
   const planifiee = etape(4, 'Garage Hoarau', 'Recherche de fuite', '14:00');
   return {
     techniciens: [
-      {
+      fabriquerTechnicienDeDemonstration({
         id: 1,
+        utilisateurId: UTILISATEUR_ID_TECHNICIEN_CONNECTE,
         nom: 'Rivière',
         prenom: 'Jean',
         telephone: '0692 11 11 11',
         couleurPlanning: '#0F766E',
-        indisponibilites: [],
         tournees: [
           { id: 10, dateTournee: jour, interventions: [signee, sansSignature, enCours, planifiee] },
         ],
-      },
+      }),
     ],
+    clients: [],
+    comptes: [],
     interventionsAPlanifier: [],
     signatures: {
       1: {

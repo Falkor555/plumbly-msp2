@@ -1,30 +1,18 @@
 import { http, HttpResponse } from 'msw';
 import type { FicheTechnicien, ListePaginee } from '../api/types';
 import type { CompteUtilisateur } from '../api/utilisateurs.api';
+import { fabriquerCompte, fabriquerTechnicien } from '../simulation/fabriques';
 import { listePaginee } from './clientsDeTest';
 import { serveurApi, urlApi } from './msw/serveur';
 
 /*
  * Fiches techniciens et comptes utilisateurs de test (US11), aux noms accentués pour vérifier
  * qu'une recherche sans accent les retrouve. Chaque appel rend des objets neufs : un test peut les
- * modifier sans toucher les autres.
+ * modifier sans toucher les autres. Les fabriques sont celles du mode simulé
+ * (simulation/fabriques.ts).
  */
 
-type DescriptionTechnicien = Partial<FicheTechnicien> &
-  Pick<FicheTechnicien, 'id' | 'nom' | 'prenom'>;
-
-export function fabriquerTechnicien(surcharge: DescriptionTechnicien): FicheTechnicien {
-  return {
-    utilisateurId: surcharge.id + 100,
-    email: `technicien${surcharge.id}@plumbly.re`,
-    compteActif: true,
-    telephone: '0692000000',
-    couleurPlanning: '#0F766E',
-    archive: false,
-    archiveLe: null,
-    ...surcharge,
-  };
-}
+export { fabriquerCompte, fabriquerTechnicien };
 
 /** Karim Benali : fiche 2, rattachée au compte 7. */
 export function karimDeTest(): FicheTechnicien {
@@ -75,21 +63,6 @@ export function techniciensDeTest(): FicheTechnicien[] {
       archiveLe: '2026-11-20T06:00:00.000Z',
     }),
   ];
-}
-
-type DescriptionCompte = Partial<CompteUtilisateur> &
-  Pick<CompteUtilisateur, 'id' | 'nom' | 'prenom'>;
-
-export function fabriquerCompte(surcharge: DescriptionCompte): CompteUtilisateur {
-  return {
-    email: `compte${surcharge.id}@plumbly.re`,
-    role: 'TECHNICIEN',
-    actif: true,
-    mdpAChanger: false,
-    derniereConnexion: null,
-    creeLe: '2026-11-20T09:00:00.000Z',
-    ...surcharge,
-  };
 }
 
 /**

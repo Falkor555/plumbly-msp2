@@ -59,12 +59,18 @@ export function creerHandlersPlanning(
       const planning: Planning = {
         du,
         au,
-        techniciens: jeu.techniciens.map((technicien) => ({
-          ...technicien,
-          tournees: technicien.tournees.filter(
-            ({ dateTournee }) => dateTournee >= du && dateTournee <= au,
-          ),
-        })),
+        // Comme l'API : les techniciens en service seulement, une fiche archivée sort du planning.
+        techniciens: jeu.techniciens
+          .filter(({ archive }) => !archive)
+          .map(({ id, nom, prenom, telephone, couleurPlanning, indisponibilites, tournees }) => ({
+            id,
+            nom,
+            prenom,
+            telephone,
+            couleurPlanning,
+            indisponibilites,
+            tournees: tournees.filter(({ dateTournee }) => dateTournee >= du && dateTournee <= au),
+          })),
       };
       return HttpResponse.json(planning);
     }),

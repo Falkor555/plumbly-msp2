@@ -1,47 +1,16 @@
 import { http, HttpResponse } from 'msw';
-import type { Adresse, Client, Intervention, ListePaginee } from '../api/types';
+import type { Client, Intervention, ListePaginee } from '../api/types';
 import { fabriquerIntervention, planifier } from '../simulation/donneesDemonstration';
+import { fabriquerAdresse, fabriquerClient } from '../simulation/fabriques';
 import { serveurApi, urlApi } from './msw/serveur';
 
 /*
  * Clients de test réunionnais, aux noms accentués pour vérifier qu'une recherche sans accent les
  * retrouve (US08). Chaque appel rend des objets neufs : un test peut les modifier sans toucher
- * les autres.
+ * les autres. Les fabriques sont celles du mode simulé (simulation/fabriques.ts).
  */
 
-const CREATION = '2026-11-20T06:00:00.000Z';
-
-export function fabriquerAdresse(surcharge: Partial<Adresse> & Pick<Adresse, 'id'>): Adresse {
-  return {
-    rue: `${surcharge.id} rue des Flamboyants`,
-    complement: null,
-    codePostal: '97400',
-    ville: 'Saint-Denis',
-    infosAcces: null,
-    archive: false,
-    archiveLe: null,
-    ...surcharge,
-  };
-}
-
-type DescriptionClient = Partial<Client> & Pick<Client, 'id' | 'nomAffiche'>;
-
-export function fabriquerClient(surcharge: DescriptionClient): Client {
-  return {
-    typeClient: 'PARTICULIER',
-    nomClient: null,
-    prenomClient: null,
-    raisonSociale: null,
-    telephone: '0692000000',
-    emailClient: null,
-    archive: false,
-    archiveLe: null,
-    creeLe: CREATION,
-    majLe: CREATION,
-    adresses: [fabriquerAdresse({ id: surcharge.id * 10 })],
-    ...surcharge,
-  };
-}
+export { fabriquerAdresse, fabriquerClient };
 
 export function heleneDeTest(): Client {
   return fabriquerClient({

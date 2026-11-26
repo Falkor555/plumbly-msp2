@@ -30,7 +30,17 @@ La connexion est simulée elle aussi (`src/simulation/handlersAuthentification.t
 | `gestion@plumbly.demo` | GESTIONNAIRE (Sophie Payet) | Planning, clients, techniciens |
 | `technicien@plumbly.demo` | TECHNICIEN (Jean Rivière) | Ma tournée du jour, détail et fin d'intervention, signature |
 
-Le changement de mot de passe (`/mot-de-passe`, `PATCH /users/me/password`) n'est pas simulé : l'écran s'affiche mais l'envoi échoue avec une erreur générique. Il n'y a pas de compte ADMIN simulé (ni de `GET /users`). La session simulée survit à un rechargement de la page : le faux serveur retient l'e-mail du compte connecté dans `sessionStorage` (clé `plumbly-simulation.compte`), jamais de jeton ; se déconnecter l'efface.
+Le changement de mot de passe (`/mot-de-passe`, `PATCH /users/me/password`) n'est pas simulé : l'écran s'affiche mais l'envoi échoue avec une erreur générique. Il n'y a pas de compte ADMIN simulé : `GET /users` est simulé mais répond 403 au gestionnaire, comme l'API. La session simulée survit à un rechargement de la page : le faux serveur retient l'e-mail du compte connecté dans `sessionStorage` (clé `plumbly-simulation.compte`), jamais de jeton ; se déconnecter l'efface.
+
+### Données de démonstration
+
+Le jeu (`src/simulation/donneesDemonstration.ts`) est recréé à chaque chargement de la page, en mémoire : tout ce qui est créé, modifié ou archivé disparaît au rechargement.
+
+- **Clients** (`clientsDemonstration.ts`) : treize clients de La Réunion aux noms accentués (Hélène Payet, Boulangerie Chez Mémé Grondin, Marie-Claude Hoarau…), dont un archivé (Marie-Thérèse Dijoux), un client à deux adresses (Hélène Payet) et un client dont l'ancienne adresse est archivée (Jean-Bernard Técher). La recherche ignore les accents et la casse et porte sur les mêmes champs que l'API (nom, prénom, raison sociale, téléphone, ville des adresses en service). Les interventions du planning et de la tournée du jour sont rattachées à ces clients : leur historique (`GET /clients/:id/interventions`) les montre.
+- **Techniciens** : les trois techniciens du planning (Jean Rivière, Marie Técher, Paul Lebon) ont une fiche complète, plus une fiche archivée (Sébastien Payet). Une fiche créée ou archivée depuis l'écran apparaît ou disparaît aussitôt du planning. Chacun a une indisponibilité la semaine suivante ; Marie a en plus une formation le jeudi de la semaine en cours, visible au planning.
+- **Comptes utilisateurs** (`comptesDemonstration.ts`) : pour créer une fiche technicien, saisir l'identifiant d'un compte TECHNICIEN libre, **8** (Julie Roche) ou **9** (Rémi Dijoux). Les autres identifiants reproduisent les refus de l'API : 10 (compte désactivé, 400), 1 (gestionnaire, 400), 4, 5, 6 ou 7 (déjà une fiche, 409), tout autre numéro (compte inexistant, 400).
+
+Les faux serveurs (`handlersClients.ts`, `handlersTechniciens.ts`) reprennent les contrôles de l'API et leurs messages exacts (400 de validation, 404, 409 d'archivage ou de chevauchement d'une indisponibilité avec une intervention) ; `validationSimulee.ts` recopie les lecteurs de `backend/src/commun/validation.ts`.
 
 Le lint et le formatage se lancent à la racine du dépôt (`npm run lint`, `npm run format`).
 

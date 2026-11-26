@@ -1,5 +1,6 @@
 import { http, HttpResponse, type HttpHandler } from 'msw';
 import type { Profil } from '../api/auth.api';
+import { COMPTES_CREES_LE } from './comptesDemonstration';
 
 /*
  * Simulation des routes d'authentification (docs/api.md, 5.1 et 6.1 ; back :
@@ -30,9 +31,6 @@ const CLE_SESSION = 'plumbly-simulation.compte';
 const IDENTIFIANTS_INCORRECTS = 'E-mail ou mot de passe incorrect.';
 const SESSION_INVALIDE = 'Session expirée : se reconnecter.';
 const AUTHENTIFICATION_REQUISE = 'Authentification requise.';
-
-/** Date de création des comptes de démonstration (GET /users/me renvoie l'objet Utilisateur complet). */
-const COMPTES_CREES_LE = '2026-01-05T04:00:00.000Z';
 
 let comptesConnus: readonly Profil[] = [];
 let emailEnMemoire: string | null = null;
@@ -80,6 +78,14 @@ function erreur(statusCode: number, message: string | string[]) {
 
 function porteLeJeton(request: Request): boolean {
   return request.headers.get('Authorization') === `Bearer ${JETON_DE_DEMONSTRATION}`;
+}
+
+/**
+ * Compte à l'origine de la requête, comme le garde d'authentification du back : il faut le jeton
+ * de démonstration ET une session ouverte. Sinon null, et la route protégée répond 401.
+ */
+export function compteAuthentifie(request: Request): Profil | null {
+  return porteLeJeton(request) ? compteConnecte() : null;
 }
 
 /** Objet Utilisateur du contrat (6.2), tel que GET /users/me le renvoie. */
@@ -195,8 +201,8 @@ export function creerHandlersAuthentification(
     }),
 
     http.get(urlApi('/users/me'), ({ request }) => {
-      const compte = compteConnecte();
-      if (!compte || !porteLeJeton(request)) return erreur(401, AUTHENTIFICATION_REQUISE);
+      const compte = compteAuthentifie(request);
+      if (!compte) return erreur(401, AUTHENTIFICATION_REQUISE);
       return HttpResponse.json(versUtilisateurApi(compte));
     }),
 
