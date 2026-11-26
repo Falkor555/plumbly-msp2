@@ -5,12 +5,15 @@ interface Props {
   libelle: string;
   valeur: string;
   onChanger: (valeur: string) => void;
-  longueurMax: number;
+  /** Sans objet pour un champ date ou heure, dont le navigateur borne la valeur. */
+  longueurMax?: number;
   /** Message de validation, relié au champ ; absent quand la saisie est valide. */
   erreur?: string;
   obligatoire?: boolean;
   aide?: string;
-  type?: 'text' | 'tel' | 'email';
+  type?: 'text' | 'tel' | 'email' | 'date' | 'time';
+  /** Borne haute d'un champ date ou heure (attribut max), par exemple « 9999-12-31 ». */
+  max?: string;
   inputMode?: 'text' | 'numeric' | 'tel' | 'email';
   desactive?: boolean;
   ref?: Ref<HTMLInputElement>;
@@ -32,6 +35,7 @@ export function ChampSaisie({
   obligatoire = false,
   aide,
   type = 'text',
+  max,
   inputMode,
   desactive = false,
   ref,
@@ -53,6 +57,7 @@ export function ChampSaisie({
         ref={ref}
         id={id}
         type={type}
+        max={max}
         inputMode={inputMode}
         // Le gestionnaire saisit les coordonnées d’un tiers : les siennes ne doivent pas être proposées.
         autoComplete="off"

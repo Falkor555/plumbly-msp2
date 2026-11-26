@@ -21,9 +21,15 @@ interface FicheOuverte {
   remplacer: (technicien: FicheTechnicien) => void;
 }
 
+/** La section des indisponibilités lit sa liste avec la fiche : vide ici, elle a ses propres tests. */
+function servirAucuneIndisponibilite(): void {
+  serveurApi.use(http.get(urlApi('/technicians/2/unavailabilities'), () => HttpResponse.json([])));
+}
+
 /** Ouvre la fiche du technicien 2 ; chaque lecture est gardée, pour compter la relecture. */
 async function ouvrirLaFiche(depart: FicheTechnicien = karimDeTest()): Promise<FicheOuverte> {
   let courante = depart;
+  servirAucuneIndisponibilite();
   const lectures = enregistrerLesRequetes('get', '/technicians/2', () =>
     HttpResponse.json(courante),
   );
@@ -105,6 +111,7 @@ describe('fiche technicien (US11)', () => {
 
   it('US11 : une fiche introuvable (404) affiche le message générique, pas celui de l’API, et « Réessayer » la relit', async () => {
     const utilisateur = userEvent.setup();
+    servirAucuneIndisponibilite();
     serveurApi.use(http.get(urlApi('/technicians/2'), () => HttpResponse.json(karimDeTest())));
     serveurApi.use(
       http.get(

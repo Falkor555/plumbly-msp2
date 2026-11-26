@@ -21,15 +21,26 @@ import {
 import { PastilleCouleur } from './PastilleCouleur';
 import { initiales } from './presentation';
 import { SectionCoordonneesTechnicien } from './SectionCoordonneesTechnicien';
+import {
+  type RelectureDesIndisponibilites,
+  SectionIndisponibilites,
+} from './SectionIndisponibilites';
 
 /** Message lu après chaque enregistrement réussi depuis la fiche. */
 const ANNONCES: Record<ActionFicheTechnicien['nom'], string> = {
   coordonnees: 'Fiche enregistrée.',
   archivage: 'Technicien archivé : sa fiche est désormais en lecture seule.',
+  'ajout-indisponibilite': 'Indisponibilité ajoutée.',
+  'suppression-indisponibilite': 'Indisponibilité supprimée.',
 };
 
+interface PropsPage {
+  /** Horloge, injectable par les tests : une indisponibilité terminée ne se supprime plus (US12). */
+  maintenant?: () => Date;
+}
+
 /** US11 : fiche du technicien désigné par l'adresse /techniciens/:id. */
-export function PageFicheTechnicien() {
+export function PageFicheTechnicien({ maintenant = () => new Date() }: PropsPage) {
   const { id } = useParams();
   const identifiant = id === undefined ? null : lireIdentifiant(id);
   if (identifiant === null) {
@@ -41,11 +52,16 @@ export function PageFicheTechnicien() {
   }
   // La clé repart d'un état neuf quand l'historique du navigateur passe d'une fiche à une autre :
   // sans elle, la fiche précédente et son message de succès resteraient affichés pendant la lecture.
-  return <FicheDuTechnicien key={identifiant} id={identifiant} />;
+  return <FicheDuTechnicien key={identifiant} id={identifiant} maintenant={maintenant} />;
+}
+
+interface PropsFiche {
+  id: number;
+  maintenant: () => Date;
 }
 
 /** Fiche d'un technicien, archivé ou non. */
-function FicheDuTechnicien({ id }: { id: number }) {
+function FicheDuTechnicien({ id, maintenant }: PropsFiche) {
   const charger = useCallback((signal: AbortSignal) => techniciensApi.consulter(id, signal), [id]);
   const { etat, recharger, dernieresDonnees } = useChargement<FicheTechnicien>(charger);
   // Après une modification, la fiche relue remplace l'ancienne sans vider la page.
@@ -68,6 +84,7 @@ function FicheDuTechnicien({ id }: { id: number }) {
           technicien={technicien}
           relectureEnCours={etat.statut === 'chargement'}
           onModifie={recharger}
+          maintenant={maintenant}
         />
       ) : (
         // Tant que le nom n'est pas connu, la page garde un titre de niveau 1 générique.
@@ -91,16 +108,20 @@ interface PropsContenu {
   relectureEnCours: boolean;
   /** Une action a été enregistrée : la fiche est relue. */
   onModifie: () => void;
+  maintenant: () => Date;
 }
+
+const PREMIERE_LECTURE: RelectureDesIndisponibilites = { version: 0, focaliserLeTitre: false };
 
 /**
  * Assemble la fiche et garde l'état partagé par ses sections : la fenêtre ouverte, le message de
  * succès et le focus à rendre après la relecture. Un technicien archivé est en lecture seule :
- * aucune action ne s'affiche (RG22).
+ * aucune action ne s'affiche (RG22), pas même sur ses indisponibilités.
  */
-function ContenuFiche({ technicien, relectureEnCours, onModifie }: PropsContenu) {
+function ContenuFiche({ technicien, relectureEnCours, onModifie, maintenant }: PropsContenu) {
   const [action, setAction] = useState<ActionFicheTechnicien | null>(null);
   const [annonce, setAnnonce] = useState<string | null>(null);
+  const [relecture, setRelecture] = useState(PREMIERE_LECTURE);
   const titre = useRef<HTMLHeadingElement>(null);
   const focaliserApresRelecture = useFocusApresRelecture(technicien);
   const actions: ActionsDeLaFiche<ActionFicheTechnicien> | undefined = technicien.archive
@@ -116,6 +137,17 @@ function ContenuFiche({ technicien, relectureEnCours, onModifie }: PropsContenu)
   function terminer(terminee: ActionFicheTechnicien) {
     setAction(null);
     setAnnonce(ANNONCES[terminee.nom]);
+    if (
+      terminee.nom === 'ajout-indisponibilite' ||
+      terminee.nom === 'suppression-indisponibilite'
+    ) {
+      // Seule la liste des indisponibilités change : la fiche elle-même n'est pas relue.
+      setRelecture(({ version }) => ({
+        version: version + 1,
+        focaliserLeTitre: terminee.nom === 'suppression-indisponibilite',
+      }));
+      return;
+    }
     if (terminee.nom === 'archivage') focaliserApresRelecture(titre);
     onModifie();
   }
@@ -125,6 +157,12 @@ function ContenuFiche({ technicien, relectureEnCours, onModifie }: PropsContenu)
       <EnTeteFiche technicien={technicien} refTitre={titre} actions={actions} />
       <ZoneAnnonce>{annonce}</ZoneAnnonce>
       <SectionCoordonneesTechnicien technicien={technicien} actions={actions} />
+      <SectionIndisponibilites
+        technicien={technicien}
+        actions={actions}
+        relecture={relecture}
+        maintenant={maintenant}
+      />
       {action && (
         <FenetreDeLaFicheTechnicien
           action={action}
