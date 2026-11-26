@@ -41,7 +41,10 @@ function AdresseCourante() {
   return <output aria-label="Adresse">{search}</output>;
 }
 
-function afficher(adresse = '/interventions') {
+/** Une entrée avec un état imite l'arrivée depuis la page de création. */
+function afficher(
+  adresse: string | { pathname: string; search?: string; state?: unknown } = '/interventions',
+) {
   render(
     <MemoryRouter initialEntries={[adresse]}>
       <Routes>
@@ -142,6 +145,32 @@ describe('liste des interventions (US15)', () => {
     expect(
       await screen.findByText('Aucune intervention ne correspond à ces filtres.'),
     ).toBeInTheDocument();
+  });
+
+  it('US14 : propose de créer une intervention depuis la liste', async () => {
+    simulerListe(liste([FUITE]));
+    afficher();
+    expect(await screen.findByRole('link', { name: 'Nouvelle intervention' })).toHaveAttribute(
+      'href',
+      '/interventions/nouvelle',
+    );
+  });
+
+  it('US14 : confirme la création, puis retire le message dès qu’un filtre change', async () => {
+    const message = 'Intervention créée pour Mme Hoarau : elle est à planifier.';
+    simulerListe(liste([FUITE]));
+    afficher({
+      pathname: '/interventions',
+      search: '?statut=A_PLANIFIER',
+      state: { messageCreation: message },
+    });
+    expect(await screen.findByText(message)).toHaveAttribute('role', 'status');
+
+    await userEvent.selectOptions(screen.getByLabelText('Urgence'), 'URGENTE');
+    await userEvent.click(screen.getByRole('button', { name: 'Filtrer' }));
+
+    await screen.findByRole('table');
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
   });
 
   it('US15 : affiche une erreur avec « Réessayer » si l’API ne répond pas', async () => {

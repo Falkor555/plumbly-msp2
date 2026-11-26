@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 import { PageConnexion } from './connexion/PageConnexion';
 import { PageInterventions } from './interventions/PageInterventions';
+import { PageNouvelleIntervention } from './interventions/PageNouvelleIntervention';
 import { PageMaTournee } from './ma-tournee/PageMaTournee';
 import { MiseEnPage } from './mise-en-page/MiseEnPage';
 import { PageMotDePasse } from './mot-de-passe/PageMotDePasse';
@@ -27,6 +28,7 @@ export default function App() {
             <Route element={<MiseEnPage />}>
               <Route path="/planning" element={<PagePlanning />} />
               <Route path="/interventions" element={<PageInterventions />} />
+              <Route path="/interventions/nouvelle" element={<PageNouvelleIntervention />} />
             </Route>
           </Route>
           <Route element={<RouteProtegee roles={ROLES_TERRAIN} />}>

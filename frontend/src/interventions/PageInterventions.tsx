@@ -1,5 +1,5 @@
 import { type ChangeEvent, type FormEvent, useCallback, useId, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { type FiltresInterventions, interventionsApi } from '../api/interventions.api';
 import type { Intervention, ListePaginee } from '../api/types';
 import { dateMetierCourte } from '../commun/dates';
@@ -22,6 +22,7 @@ import {
   versBrouillon,
   versParametres,
 } from './filtres';
+import type { EtatApresCreation } from './PageNouvelleIntervention'
 
 const CHAMP =
   'mt-1 block h-11 w-full rounded border border-gray-300 bg-white px-3 text-sm text-anthracite focus-visible:border-sarcelle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sarcelle';
@@ -45,13 +46,34 @@ export function PageInterventions() {
   );
   const { etat, recharger } = useChargement<ListePaginee<Intervention>>(charger);
   const appliquer = (nouveaux: FiltresInterventions) => setParametres(versParametres(nouveaux));
+  // Présent seulement juste après une création : un changement de filtre le fait disparaître.
+  const messageCreation = (useLocation().state as EtatApresCreation | null)?.messageCreation;
 
   return (
     <main className="mx-auto max-w-[1440px] space-y-4 px-4 py-6 md:px-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Interventions</h1>
-        <p className="text-sm text-gris-texte">Demandes des clients, les plus urgentes d’abord.</p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Interventions</h1>
+          <p className="text-sm text-gris-texte">
+            Demandes des clients, les plus urgentes d’abord.
+          </p>
+        </div>
+        <Link
+          to="/interventions/nouvelle"
+          className={`${BOUTON_PRINCIPAL} inline-flex items-center`}
+        >
+          Nouvelle intervention
+        </Link>
       </header>
+
+      {messageCreation && (
+        <p
+          role="status"
+          className="rounded border border-sarcelle/30 bg-sarcelle-claire px-4 py-3 text-sm font-medium text-sarcelle-profonde"
+        >
+          {messageCreation}
+        </p>
+      )}
 
       {/* La clé recrée le formulaire quand l'adresse change (précédent, lien partagé). */}
       <FormulaireFiltres key={adresse} initial={filtres} onAppliquer={appliquer} />

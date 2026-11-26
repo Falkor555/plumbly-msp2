@@ -4,6 +4,7 @@ import type {
   FinDIntervention,
   Intervention,
   ListePaginee,
+  NouvelleIntervention,
   SignatureIntervention,
   StatutIntervention,
   Urgence,
@@ -47,6 +48,10 @@ export const interventionsApi = {
       signal,
     }),
 
+  /** US14 : la nouvelle intervention est créée « à planifier » (RG01). */
+  creer: (intervention: NouvelleIntervention): Promise<Intervention> =>
+    api.post<Intervention>('/interventions', intervention),
+  
   /** US14 et US24 : une intervention, par exemple pour relire son statut après une réponse perdue. */
   consulter: (id: number, signal?: AbortSignal): Promise<Intervention> =>
     api.get<Intervention>(`/interventions/${id}`, { signal }),
