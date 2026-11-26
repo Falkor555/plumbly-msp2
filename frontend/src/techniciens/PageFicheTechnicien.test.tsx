@@ -33,7 +33,7 @@ async function ouvrirLaFiche(depart: FicheTechnicien = karimDeTest()): Promise<F
   const lectures = enregistrerLesRequetes('get', '/technicians/2', () =>
     HttpResponse.json(courante),
   );
-  afficherAvecSession(
+  await afficherAvecSession(
     <PageFicheTechnicien />,
     GESTIONNAIRE_DE_TEST,
     '/techniciens/2',
@@ -124,7 +124,7 @@ describe('fiche technicien (US11)', () => {
         { once: true },
       ),
     );
-    afficherAvecSession(
+    await afficherAvecSession(
       <PageFicheTechnicien />,
       GESTIONNAIRE_DE_TEST,
       '/techniciens/2',
