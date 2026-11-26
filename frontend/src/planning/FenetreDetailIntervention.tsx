@@ -2,6 +2,7 @@ import { useId, useRef, type ReactNode } from 'react';
 import type { Intervention } from '../api/types';
 import { Fenetre } from '../commun/Fenetre';
 import { lienTelephone } from '../commun/liens';
+import { LienItineraire } from '../commun/LiensContact';
 import { BlocSignature } from '../signature/BlocSignature';
 import { BadgesIntervention } from './BadgesIntervention';
 import { creneau } from './presentation';
@@ -62,6 +63,9 @@ export function FenetreDetailIntervention({ intervention, onFermer }: Props) {
               {adresse.codePostal} {adresse.ville}
             </span>
           </address>
+          <span className="mt-2 block">
+            <LienItineraire adresse={adresse} />
+          </span>
         </Rubrique>
         {adresse.infosAcces && <Rubrique titre="Accès">{adresse.infosAcces}</Rubrique>}
         <Rubrique titre="Description">{intervention.description}</Rubrique>

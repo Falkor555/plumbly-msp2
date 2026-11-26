@@ -95,6 +95,20 @@ describe('fiche d’une intervention (US16)', () => {
     expect(screen.getByText('Non affectée')).toBeInTheDocument();
   });
 
+  it('US24 : propose d’appeler le client et d’ouvrir l’itinéraire vers l’adresse', async () => {
+    simulerApi();
+    afficher();
+
+    expect(await screen.findByRole('link', { name: 'Appeler Mme Hoarau' })).toHaveAttribute(
+      'href',
+      'tel:0692123456',
+    );
+    expect(screen.getByRole('link', { name: 'Itinéraire (nouvel onglet)' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('destination=4%20rue%20des%20Flamboyants%2C%2097400%20Saint-Denis'),
+    );
+  });
+
   it('US16 : modifie l’urgence et la description, en n’envoyant que les champs changés', async () => {
     const appels = simulerApi();
     afficher();
