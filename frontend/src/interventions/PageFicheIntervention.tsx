@@ -5,7 +5,7 @@ import { interventionsApi } from '../api/interventions.api';
 import type { Intervention, TypeIntervention } from '../api/types';
 import { typesInterventionApi } from '../api/typesIntervention.api';
 import { dateMetierCourte } from '../commun/dates';
-import { lienTelephone } from '../commun/liens';
+import { LienAppeler, LienItineraire } from '../commun/LiensContact';
 import { messageErreur } from '../commun/messageErreur';
 import { useChargement } from '../commun/useChargement';
 import { BadgesIntervention } from '../planning/BadgesIntervention';
@@ -204,12 +204,10 @@ function Details({ intervention }: { intervention: Intervention }) {
     <dl className={`${CARTE} grid gap-x-6 text-sm sm:grid-cols-2`}>
       <Rubrique titre="Client">
         {client.nomAffiche}
-        <a
-          href={lienTelephone(client.telephone)}
-          className="block font-semibold text-sarcelle-profonde underline"
-        >
-          {client.telephone}
-        </a>
+        <span className="block tabular-nums">{client.telephone}</span>
+        <span className="mt-2 block">
+          <LienAppeler nom={client.nomAffiche} telephone={client.telephone} />
+        </span>
       </Rubrique>
       <Rubrique titre="Adresse">
         <address className="not-italic">
@@ -219,6 +217,9 @@ function Details({ intervention }: { intervention: Intervention }) {
             {adresse.codePostal} {adresse.ville}
           </span>
         </address>
+        <span className="mt-2 block">
+          <LienItineraire adresse={adresse} />
+        </span>
       </Rubrique>
       {adresse.infosAcces && <Rubrique titre="Accès">{adresse.infosAcces}</Rubrique>}
       <Rubrique titre="Créneau">

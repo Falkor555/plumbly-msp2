@@ -1,5 +1,6 @@
 import type { FiltresInterventions } from '../api/interventions.api';
-import type { StatutIntervention, Urgence } from '../api/types';
+import type { DateIso, StatutIntervention, Urgence } from '../api/types';
+import { ajouterJours, lundiDeLaSemaine } from '../commun/dates';
 
 /*
  * Filtres de la liste des interventions (US15), gardés dans l'adresse de la page : ils sont
@@ -96,4 +97,34 @@ export function erreursDuBrouillon(brouillon: Brouillon): string[] {
 export function depuisBrouillon(brouillon: Brouillon): FiltresInterventions {
   const remplis = Object.entries(brouillon).filter(([, valeur]) => valeur.trim() !== '');
   return lireFiltres(new URLSearchParams(remplis));
+}
+
+export interface FiltrePret {
+  libelle: string;
+  filtres: FiltresInterventions;
+}
+
+/**
+ * #49 : les listes que le bureau consulte le plus, en un clic. Elles remplissent les filtres
+ * ordinaires, qui restent modifiables ; rien n'est enregistré. Les jours sont ceux de La Réunion.
+ */
+export function filtresPrets(aujourdhui: DateIso): FiltrePret[] {
+  const lundi = lundiDeLaSemaine(aujourdhui);
+  return [
+    {
+      libelle: 'Urgentes à planifier',
+      filtres: { page: 1, statut: 'A_PLANIFIER', urgence: 'URGENTE' },
+    },
+    { libelle: 'À planifier', filtres: { page: 1, statut: 'A_PLANIFIER' } },
+    { libelle: 'En cours', filtres: { page: 1, statut: 'EN_COURS' } },
+    { libelle: 'Aujourd’hui', filtres: { page: 1, du: aujourdhui, au: aujourdhui } },
+    { libelle: 'Cette semaine', filtres: { page: 1, du: lundi, au: ajouterJours(lundi, 6) } },
+  ];
+}
+
+/** Même liste, quelle que soit la page affichée : sert à marquer le filtre prêt actif. */
+export function memesFiltres(a: FiltresInterventions, b: FiltresInterventions): boolean {
+  return (
+    versParametres({ ...a, page: 1 }).toString() === versParametres({ ...b, page: 1 }).toString()
+  );
 }

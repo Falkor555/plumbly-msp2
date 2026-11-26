@@ -124,6 +124,19 @@ describe('connexion et navigation (US01, US02, US24)', () => {
     expect(window.location.pathname).toBe('/ma-tournee');
   });
 
+  it('US15 : n’affiche ni la liste ni ses filtres à un technicien, renvoyé vers sa tournée', async () => {
+    // Aucun handler pour GET /interventions : un appel ferait échouer le test.
+    serveurApi.use(...sessionDe(KARIM), pasDeTournee);
+    ouvrir('/interventions?statut=A_PLANIFIER');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Ma tournée du jour' }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/ma-tournee');
+    expect(
+      screen.queryByRole('group', { name: 'Filtres prêts à l’emploi' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('déconnecte et revient à la page de connexion (US02)', async () => {
     serveurApi.use(
       ...sessionDe(SOPHIE),

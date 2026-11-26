@@ -52,7 +52,7 @@ function afficher(
           path="/interventions"
           element={
             <>
-              <PageInterventions />
+              <PageInterventions aujourdhui="2026-11-26" />
               <AdresseCourante />
             </>
           }
@@ -145,6 +145,53 @@ describe('liste des interventions (US15)', () => {
     expect(
       await screen.findByText('Aucune intervention ne correspond à ces filtres.'),
     ).toBeInTheDocument();
+  });
+
+  it('US15 : « Urgentes à planifier » remplit les filtres et l’adresse en un clic', async () => {
+    const appels = simulerListe(liste([FUITE]));
+    afficher();
+    await screen.findByRole('table');
+    const prets = screen.getByRole('group', { name: 'Filtres prêts à l’emploi' });
+    const urgentes = within(prets).getByRole('button', { name: 'Urgentes à planifier' });
+    expect(urgentes).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(urgentes);
+
+    await screen.findByRole('table');
+    expect(screen.getByLabelText('Adresse')).toHaveTextContent(
+      '?statut=A_PLANIFIER&urgence=URGENTE',
+    );
+    expect(appels.at(-1)?.get('urgence')).toBe('URGENTE');
+    expect(screen.getByLabelText('Statut')).toHaveValue('A_PLANIFIER');
+    expect(screen.getByLabelText('Urgence')).toHaveValue('URGENTE');
+    expect(urgentes).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('US15 : « Cette semaine » remplit les dates, qui restent modifiables, puis « Effacer » les retire', async () => {
+    const appels = simulerListe(liste([FUITE]));
+    afficher();
+    await screen.findByRole('table');
+    const semaine = screen.getByRole('button', { name: 'Cette semaine' });
+
+    await userEvent.click(semaine);
+    await screen.findByRole('table');
+    expect(appels.at(-1)?.get('du')).toBe('2026-11-23');
+    expect(appels.at(-1)?.get('au')).toBe('2026-11-29');
+    expect(screen.getByLabelText('Du')).toHaveValue('2026-11-23');
+
+    await userEvent.selectOptions(screen.getByLabelText('Statut'), 'EN_COURS');
+    await userEvent.click(screen.getByRole('button', { name: 'Filtrer' }));
+    await screen.findByRole('table');
+    expect(screen.getByLabelText('Adresse')).toHaveTextContent(
+      '?statut=EN_COURS&du=2026-11-23&au=2026-11-29',
+    );
+    // Les filtres ne correspondent plus exactement à « Cette semaine ».
+    expect(semaine).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Effacer les filtres' }));
+    await screen.findByRole('table');
+    expect(screen.getByLabelText('Du')).toHaveValue('');
+    expect(appels.at(-1)?.get('du')).toBeNull();
   });
 
   it('US16 : ouvre la fiche d’une intervention depuis le nom du client', async () => {

@@ -92,3 +92,17 @@ describe('signature du client dans le détail du planning (US33)', () => {
     expect(within(fenetre).queryByRole('img')).not.toBeInTheDocument();
   });
 });
+
+describe('itinéraire dans le détail du planning (#49)', () => {
+  it('US23 : propose l’itinéraire vers l’adresse, dans un nouvel onglet', () => {
+    const choisie = intervention(1);
+    const fenetre = ouvrir(choisie);
+
+    const lien = within(fenetre).getByRole('link', { name: 'Itinéraire (nouvel onglet)' });
+    expect(lien).toHaveAttribute(
+      'href',
+      expect.stringContaining(encodeURIComponent(choisie.adresse.ville)),
+    );
+    expect(lien).toHaveAttribute('target', '_blank');
+  });
+});
