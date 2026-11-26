@@ -3,8 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
-import type { AdresseClient, Client, ListePaginee, TypeIntervention } from '../api/types';
+import type { Adresse, Client, ListePaginee, TypeIntervention } from '../api/types';
 import { fabriquerIntervention } from '../simulation/donneesDemonstration';
+import { fabriquerAdresse, fabriquerClient } from '../simulation/fabriques';
 import { serveurApi, urlApi } from '../test/msw/serveur';
 import { PageNouvelleIntervention } from './PageNouvelleIntervention';
 
@@ -13,27 +14,21 @@ const TYPES: TypeIntervention[] = [
   { id: 5, libelle: 'Recherche de fuite', dureeDefautMin: 90 },
 ];
 
-function adresse(id: number, rue: string, ville: string): AdresseClient {
-  return {
-    id,
-    rue,
-    complement: null,
-    codePostal: '97400',
-    ville,
-    infosAcces: null,
-    archive: false,
-  };
+// Les fabriques complètent le reste de l'objet de l'API (#16) : seuls comptent ici l'identité et
+// les adresses du client.
+function adresse(id: number, rue: string, ville: string): Adresse {
+  return fabriquerAdresse({ id, rue, codePostal: '97400', ville });
 }
 
-const DUPONT: Client = {
+const DUPONT: Client = fabriquerClient({
   id: 8,
   typeClient: 'PARTICULIER',
   nomAffiche: 'Jean Dupont',
   telephone: '0692123456',
   adresses: [adresse(15, '12 rue des Lilas', 'Saint-Denis')],
-};
+});
 
-const GARAGE: Client = {
+const GARAGE: Client = fabriquerClient({
   id: 9,
   typeClient: 'PROFESSIONNEL',
   nomAffiche: 'Garage Hoarau',
@@ -42,7 +37,7 @@ const GARAGE: Client = {
     adresse(21, '3 chemin Bœuf Mort', 'Le Tampon'),
     adresse(22, '8 rue du Port', 'Saint-Pierre'),
   ],
-};
+});
 
 function page(clients: Client[]): ListePaginee<Client> {
   return { data: clients, meta: { page: 1, limit: 10, total: clients.length, totalPages: 1 } };

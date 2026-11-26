@@ -39,6 +39,13 @@ const formatDateCourte = new Intl.DateTimeFormat('fr-FR', {
   month: '2-digit',
 });
 
+const formatDate = new Intl.DateTimeFormat('fr-FR', {
+  timeZone: FUSEAU_METIER,
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+
 // Un jour AAAA-MM-JJ n'a pas d'heure : on le manipule comme un minuit UTC, formaté en UTC.
 const formatJourCourt = new Intl.DateTimeFormat('fr-FR', {
   timeZone: 'UTC',
@@ -72,6 +79,19 @@ export function heureMetier(instant: Date | DateHeureIso): string {
 /** Date réunionnaise d'un instant, par exemple « 24/11 ». */
 export function dateMetierCourte(instant: Date | DateHeureIso): string {
   return formatDateCourte.format(new Date(instant));
+}
+
+/** Date réunionnaise d'un instant, par exemple « 24/11/2026 ». */
+export function dateMetier(instant: Date | DateHeureIso): string {
+  return formatDate.format(new Date(instant));
+}
+
+/**
+ * Date et heure réunionnaises d'un instant, par exemple « 24/11/2026 08:30 ». Assemblées à la main
+ * parce que le séparateur d'Intl entre la date et l'heure varie selon le moteur (« , » ou « à »).
+ */
+export function dateHeureMetier(instant: Date | DateHeureIso): string {
+  return `${dateMetier(instant)} ${heureMetier(instant)}`;
 }
 
 /** Minutes écoulées depuis minuit, heure de La Réunion. */

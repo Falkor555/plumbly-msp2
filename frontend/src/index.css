@@ -22,6 +22,22 @@
   --color-alerte: #d97706;
   --color-erreur: #dc2626;
   --color-info: #2563eb;
+
+  /*
+   * RGAA 3.2 (WCAG 2.1 AA) : un texte doit atteindre 4,5:1 avec son fond. Les couleurs d'état
+   * ci-dessus n'y arrivent pas toutes (succès 3,1:1 sur son fond clair, alerte 3,2:1 sur blanc,
+   * erreur 4,4:1 sur son fond clair) : elles restent pour les bordures, anneaux et icônes, et le
+   * texte prend ces teintes plus foncées. Rapports mesurés : erreur 5,9:1, succès 4,8:1,
+   * alerte 4,8:1 sur leur fond ; info 4,7:1 sur le sien.
+   */
+  --color-erreur-texte: #b91c1c;
+  --color-succes-texte: #15803d;
+  --color-alerte-texte: #b45309;
+
+  --color-erreur-fond: #fef2f2;
+  --color-succes-fond: #f0fdf4;
+  --color-info-fond: #eff6ff;
+  --color-alerte-fond: #fffbeb;
 }
 
 @layer base {

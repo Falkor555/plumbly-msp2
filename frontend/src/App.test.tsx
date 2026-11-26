@@ -1,11 +1,21 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import type { Profil } from './api/auth.api';
 import { effacerJetonAcces } from './api/jetonAcces';
+import type { Client } from './api/types';
+import {
+  clientsDeTest,
+  fabriquerClient,
+  heleneDeTest,
+  listePaginee,
+  servirLesClients,
+} from './test/clientsDeTest';
+import { enregistrerLesRequetes } from './test/msw/requetesRecues';
 import { serveurApi, urlApi } from './test/msw/serveur';
+import { karimDeTest, servirLesTechniciens, techniciensDeTest } from './test/techniciensDeTest';
 
 const SOPHIE: Profil = {
   id: 3,
@@ -149,6 +159,284 @@ describe('connexion et navigation (US01, US02, US24)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Connexion' })).toBeInTheDocument();
+  });
+});
+
+describe('écrans clients dans l’application (US08, US09)', () => {
+  function navigationPrincipale(): HTMLElement {
+    return screen.getByRole('navigation', { name: 'Navigation principale' });
+  }
+
+  function servirLaFicheDeHelene() {
+    serveurApi.use(
+      http.get(urlApi('/clients/7'), () => HttpResponse.json(heleneDeTest())),
+      http.get(urlApi('/clients/7/interventions'), () => HttpResponse.json(listePaginee([]))),
+    );
+  }
+
+  /** Simule la fiche du client sans y répondre avant l'appel de la fonction rendue. */
+  function servirLaFicheRetenue(client: Client): () => void {
+    let liberer: () => void = () => undefined;
+    const reponseRetenue = new Promise<void>((resolve) => (liberer = resolve));
+    serveurApi.use(
+      http.get(urlApi(`/clients/${client.id}`), async () => {
+        await reponseRetenue;
+        return HttpResponse.json(client);
+      }),
+      http.get(urlApi(`/clients/${client.id}/interventions`), () =>
+        HttpResponse.json(listePaginee([])),
+      ),
+    );
+    return () => liberer();
+  }
+
+  /** Défilements demandés depuis le dernier appel (espion posé par src/test/setup.ts). */
+  function suivreLesDefilements() {
+    const defilements = vi.mocked(window.scrollTo);
+    defilements.mockClear();
+    return defilements;
+  }
+
+  it('US08 : un gestionnaire connecté voit la liste des clients, signalée dans la navigation', async () => {
+    serveurApi.use(...sessionDe(SOPHIE));
+    servirLesClients(clientsDeTest());
+
+    ouvrir('/clients');
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Clients' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Hélène Payet' })).toBeInTheDocument();
+    const navigation = navigationPrincipale();
+    expect(within(navigation).getByRole('link', { name: 'Clients' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(navigation).getByRole('link', { name: 'Planning' })).not.toHaveAttribute(
+      'aria-current',
+    );
+  });
+
+  it('US08 : renvoie un technicien vers sa tournée s’il ouvre la liste des clients', async () => {
+    serveurApi.use(...sessionDe(KARIM), pasDeTournee);
+
+    ouvrir('/clients');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Ma tournée du jour' }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/ma-tournee');
+  });
+
+  it.each([
+    ['qui n’est pas un nombre', '/clients/abc'],
+    ['nul', '/clients/0'],
+  ])(
+    'US09 : un identifiant de fiche %s affiche « Page introuvable », le focus sur son contenu, sans interroger l’API',
+    async (_cas, chemin) => {
+      serveurApi.use(...sessionDe(SOPHIE));
+      const lectures = enregistrerLesRequetes('get', '/clients/:id', () =>
+        HttpResponse.json(heleneDeTest()),
+      );
+
+      ouvrir(chemin);
+
+      const titre = await screen.findByRole('heading', { level: 1, name: 'Page introuvable' });
+      expect(screen.getByRole('main')).toContainElement(titre);
+      expect(screen.getByRole('main')).toHaveFocus();
+      expect(screen.getByRole('link', { name: 'Retour à la liste des clients' })).toHaveAttribute(
+        'href',
+        '/clients',
+      );
+      expect(lectures).toHaveLength(0);
+    },
+  );
+
+  it('US09 : un clic sur un client ouvre sa fiche sans recharger la page', async () => {
+    const utilisateur = userEvent.setup();
+    serveurApi.use(...sessionDe(SOPHIE));
+    servirLesClients(clientsDeTest());
+    servirLaFicheDeHelene();
+    ouvrir('/clients');
+    const navigation = await screen.findByRole('navigation', { name: 'Navigation principale' });
+
+    await utilisateur.click(await screen.findByRole('link', { name: 'Hélène Payet' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Hélène Payet' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Coordonnées' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/clients/7');
+    // La même barre est restée en place : seule la page a changé, la session n'a pas été relue.
+    expect(navigationPrincipale()).toBe(navigation);
+    expect(within(navigation).getByRole('link', { name: 'Clients' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  it('US09 : la fiche ouverte depuis la liste repart du haut, le focus au début de son contenu', async () => {
+    const utilisateur = userEvent.setup();
+    serveurApi.use(...sessionDe(SOPHIE));
+    servirLesClients(clientsDeTest());
+    servirLaFicheDeHelene();
+    ouvrir('/clients');
+    const lien = await screen.findByRole('link', { name: 'Hélène Payet' });
+    const defilements = suivreLesDefilements();
+
+    await utilisateur.click(lien);
+
+    // Le lien activé a disparu avec la liste : le focus n'est pas retombé sur le document.
+    const titre = await screen.findByRole('heading', { level: 1, name: 'Hélène Payet' });
+    expect(screen.getByRole('main')).toContainElement(titre);
+    expect(screen.getByRole('main')).toHaveFocus();
+    expect(defilements).toHaveBeenCalledOnce();
+    expect(defilements).toHaveBeenCalledWith(0, 0);
+    await utilisateur.tab();
+    expect(screen.getByRole('link', { name: 'Retour à la liste des clients' })).toHaveFocus();
+  });
+
+  it('US08 : « Retour à la liste des clients » rouvre la liste en haut, le focus sur son contenu', async () => {
+    const utilisateur = userEvent.setup();
+    serveurApi.use(...sessionDe(SOPHIE));
+    servirLesClients(clientsDeTest());
+    servirLaFicheDeHelene();
+    ouvrir('/clients/7');
+    await screen.findByRole('heading', { level: 1, name: 'Hélène Payet' });
+    const defilements = suivreLesDefilements();
+
+    await utilisateur.click(screen.getByRole('link', { name: 'Retour à la liste des clients' }));
+
+    expect(await screen.findByRole('link', { name: 'Hélène Payet' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/clients');
+    expect(screen.getByRole('main')).toContainElement(
+      screen.getByRole('heading', { level: 1, name: 'Clients' }),
+    );
+    expect(screen.getByRole('main')).toHaveFocus();
+    expect(defilements).toHaveBeenCalledOnce();
+    expect(defilements).toHaveBeenCalledWith(0, 0);
+  });
+
+  it('US09 : revenir par l’historique sur une autre fiche n’en montre ni l’ancien client ni son message pendant la lecture', async () => {
+    const utilisateur = userEvent.setup();
+    const boulangerie = fabriquerClient({
+      id: 3,
+      typeClient: 'PROFESSIONNEL',
+      raisonSociale: 'Boulangerie Técher',
+      nomAffiche: 'Boulangerie Técher',
+    });
+    serveurApi.use(
+      ...sessionDe(SOPHIE),
+      http.post(urlApi('/clients/7/addresses/71/archive'), () =>
+        HttpResponse.json({
+          ...heleneDeTest().adresses[1],
+          archive: true,
+          archiveLe: '2026-11-25T06:00:00.000Z',
+        }),
+      ),
+    );
+    servirLaFicheDeHelene();
+    const repondreSurLaBoulangerie = servirLaFicheRetenue(boulangerie);
+    // Historique du navigateur : la fiche de la boulangerie, puis celle d'Hélène Payet.
+    window.history.replaceState(null, '', '/clients/3');
+    window.history.pushState(null, '', '/clients/7');
+    render(<App />);
+    await utilisateur.click(
+      await screen.findByRole('button', { name: 'Archiver l’adresse 3 chemin des Tamarins' }),
+    );
+    await utilisateur.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Archiver l’adresse' }),
+    );
+    expect(await screen.findByText('Adresse archivée.')).toBeInTheDocument();
+
+    window.history.back();
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Fiche client' }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/clients/3');
+    expect(screen.getByText('Chargement de la fiche du client…')).toBeInTheDocument();
+    expect(screen.queryByText('Hélène Payet')).not.toBeInTheDocument();
+    expect(screen.queryByText('Adresse archivée.')).not.toBeInTheDocument();
+    repondreSurLaBoulangerie();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Boulangerie Técher' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Confirmation' })).toBeEmptyDOMElement();
+  });
+});
+
+describe('écrans techniciens dans l’application (US11)', () => {
+  function navigationPrincipale(): HTMLElement {
+    return screen.getByRole('navigation', { name: 'Navigation principale' });
+  }
+
+  it('US11 : un gestionnaire connecté voit la liste des techniciens, signalée dans la navigation', async () => {
+    serveurApi.use(...sessionDe(SOPHIE));
+    servirLesTechniciens(techniciensDeTest());
+
+    ouvrir('/techniciens');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Techniciens' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Karim Benali' })).toBeInTheDocument();
+    const navigation = navigationPrincipale();
+    expect(within(navigation).getByRole('link', { name: 'Techniciens' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(navigation).getByRole('link', { name: 'Clients' })).not.toHaveAttribute(
+      'aria-current',
+    );
+  });
+
+  it('US11 : le lien « Techniciens » reste actif sur la fiche d’un technicien', async () => {
+    serveurApi.use(
+      ...sessionDe(SOPHIE),
+      http.get(urlApi('/technicians/2'), () => HttpResponse.json(karimDeTest())),
+    );
+
+    ouvrir('/techniciens/2');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Karim Benali' }),
+    ).toBeInTheDocument();
+    expect(
+      within(navigationPrincipale()).getByRole('link', { name: 'Techniciens' }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
+  it.each([
+    ['qui n’est pas un nombre', '/techniciens/abc'],
+    ['nul', '/techniciens/0'],
+  ])(
+    'US11 : un identifiant de fiche %s affiche « Page introuvable », le focus sur son contenu, sans interroger l’API',
+    async (_cas, chemin) => {
+      serveurApi.use(...sessionDe(SOPHIE));
+      const lectures = enregistrerLesRequetes('get', '/technicians/:id', () =>
+        HttpResponse.json(karimDeTest()),
+      );
+
+      ouvrir(chemin);
+
+      const titre = await screen.findByRole('heading', { level: 1, name: 'Page introuvable' });
+      expect(screen.getByRole('main')).toContainElement(titre);
+      expect(screen.getByRole('main')).toHaveFocus();
+      expect(
+        screen.getByRole('link', { name: 'Retour à la liste des techniciens' }),
+      ).toHaveAttribute('href', '/techniciens');
+      expect(lectures).toHaveLength(0);
+    },
+  );
+
+  it('US11 : renvoie un technicien vers sa tournée s’il ouvre la liste des techniciens', async () => {
+    serveurApi.use(...sessionDe(KARIM), pasDeTournee);
+
+    ouvrir('/techniciens');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Ma tournée du jour' }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/ma-tournee');
   });
 });
 

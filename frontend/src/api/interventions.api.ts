@@ -1,4 +1,5 @@
 import { api } from './clientHttp';
+import { TAILLE_PAGE_MAX } from './parametres';
 import type {
   DateIso,
   FinDIntervention,
@@ -10,9 +11,6 @@ import type {
   StatutIntervention,
   Urgence,
 } from './types';
-
-/** Le contrat plafonne une page à 100 éléments (docs/api.md, section 4). */
-const TAILLE_PAGE_MAX = 100;
 
 /** Taille d'une page de la liste du bureau : la valeur par défaut du contrat. */
 const TAILLE_PAGE = 20;

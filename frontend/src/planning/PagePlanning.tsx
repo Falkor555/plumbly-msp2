@@ -75,7 +75,7 @@ export function PagePlanning({ aujourdhui = jourMetier(new Date()) }: Props) {
       {etat.statut === 'erreur' && (
         <div
           role="alert"
-          className="flex items-center gap-3 rounded border border-erreur/30 bg-red-50 px-4 py-3 text-sm text-erreur"
+          className="flex items-center gap-3 rounded border border-erreur/30 bg-erreur-fond px-4 py-3 text-sm text-erreur-texte"
         >
           {etat.message}
           <button type="button" onClick={recharger} className="ml-auto font-semibold underline">

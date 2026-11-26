@@ -31,6 +31,14 @@ export function MiseEnPage() {
               <NavLink to="/interventions" className={LIEN}>
                 Interventions
               </NavLink>
+              {/* Sans « end » : le lien reste actif sur la fiche d'un client (/clients/:id). */}
+              <NavLink to="/clients" className={LIEN}>
+                Clients
+              </NavLink>
+              {/* De même sur la fiche d'un technicien (/techniciens/:id). */}
+              <NavLink to="/techniciens" className={LIEN}>
+                Techniciens
+              </NavLink>
             </nav>
           )}
           <div className="ml-auto flex items-center gap-3">

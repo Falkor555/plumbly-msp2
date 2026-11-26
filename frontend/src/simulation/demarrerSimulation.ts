@@ -2,30 +2,34 @@ import { setupWorker } from 'msw/browser';
 import type { Intervention } from '../api/types';
 import { jourMetier, lundiDeLaSemaine, versInstant } from '../commun/dates';
 import {
+  CLIENT_EXPEDIT_PAYET,
+  CLIENT_GARAGE_HOARAU,
+  CLIENT_JOSIANE_BARET,
+  CLIENT_YOLANDE_GRONDIN,
+} from './clientsDemonstration';
+import {
+  chez,
   creerJeuDeDemonstration,
-  fabriquerIntervention,
+  fabriquerInterventionChez,
   type JeuDeDemonstration,
   planifier,
 } from './donneesDemonstration';
-import { creerHandlersInterventions } from './handlersInterventions';
-import { creerHandlersPlanning } from './handlersPlanning';
+import { creerHandlersDeSimulation } from './handlersDeSimulation';
 
 const URL_API = (import.meta.env.VITE_API_URL ?? '/api/v1').replace(/\/$/, '');
 
 /**
  * Mode simulé (npm run dev:simule, développement uniquement) : MSW répond aux appels de l'API dans le navigateur
- * avec les données de démonstration, pour voir les écrans tant que l'authentification (#13)
- * et la liste des interventions (#17) ne sont pas livrées.
+ * avec les données de démonstration et une connexion simulée (comptesDemonstration.ts), pour
+ * parcourir tous les écrans sans back-end.
  */
 export async function demarrerSimulation(): Promise<void> {
-  const aujourdhui = (): string => jourMetier(new Date());
+  const maintenant = (): Date => new Date();
+  const aujourdhui = (): string => jourMetier(maintenant());
   const jeu = creerJeuDeDemonstration(lundiDeLaSemaine(aujourdhui()));
   ajouterTourneeDuJour(jeu, aujourdhui());
-  const options = { urlApi: (chemin: string) => `${URL_API}${chemin}`, aujourdhui };
-  const handlers = [
-    ...creerHandlersPlanning(jeu, options),
-    ...creerHandlersInterventions(jeu, options),
-  ];
+  const options = { urlApi: (chemin: string) => `${URL_API}${chemin}`, aujourdhui, maintenant };
+  const handlers = creerHandlersDeSimulation(jeu, options);
   await setupWorker(...handlers).start({ onUnhandledFrame: 'bypass' });
   console.info('[Plumbly] API simulée par MSW : données de démonstration.');
 }
@@ -41,11 +45,9 @@ function ajouterTourneeDuJour(jeu: JeuDeDemonstration, jour: string): void {
   technicien.tournees = technicien.tournees.filter(({ dateTournee }) => dateTournee !== jour);
   const signee = terminee(
     planifier(
-      fabriquerIntervention({
+      fabriquerInterventionChez(...chez(jeu.clients, CLIENT_JOSIANE_BARET), {
         id: 6,
-        client: 'Mme Baret',
         type: 'Entretien chaudière',
-        ville: 'Saint-Pierre',
         dureeEstimeeMin: 60,
       }),
       jour,
@@ -65,11 +67,9 @@ function ajouterTourneeDuJour(jeu: JeuDeDemonstration, jour: string): void {
   };
   const sansSignature = terminee(
     planifier(
-      fabriquerIntervention({
+      fabriquerInterventionChez(...chez(jeu.clients, CLIENT_EXPEDIT_PAYET), {
         id: 8,
-        client: 'M. Payet',
         type: 'Débouchage',
-        ville: 'Saint-Louis',
         dureeEstimeeMin: 45,
       }),
       jour,
@@ -81,11 +81,9 @@ function ajouterTourneeDuJour(jeu: JeuDeDemonstration, jour: string): void {
   );
   const enCours: Intervention = {
     ...planifier(
-      fabriquerIntervention({
+      fabriquerInterventionChez(...chez(jeu.clients, CLIENT_YOLANDE_GRONDIN), {
         id: 9,
-        client: 'Mme Grondin',
         type: 'Remplacement de robinet',
-        ville: 'Saint-Pierre',
         dureeEstimeeMin: 60,
       }),
       jour,
@@ -95,13 +93,11 @@ function ajouterTourneeDuJour(jeu: JeuDeDemonstration, jour: string): void {
     statut: 'EN_COURS',
     demarreeLe: versInstant(jour, '10:35'),
   };
+  // L'adresse du garage porte déjà le complément et les infos d'accès (clientsDemonstration.ts).
   const fuite = planifier(
-    fabriquerIntervention({
+    fabriquerInterventionChez(...chez(jeu.clients, CLIENT_GARAGE_HOARAU), {
       id: 7,
-      client: 'Garage Hoarau',
-      typeClient: 'PROFESSIONNEL',
       type: 'Recherche de fuite',
-      ville: 'Le Tampon',
       dureeEstimeeMin: 90,
       urgence: 'URGENTE',
     }),
@@ -109,11 +105,6 @@ function ajouterTourneeDuJour(jeu: JeuDeDemonstration, jour: string): void {
     '14:00',
     4,
   );
-  fuite.adresse = {
-    ...fuite.adresse,
-    complement: 'Atelier au fond de la cour',
-    infosAcces: 'Sonner au portail bleu',
-  };
   technicien.tournees.push({
     id: 11,
     dateTournee: jour,

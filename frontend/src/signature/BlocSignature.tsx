@@ -39,19 +39,19 @@ export function BlocSignature({ idIntervention }: Props) {
         <p className="text-gris-texte">Chargement de la signature…</p>
       )}
       {etat.statut === 'erreur' && (
-        <p role="alert" className="text-red-700">
+        <p role="alert" className="text-erreur-texte">
           {etat.message}
         </p>
       )}
       {etat.statut === 'pret' && (
         <>
           {etat.donnees.integre ? (
-            <span className={`${BADGE} bg-green-50 text-green-800 ring-succes/20`}>
+            <span className={`${BADGE} bg-succes-fond text-green-800 ring-succes/20`}>
               Contenu intact
             </span>
           ) : (
             <p className="space-y-1">
-              <span className={`${BADGE} bg-red-50 text-red-700 ring-erreur/20`}>
+              <span className={`${BADGE} bg-erreur-fond text-erreur-texte ring-erreur/20`}>
                 Contenu modifié après signature
               </span>
               <span className="block text-xs text-gris-texte">

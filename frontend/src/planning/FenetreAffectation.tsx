@@ -107,7 +107,7 @@ export function FenetreAffectation({ caseAAffecter, onFermer }: Props) {
             <p className="text-sm text-gris-texte">Chargement des interventions à planifier…</p>
           )}
           {etat.statut === 'erreur' && (
-            <p role="alert" className="text-sm text-erreur">
+            <p role="alert" className="text-sm text-erreur-texte">
               {etat.message}
             </p>
           )}
@@ -161,7 +161,7 @@ export function FenetreAffectation({ caseAAffecter, onFermer }: Props) {
           {erreur && (
             <p
               role="alert"
-              className="rounded border border-erreur/30 bg-red-50 px-3 py-2 text-sm text-erreur"
+              className="rounded border border-erreur/30 bg-erreur-fond px-3 py-2 text-sm text-erreur-texte"
             >
               {erreur}
             </p>

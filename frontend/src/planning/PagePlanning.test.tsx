@@ -53,7 +53,7 @@ describe('planning du gestionnaire', () => {
 
     const caseLundi = within(ligneDuTechnicien('Jean Rivière')).getAllByRole('cell')[0];
     expect(
-      within(caseLundi).getByRole('article', { name: /08:00–09:00, Mme Hoarau/ }),
+      within(caseLundi).getByRole('article', { name: /08:00–09:00, Marie-Claude Hoarau/ }),
     ).toBeInTheDocument();
     expect(within(caseLundi).getByText('Urgente')).toBeInTheDocument();
     expect(within(caseLundi).getByText('En cours')).toBeInTheDocument();
@@ -93,7 +93,7 @@ describe('planning du gestionnaire', () => {
     expect(await screen.findByText('Semaine du 30/11 au 05/12')).toBeInTheDocument();
     await screen.findByRole('rowheader', { name: /Jean Rivière/ });
     expect(requetesPlanning.at(-1)?.get('du')).toBe('2026-11-30');
-    expect(screen.queryByText('Mme Hoarau')).not.toBeInTheDocument();
+    expect(screen.queryByText('Marie-Claude Hoarau')).not.toBeInTheDocument();
   });
 
   it("bascule en vue jour sur la frise horaire et ne demande que ce jour à l'API", async () => {
@@ -140,7 +140,7 @@ describe('planning du gestionnaire', () => {
     await utilisateur.click(screen.getByRole('button', { name: /Voir le mardi 24 novembre 2026/ }));
 
     expect(await screen.findByRole('list', { name: 'Tournée de Marie Técher' })).toHaveTextContent(
-      'M. Fontaine',
+      'Jean-Yves Fontaine',
     );
     expect(screen.getByRole('button', { name: 'jour' })).toHaveAttribute('aria-pressed', 'true');
   });
@@ -169,7 +169,7 @@ describe('planning du gestionnaire', () => {
   });
 });
 
-/** Le jeu de démonstration, avec des infos d'accès sur l'intervention de Mme Hoarau (id 1). */
+/** Le jeu de démonstration avec des infos d'accès sur l'intervention n° 1 (Marie-Claude Hoarau). */
 function jeuAvecInfosAcces(infosAcces: string): JeuDeDemonstration {
   const jeu = creerJeuDeDemonstration(LUNDI);
   return {
@@ -200,22 +200,22 @@ describe("détail d'une intervention du planning", () => {
     render(<PagePlanning aujourdhui={LUNDI} />);
     await screen.findByRole('rowheader', { name: /Jean Rivière/ });
     const requetesAvantOuverture = requetesPlanning.length;
-    const carte = screen.getByRole('article', { name: /08:00–09:00, Mme Hoarau/ });
+    const carte = screen.getByRole('article', { name: /08:00–09:00, Marie-Claude Hoarau/ });
 
     await utilisateur.click(within(carte).getByRole('button'));
 
     const detail = screen.getByRole('dialog', { name: 'Recherche de fuite' });
     expect(detail).toHaveTextContent('08:00–09:00');
     expect(within(detail).getByText('Planifiée')).toBeInTheDocument();
-    expect(detail).toHaveTextContent('Mme Hoarau');
-    expect(within(detail).getByRole('link', { name: '0692 12 34 56' })).toHaveAttribute(
+    expect(detail).toHaveTextContent('Marie-Claude Hoarau');
+    expect(within(detail).getByRole('link', { name: '0692445566' })).toHaveAttribute(
       'href',
-      'tel:0692123456',
+      'tel:0692445566',
     );
-    expect(detail).toHaveTextContent('1 rue des Flamboyants');
+    expect(detail).toHaveTextContent('8 allée des Bougainvilliers');
     expect(detail).toHaveTextContent('97400 Saint-Denis');
     expect(detail).toHaveTextContent('Portail vert, sonner deux fois');
-    expect(detail).toHaveTextContent('Recherche de fuite chez Mme Hoarau');
+    expect(detail).toHaveTextContent('Recherche de fuite chez Marie-Claude Hoarau');
     expect(requetesPlanning).toHaveLength(requetesAvantOuverture);
   });
 
@@ -225,7 +225,9 @@ describe("détail d'une intervention du planning", () => {
     await screen.findByRole('rowheader', { name: /Jean Rivière/ });
 
     await utilisateur.click(
-      within(screen.getByRole('article', { name: /08:00–09:00, Mme Hoarau/ })).getByRole('button'),
+      within(screen.getByRole('article', { name: /08:00–09:00, Marie-Claude Hoarau/ })).getByRole(
+        'button',
+      ),
     );
 
     const detail = screen.getByRole('dialog', { name: 'Recherche de fuite' });
@@ -237,7 +239,7 @@ describe("détail d'une intervention du planning", () => {
     render(<PagePlanning aujourdhui={LUNDI} />);
     await screen.findByRole('rowheader', { name: /Jean Rivière/ });
     const boutonCarte = within(
-      screen.getByRole('article', { name: /08:00–09:00, Mme Hoarau/ }),
+      screen.getByRole('article', { name: /08:00–09:00, Marie-Claude Hoarau/ }),
     ).getByRole('button');
     await utilisateur.click(boutonCarte);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -260,7 +262,7 @@ describe("détail d'une intervention du planning", () => {
     await utilisateur.keyboard('{Enter}');
 
     const detail = screen.getByRole('dialog', { name: 'Chauffe-eau' });
-    expect(detail).toHaveTextContent('Boulangerie Grondin');
+    expect(detail).toHaveTextContent('Boulangerie Chez Mémé Grondin');
     expect(within(detail).getByText('En cours')).toBeInTheDocument();
     expect(within(detail).getByText('Urgente')).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: 'Fermer' })).toHaveFocus();

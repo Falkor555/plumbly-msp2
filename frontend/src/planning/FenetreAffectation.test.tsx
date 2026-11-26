@@ -53,14 +53,14 @@ describe("affectation d'une intervention à une tournée", () => {
 
     await utilisateur.selectOptions(
       within(fenetre).getByLabelText('Intervention à planifier'),
-      within(fenetre).getByRole('option', { name: /Mme Nativel/ }),
+      within(fenetre).getByRole('option', { name: /Rosemay Nativel/ }),
     );
     await utilisateur.clear(within(fenetre).getByLabelText('Heure de début'));
     await utilisateur.type(within(fenetre).getByLabelText('Heure de début'), '09:30');
     await utilisateur.click(within(fenetre).getByRole('button', { name: 'Affecter' }));
 
     expect(
-      await screen.findByRole('article', { name: /09:30–10:30, Mme Nativel/ }),
+      await screen.findByRole('article', { name: /09:30–10:30, Rosemay Nativel/ }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(ecritures).toEqual([
@@ -79,7 +79,7 @@ describe("affectation d'une intervention à une tournée", () => {
 
     await utilisateur.selectOptions(
       within(fenetre).getByLabelText('Intervention à planifier'),
-      within(fenetre).getByRole('option', { name: /Mme Nativel/ }),
+      within(fenetre).getByRole('option', { name: /Rosemay Nativel/ }),
     );
     await utilisateur.clear(within(fenetre).getByLabelText('Heure de début'));
     await utilisateur.type(within(fenetre).getByLabelText('Heure de début'), '08:30');
@@ -108,7 +108,7 @@ describe("affectation d'une intervention à une tournée", () => {
     const { utilisateur, fenetre } = await ouvrirAffectation('Paul Lebon');
     await utilisateur.selectOptions(
       within(fenetre).getByLabelText('Intervention à planifier'),
-      within(fenetre).getByRole('option', { name: /Mme Nativel/ }),
+      within(fenetre).getByRole('option', { name: /Rosemay Nativel/ }),
     );
 
     await utilisateur.click(within(fenetre).getByRole('button', { name: 'Affecter' }));
@@ -116,7 +116,7 @@ describe("affectation d'une intervention à une tournée", () => {
     await utilisateur.click(within(fenetre).getByRole('button', { name: 'Affecter' }));
 
     expect(
-      await screen.findByRole('article', { name: /08:00–09:00, Mme Nativel/ }),
+      await screen.findByRole('article', { name: /08:00–09:00, Rosemay Nativel/ }),
     ).toBeInTheDocument();
     expect(ecritures.filter(({ chemin }) => chemin === '/tours')).toHaveLength(1);
   });

@@ -20,7 +20,9 @@ export function BadgesIntervention({ intervention }: Props) {
         </span>
       )}
       {intervention.enRetard && (
-        <span className={`${BADGE} bg-red-50 text-erreur ring-erreur/20`}>En retard</span>
+        <span className={`${BADGE} bg-erreur-fond text-erreur-texte ring-erreur/20`}>
+          En retard
+        </span>
       )}
     </span>
   );

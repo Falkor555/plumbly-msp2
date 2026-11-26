@@ -188,7 +188,7 @@ export function FenetreCloture({ intervention, onFermer }: Props) {
         {erreur && (
           <p
             role="alert"
-            className="rounded border border-erreur/30 bg-red-50 px-3 py-2 text-sm whitespace-pre-line text-red-700"
+            className="rounded border border-erreur/30 bg-erreur-fond px-3 py-2 text-sm whitespace-pre-line text-erreur-texte"
           >
             {erreur}
           </p>

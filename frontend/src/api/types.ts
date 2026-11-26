@@ -134,7 +134,21 @@ export interface Affectation {
   ordreTournee?: number;
 }
 
-/** Adresse d'intervention d'un client (docs/api.md, 6.5). */
+/**
+ * Page demandée ; l'API refuse limit au-delà de 100 (400), parametresDePagination la plafonne
+ * côté front (docs/api.md, section 4).
+ */
+export interface Pagination {
+  page?: number;
+  limit?: number;
+}
+
+// ---------- Clients (docs/api.md, section 6.5 ; backend/src/clients/clients.types.ts) ----------
+
+/**
+ * Adresse d'intervention d'un client (docs/api.md, 6.5), telle que le choix du client d'une
+ * intervention (US14) la lit : sans la date d'archivage.
+ */
 export interface AdresseClient {
   id: number;
   rue: string;
@@ -145,14 +159,198 @@ export interface AdresseClient {
   archive: boolean;
 }
 
-/** GET /clients : chaque client arrive avec ses adresses non archivées. */
+/** Adresse complète renvoyée par l'API. */
+export interface Adresse extends AdresseClient {
+  archiveLe: DateHeureIso | null;
+}
+
 export interface Client {
   id: number;
   typeClient: TypeClient;
+  nomClient: string | null;
+  prenomClient: string | null;
+  raisonSociale: string | null;
+  /** Raison sociale d'un professionnel, « prénom nom » d'un particulier. */
   nomAffiche: string;
   telephone: string;
-  adresses: AdresseClient[];
+  emailClient: string | null;
+  archive: boolean;
+  archiveLe: DateHeureIso | null;
+  creeLe: DateHeureIso;
+  majLe: DateHeureIso;
+  /** Toutes les adresses, archivées comprises, sauf dans la liste qui ne garde que les actives. */
+  adresses: Adresse[];
 }
+
+/** L'API refuse une chaîne vide : un champ facultatif non rempli est omis. */
+export interface NouvelleAdresse {
+  rue: string;
+  complement?: string;
+  codePostal: string;
+  ville: string;
+  infosAcces?: string;
+}
+
+/** Seuls les champs présents changent ; null efface un champ facultatif. */
+export interface ModificationAdresse {
+  rue?: string;
+  complement?: string | null;
+  codePostal?: string;
+  ville?: string;
+  infosAcces?: string | null;
+}
+
+/** POST /clients (US06) : le client et sa première adresse (RG21). */
+export interface NouveauClient {
+  typeClient: TypeClient;
+  nomClient?: string;
+  prenomClient?: string;
+  raisonSociale?: string;
+  telephone: string;
+  emailClient?: string;
+  adresse: NouvelleAdresse;
+}
+
+/** PATCH /clients/:id (US10) : seuls les champs présents changent ; null efface. */
+export interface ModificationClient {
+  typeClient?: TypeClient;
+  nomClient?: string | null;
+  prenomClient?: string | null;
+  raisonSociale?: string | null;
+  telephone?: string;
+  emailClient?: string | null;
+}
+
+export type TriClients = 'nomAffiche' | '-nomAffiche' | 'creeLe' | '-creeLe';
+
+/** Filtres et tri communs à la liste des clients (US08) et à son export (US32). */
+export interface CriteresClients {
+  recherche?: string;
+  typeClient?: TypeClient;
+  /** Vrai : les clients archivés sont listés avec les autres. */
+  archives?: boolean;
+  tri?: TriClients;
+}
+
+export interface FiltresClients extends CriteresClients, Pagination {}
+
+/** GET /clients/:id/interventions (US09) : le tri est fixé par l'API (création décroissante). */
+export interface FiltresHistorique extends Pagination {
+  statuts?: StatutIntervention[];
+}
+
+// ---------- Import des clients (US31, backend/src/clients/import/import-clients.types.ts) ----------
+
+export type ChampClient =
+  | 'typeClient'
+  | 'nomClient'
+  | 'prenomClient'
+  | 'raisonSociale'
+  | 'telephone'
+  | 'emailClient'
+  | 'rue'
+  | 'complement'
+  | 'codePostal'
+  | 'ville'
+  | 'infosAcces';
+
+/** En-tête du fichier → champ client ; null ignore la colonne. */
+export type Correspondance = Record<string, ChampClient | null>;
+
+export type SeparateurCsv = ';' | ',';
+
+export type StrategieDoublons = 'IGNORER' | 'METTRE_A_JOUR';
+
+/** POST /clients/import/analysis : rien n'est enregistré. */
+export interface DemandeAnalyse {
+  contenu: string;
+  separateur?: SeparateurCsv;
+  correspondance?: Correspondance;
+}
+
+/** POST /clients/import : la stratégie des doublons est un choix explicite (RG28). */
+export interface DemandeImport extends DemandeAnalyse {
+  strategieDoublons: StrategieDoublons;
+}
+
+/** Ligne du fichier telle que lue ; l'en-tête est la ligne 1. */
+export interface LigneCsv {
+  numero: number;
+  cellules: string[];
+}
+
+export type LigneAnalysee =
+  | { numero: number; resultat: 'VALIDE' }
+  | { numero: number; resultat: 'DOUBLON'; clientId: number; motif: string }
+  | { numero: number; resultat: 'INVALIDE'; erreurs: string[] };
+
+export interface ReponseAnalyse {
+  separateur: SeparateurCsv;
+  enTetes: string[];
+  /** Contient tous les en-têtes du fichier. */
+  correspondance: Correspondance;
+  colonnesIgnorees: string[];
+  apercu: LigneCsv[];
+  lignes: LigneAnalysee[];
+  totaux: { lignes: number; valides: number; doublons: number; invalides: number };
+}
+
+export type LigneImportee =
+  | { numero: number; resultat: 'CREE' | 'MIS_A_JOUR'; clientId: number }
+  | { numero: number; resultat: 'IGNORE'; clientId: number; motif: string }
+  | { numero: number; resultat: 'REJETE'; erreurs: string[] };
+
+export interface RapportImport {
+  totaux: { crees: number; misAJour: number; ignores: number; rejetes: number };
+  lignes: LigneImportee[];
+}
+
+// ---------- Techniciens (docs/api.md, section 6.6 ; backend/src/techniciens/techniciens.types.ts) ----------
+
+/** Fiche complète renvoyée par /technicians ; nom, prénom et e-mail viennent du compte utilisateur. */
+export interface FicheTechnicien extends TechnicienResume {
+  utilisateurId: number;
+  email: string;
+  compteActif: boolean;
+  archive: boolean;
+  archiveLe: DateHeureIso | null;
+}
+
+/** POST /technicians (US11) : sans couleur, l'API en choisit une libre dans sa palette. */
+export interface NouveauTechnicien {
+  utilisateurId: number;
+  telephone: string;
+  couleurPlanning?: string;
+}
+
+/** PATCH /technicians/:id : ni l'un ni l'autre ne s'efface. */
+export interface ModificationTechnicien {
+  telephone?: string;
+  couleurPlanning?: string;
+}
+
+export type TriTechniciens = 'nom' | '-nom';
+
+export interface FiltresTechniciens extends Pagination {
+  recherche?: string;
+  archives?: boolean;
+  tri?: TriTechniciens;
+}
+
+/** Sans borne, l'API ne renvoie que les indisponibilités en cours ou à venir. */
+export interface PeriodeIndisponibilites {
+  du?: DateIso;
+  au?: DateIso;
+}
+
+/** POST /technicians/:id/unavailabilities (US12) : instants avec fuseau (versInstant). */
+export interface NouvelleIndisponibilite {
+  debut: DateHeureIso;
+  fin: DateHeureIso;
+  motif?: string;
+}
+
+// ---------- Interventions du bureau (#18, docs/api.md, sections 6.3 et 6.4) ----------
 
 /** GET /intervention-types (docs/api.md, 6.4). */
 export interface TypeIntervention {
