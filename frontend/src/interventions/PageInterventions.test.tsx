@@ -147,6 +147,15 @@ describe('liste des interventions (US15)', () => {
     ).toBeInTheDocument();
   });
 
+  it('US16 : ouvre la fiche d’une intervention depuis le nom du client', async () => {
+    simulerListe(liste([FUITE]));
+    afficher('/interventions?statut=A_PLANIFIER');
+    expect(await screen.findByRole('link', { name: 'Mme Hoarau' })).toHaveAttribute(
+      'href',
+      '/interventions/1',
+    );
+  });
+
   it('US14 : propose de créer une intervention depuis la liste', async () => {
     simulerListe(liste([FUITE]));
     afficher();

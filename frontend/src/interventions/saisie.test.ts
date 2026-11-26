@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { avecType, erreursDeLaSaisie, SAISIE_VIDE, versNouvelleIntervention } from './saisie';
+import { fabriquerIntervention } from '../simulation/donneesDemonstration';
+import {
+  avecType,
+  depuisIntervention,
+  erreursDeLaSaisie,
+  erreursDuMotif,
+  SAISIE_VIDE,
+  versModification,
+  versNouvelleIntervention,
+} from './saisie';
 
 const DEBOUCHAGE = { id: 3, libelle: 'Débouchage', dureeDefautMin: 45 };
 
@@ -42,5 +51,39 @@ describe('saisie d’une intervention (US14)', () => {
       urgence: 'URGENTE',
       dureeEstimeeMin: 45,
     });
+  });
+});
+
+describe('modification et annulation d’une intervention (US16)', () => {
+  const FUITE = fabriquerIntervention({
+    id: 4,
+    client: 'Mme Hoarau',
+    type: 'Recherche de fuite',
+    ville: 'Saint-Denis',
+    dureeEstimeeMin: 60,
+  });
+
+  it('US16 : sans changement, il n’y a rien à envoyer', () => {
+    expect(versModification(depuisIntervention(FUITE), FUITE)).toEqual({});
+  });
+
+  it('US16 : n’envoie que les champs changés', () => {
+    const saisie = {
+      ...depuisIntervention(FUITE),
+      urgence: 'URGENTE' as const,
+      description: ' Fuite au plafond ',
+    };
+    expect(versModification(saisie, FUITE)).toEqual({
+      urgence: 'URGENTE',
+      description: 'Fuite au plafond',
+    });
+  });
+
+  it('RG05 : refuse un motif d’annulation vide ou trop long', () => {
+    expect(erreursDuMotif('  ')).toEqual(['Indiquez le motif de l’annulation.']);
+    expect(erreursDuMotif('x'.repeat(501))).toEqual([
+      'Le motif ne doit pas dépasser 500 caractères.',
+    ]);
+    expect(erreursDuMotif('Client injoignable')).toEqual([]);
   });
 });

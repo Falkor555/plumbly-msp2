@@ -169,3 +169,6 @@ export interface NouvelleIntervention {
   urgence: Urgence;
   dureeEstimeeMin: number;
 }
+
+/** Corps de PATCH /interventions/:id (US16) : seuls les champs changés sont envoyés. */
+export type ModificationIntervention = Partial<Omit<NouvelleIntervention, 'adresseId'>>;

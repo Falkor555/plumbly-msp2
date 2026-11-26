@@ -4,6 +4,7 @@ import type {
   FinDIntervention,
   Intervention,
   ListePaginee,
+  ModificationIntervention,
   NouvelleIntervention,
   SignatureIntervention,
   StatutIntervention,
@@ -51,7 +52,15 @@ export const interventionsApi = {
   /** US14 : la nouvelle intervention est créée « à planifier » (RG01). */
   creer: (intervention: NouvelleIntervention): Promise<Intervention> =>
     api.post<Intervention>('/interventions', intervention),
-  
+
+  /** US16 : 400 si elle n'est plus modifiable (RG06, RG15), 409 si la durée chevauche (RG09). */
+  modifier: (id: number, modification: ModificationIntervention): Promise<Intervention> =>
+    api.patch<Intervention>(`/interventions/${id}`, modification),
+
+  /** US16 : motif obligatoire ; l'intervention quitte sa tournée si elle en avait une (RG05). */
+  annuler: (id: number, motif: string): Promise<Intervention> =>
+    api.post<Intervention>(`/interventions/${id}/cancel`, { motif }),
+
   /** US14 et US24 : une intervention, par exemple pour relire son statut après une réponse perdue. */
   consulter: (id: number, signal?: AbortSignal): Promise<Intervention> =>
     api.get<Intervention>(`/interventions/${id}`, { signal }),

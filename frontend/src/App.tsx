@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 import { PageConnexion } from './connexion/PageConnexion';
+import { PageFicheIntervention } from './interventions/PageFicheIntervention';
 import { PageInterventions } from './interventions/PageInterventions';
 import { PageNouvelleIntervention } from './interventions/PageNouvelleIntervention';
 import { PageMaTournee } from './ma-tournee/PageMaTournee';
@@ -29,6 +30,7 @@ export default function App() {
               <Route path="/planning" element={<PagePlanning />} />
               <Route path="/interventions" element={<PageInterventions />} />
               <Route path="/interventions/nouvelle" element={<PageNouvelleIntervention />} />
+              <Route path="/interventions/:id" element={<PageFicheIntervention />} />
             </Route>
           </Route>
           <Route element={<RouteProtegee roles={ROLES_TERRAIN} />}>

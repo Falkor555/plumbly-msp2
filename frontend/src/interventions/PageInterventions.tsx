@@ -22,7 +22,8 @@ import {
   versBrouillon,
   versParametres,
 } from './filtres';
-import type { EtatApresCreation } from './PageNouvelleIntervention'
+import type { EtatRetourListe } from './PageFicheIntervention';
+import type { EtatApresCreation } from './PageNouvelleIntervention';
 
 const CHAMP =
   'mt-1 block h-11 w-full rounded border border-gray-300 bg-white px-3 text-sm text-anthracite focus-visible:border-sarcelle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sarcelle';
@@ -233,6 +234,8 @@ interface PropsResultats {
 
 function Resultats({ liste, onPage }: PropsResultats) {
   const { data, meta } = liste;
+  // La fiche reçoit les filtres de la liste, pour que « Retour à la liste » les retrouve.
+  const retour: EtatRetourListe = { retourListe: useLocation().search };
   if (meta.total === 0) {
     return (
       <p className="rounded-lg border border-bordure bg-white px-4 py-6 text-center text-sm text-gris-texte">
@@ -263,7 +266,13 @@ function Resultats({ liste, onPage }: PropsResultats) {
                   <BadgesIntervention intervention={intervention} />
                 </td>
                 <td className={CELLULE}>
-                  <span className="font-medium">{intervention.client.nomAffiche}</span>
+                  <Link
+                    to={`/interventions/${intervention.id}`}
+                    state={retour}
+                    className="font-semibold text-sarcelle-profonde underline"
+                  >
+                    {intervention.client.nomAffiche}
+                  </Link>
                   <span className="block text-gris-texte">{intervention.adresse.ville}</span>
                 </td>
                 <td className={CELLULE}>{intervention.type.libelle}</td>
