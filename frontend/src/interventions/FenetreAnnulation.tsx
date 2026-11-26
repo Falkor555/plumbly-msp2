@@ -78,7 +78,7 @@ export function FenetreAnnulation({ intervention, onAnnulee, onFermer }: Props) 
         {erreurs.length > 0 && (
           <ul
             role="alert"
-            className="rounded border border-erreur/30 bg-red-50 px-3 py-2 text-sm whitespace-pre-line text-erreur"
+            className="rounded border border-erreur/30 bg-erreur-fond px-3 py-2 text-sm whitespace-pre-line text-erreur-texte"
           >
             {erreurs.map((erreur) => (
               <li key={erreur}>{erreur}</li>
@@ -97,7 +97,7 @@ export function FenetreAnnulation({ intervention, onAnnulee, onFermer }: Props) 
           <button
             type="submit"
             disabled={envoi}
-            className={`${BOUTON} bg-erreur text-white hover:bg-red-700`}
+            className={`${BOUTON} bg-erreur text-white hover:bg-erreur-texte`}
           >
             {envoi ? 'Annulation…' : 'Confirmer l’annulation'}
           </button>

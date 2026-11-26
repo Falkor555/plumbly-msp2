@@ -26,7 +26,7 @@ const BOUTON_PRINCIPAL =
 const BOUTON_SECONDAIRE =
   'inline-flex h-11 items-center rounded border border-gray-300 bg-white px-4 text-sm font-semibold text-sarcelle-profonde hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle';
 const BOUTON_DANGER =
-  'inline-flex h-11 items-center rounded border border-erreur/40 bg-white px-4 text-sm font-semibold text-erreur hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle';
+  'inline-flex h-11 items-center rounded border border-erreur/40 bg-white px-4 text-sm font-semibold text-erreur-texte hover:bg-erreur-fond focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle';
 const CARTE = 'space-y-3 rounded-lg border border-bordure bg-white p-4';
 
 /** Filtres de la liste d'où l'on vient : le retour les retrouve (US15). */
@@ -77,7 +77,7 @@ export function PageFicheIntervention() {
       {etat.statut === 'erreur' && (
         <div
           role="alert"
-          className="space-y-2 rounded border border-erreur/30 bg-red-50 px-4 py-3 text-sm text-erreur"
+          className="space-y-2 rounded border border-erreur/30 bg-erreur-fond px-4 py-3 text-sm text-erreur-texte"
         >
           <p>{etat.message}</p>
           <button type="button" onClick={recharger} className="h-11 font-semibold underline">
@@ -305,7 +305,7 @@ function FormulaireModification({
       <ChampsDemande types={types} saisie={saisie} onSaisie={setSaisie} />
 
       {erreurs.length > 0 && (
-        <ul role="alert" className="space-y-1 text-sm text-erreur">
+        <ul role="alert" className="space-y-1 text-sm text-erreur-texte">
           {erreurs.map((erreur) => (
             <li key={erreur} className="whitespace-pre-line">
               {erreur}

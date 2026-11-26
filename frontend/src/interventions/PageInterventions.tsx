@@ -85,7 +85,7 @@ export function PageInterventions() {
       {etat.statut === 'erreur' && (
         <div
           role="alert"
-          className="space-y-2 rounded border border-erreur/30 bg-red-50 px-4 py-3 text-sm text-erreur"
+          className="space-y-2 rounded border border-erreur/30 bg-erreur-fond px-4 py-3 text-sm text-erreur-texte"
         >
           <p>{etat.message}</p>
           <button type="button" onClick={recharger} className="h-11 font-semibold underline">
@@ -204,7 +204,7 @@ function FormulaireFiltres({ initial, onAppliquer }: PropsFormulaire) {
       </div>
 
       {erreurs.length > 0 && (
-        <ul role="alert" className="text-sm text-erreur sm:col-span-2 lg:col-span-6">
+        <ul role="alert" className="text-sm text-erreur-texte sm:col-span-2 lg:col-span-6">
           {erreurs.map((erreur) => (
             <li key={erreur}>{erreur}</li>
           ))}

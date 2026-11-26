@@ -42,7 +42,7 @@ export function ChoixClient({ client, adresseId, onClient, onAdresse }: Props) {
         </button>
       </div>
       {client.adresses.length === 0 ? (
-        <p role="alert" className="text-sm text-erreur">
+        <p role="alert" className="text-sm text-erreur-texte">
           Ce client n’a aucune adresse en service : ajoutez-en une depuis sa fiche.
         </p>
       ) : (
@@ -131,7 +131,7 @@ function RechercheClient({ onChoisir }: { onChoisir: (client: Client) => void })
           </button>
         </div>
         {erreurSaisie && (
-          <p id={`${id}-erreur`} role="alert" className="mt-1 text-sm text-erreur">
+          <p id={`${id}-erreur`} role="alert" className="mt-1 text-sm text-erreur-texte">
             {erreurSaisie}
           </p>
         )}
@@ -141,7 +141,7 @@ function RechercheClient({ onChoisir }: { onChoisir: (client: Client) => void })
         <p className="text-sm text-gris-texte">Recherche des clients…</p>
       )}
       {etat.statut === 'erreur' && (
-        <p role="alert" className="text-sm text-erreur">
+        <p role="alert" className="text-sm text-erreur-texte">
           {etat.message}
         </p>
       )}
