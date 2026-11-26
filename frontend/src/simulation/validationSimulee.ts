@@ -33,15 +33,22 @@ export function erreur(statusCode: number, message: string | string[]): Response
 /** Les lecteurs ci-dessous lèvent cette erreur, qui porte la réponse HTTP à renvoyer. */
 export class RequeteRefusee extends Error {
   readonly reponse: Response;
+  /**
+   * Les messages de la réponse, lisibles sans la décoder : l'import (US31) rejoue la validation
+   * de POST /clients sur chaque ligne et en fait les motifs de rejet de la ligne.
+   */
+  readonly messages: string[];
 
-  constructor(reponse: Response) {
+  constructor(reponse: Response, messages: string[]) {
     super('Requête refusée par la validation simulée');
     this.reponse = reponse;
+    this.messages = messages;
   }
 }
 
 export function refuser(message: string | string[], statusCode = 400): RequeteRefusee {
-  return new RequeteRefusee(erreur(statusCode, message));
+  const messages = Array.isArray(message) ? message : [message];
+  return new RequeteRefusee(erreur(statusCode, message), messages);
 }
 
 /** Exécute un handler ; une RequeteRefusee devient la réponse HTTP qu'elle porte. */

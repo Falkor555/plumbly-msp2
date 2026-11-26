@@ -7,7 +7,6 @@ import {
   CLIENT_JOSIANE_BARET,
   CLIENT_YOLANDE_GRONDIN,
 } from './clientsDemonstration';
-import { COMPTES_DEMONSTRATION } from './comptesDemonstration';
 import {
   chez,
   creerJeuDeDemonstration,
@@ -15,11 +14,7 @@ import {
   type JeuDeDemonstration,
   planifier,
 } from './donneesDemonstration';
-import { creerHandlersAuthentification } from './handlersAuthentification';
-import { creerHandlersClients } from './handlersClients';
-import { creerHandlersInterventions } from './handlersInterventions';
-import { creerHandlersPlanning } from './handlersPlanning';
-import { creerHandlersTechniciens } from './handlersTechniciens';
+import { creerHandlersDeSimulation } from './handlersDeSimulation';
 
 const URL_API = (import.meta.env.VITE_API_URL ?? '/api/v1').replace(/\/$/, '');
 
@@ -34,14 +29,7 @@ export async function demarrerSimulation(): Promise<void> {
   const jeu = creerJeuDeDemonstration(lundiDeLaSemaine(aujourdhui()));
   ajouterTourneeDuJour(jeu, aujourdhui());
   const options = { urlApi: (chemin: string) => `${URL_API}${chemin}`, aujourdhui, maintenant };
-  const handlers = [
-    // En premier : la connexion et le profil conditionnent l'accès à tous les autres écrans.
-    ...creerHandlersAuthentification(COMPTES_DEMONSTRATION, options),
-    ...creerHandlersPlanning(jeu, options),
-    ...creerHandlersInterventions(jeu, options),
-    ...creerHandlersClients(jeu, options),
-    ...creerHandlersTechniciens(jeu, options),
-  ];
+  const handlers = creerHandlersDeSimulation(jeu, options);
   await setupWorker(...handlers).start({ onUnhandledFrame: 'bypass' });
   console.info('[Plumbly] API simulée par MSW : données de démonstration.');
 }

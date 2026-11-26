@@ -58,7 +58,8 @@ const CHAMPS_IDENTITE = [
   'emailClient',
 ] as const;
 const CHAMPS_ADRESSE = ['rue', 'complement', 'codePostal', 'ville', 'infosAcces'] as const;
-const CRITERES_DE_LISTE = ['page', 'limit', 'recherche', 'typeClient', 'archives', 'tri'] as const;
+// Communs à la liste et à son export ; seule la liste accepte en plus page et limit.
+const CRITERES_DE_LISTE = ['recherche', 'typeClient', 'archives', 'tri'] as const;
 const TYPES_CLIENT: readonly TypeClient[] = ['PARTICULIER', 'PROFESSIONNEL'];
 const TRIS_CLIENTS: readonly TriClients[] = ['nomAffiche', '-nomAffiche', 'creeLe', '-creeLe'];
 const STATUTS: readonly StatutIntervention[] = [
@@ -81,17 +82,26 @@ const LONGUEUR_INFOS_ACCES = 500;
 const CLIENT_INTROUVABLE = 'Client introuvable.';
 const CLIENT_ARCHIVE = 'Ce client est archivé : il ne peut plus être modifié.';
 
+/** Séquences des identifiants de clients et d'adresses, comme celles de PostgreSQL. */
+export interface SequencesDesClients {
+  prochainIdClient: () => number;
+  prochainIdAdresse: () => number;
+}
+
 interface Options {
   urlApi: (chemin: string) => string;
   maintenant?: () => Date;
+  /**
+   * L'import (handlersExportImport.ts) crée lui aussi des clients et des adresses dans le jeu : il
+   * doit tirer ses identifiants des mêmes séquences, sinon deux clients auraient le même.
+   */
+  sequences?: SequencesDesClients;
 }
 
 /** Ce que partagent les règles : le jeu, l'heure courante et les séquences d'identifiants. */
-interface Contexte {
+export interface ContexteDesClients extends SequencesDesClients {
   jeu: JeuDeDemonstration;
   maintenant: () => Date;
-  prochainIdClient: () => number;
-  prochainIdAdresse: () => number;
 }
 
 interface FiltresClients {
@@ -105,6 +115,9 @@ type IdentiteClient = Pick<
   Client,
   'typeClient' | 'nomClient' | 'prenomClient' | 'raisonSociale' | 'telephone' | 'emailClient'
 >;
+
+/** Corps de POST /clients une fois lu : l'identité complétée par null, et la première adresse. */
+export type NouveauClientLu = IdentiteClient & { adresse: NouvelleAdresse };
 
 type TourneeDuJeu = TechnicienDeDemonstration['tournees'][number];
 
@@ -164,8 +177,9 @@ function lireAdresseImbriquee(valeur: unknown, erreurs: string[]): NouvelleAdres
  * POST /clients, comme lireNouveauClient du back : l'identité et l'adresse sont lues ensemble (un
  * seul 400 pour toutes leurs erreurs), puis la règle nom / raison sociale est vérifiée à part,
  * avant toute création. Un envoi sans téléphone ni nom ne signale donc d'abord que le téléphone.
+ * L'import (US31) valide chaque ligne du fichier par ici, comme le back (RG27).
  */
-function lireNouveauClient(corps: unknown): IdentiteClient & { adresse: NouvelleAdresse } {
+export function lireNouveauClient(corps: unknown): NouveauClientLu {
   const champs = lireObjet(corps, [...CHAMPS_IDENTITE, 'adresse']);
   const erreurs: string[] = [];
   const identite = lireIdentite(champs, erreurs, true);
@@ -213,10 +227,29 @@ function verifierIdentite(
 }
 
 function lireFiltres(request: Request): { pagination: Pagination; filtres: FiltresClients } {
-  const champs = lireParametres(request, CRITERES_DE_LISTE);
+  const champs = lireParametres(request, ['page', 'limit', ...CRITERES_DE_LISTE]);
   const erreurs: string[] = [];
   const pagination = lirePagination(champs, erreurs);
-  const filtres: FiltresClients = {
+  const filtres = lireCriteresDeListe(champs, erreurs);
+  signalerErreurs(erreurs);
+  return { pagination, filtres };
+}
+
+/**
+ * GET /clients/export (US32), comme lireCriteresExportClients du back : les critères de la liste
+ * sans pagination. page et limit y sont des champs inconnus, refusés en 400 (« Le champ page
+ * n’est pas autorisé ») : le fichier contient toute la liste filtrée.
+ */
+export function lireCriteresExport(request: Request): FiltresClients {
+  const champs = lireParametres(request, CRITERES_DE_LISTE);
+  const erreurs: string[] = [];
+  const filtres = lireCriteresDeListe(champs, erreurs);
+  signalerErreurs(erreurs);
+  return filtres;
+}
+
+function lireCriteresDeListe(champs: Champs, erreurs: string[]): FiltresClients {
+  return {
     archives: lireBooleenDeRequete(champs, 'archives', erreurs),
     tri: lireTri(champs, TRIS_CLIENTS, 'nomAffiche', erreurs),
     recherche: lireRecherche(champs, erreurs),
@@ -224,8 +257,6 @@ function lireFiltres(request: Request): { pagination: Pagination; filtres: Filtr
       obligatoire: false,
     }),
   };
-  signalerErreurs(erreurs);
-  return { pagination, filtres };
 }
 
 function lireStatuts(valeur: unknown, erreurs: string[]): StatutIntervention[] | undefined {
@@ -252,7 +283,7 @@ function lireFiltresHistorique(request: Request): {
 
 // ---------- Recherche, tri et présentation, comme clients.repository.ts ----------
 
-function adressesActives(client: Client): Adresse[] {
+export function adressesActives(client: Client): Adresse[] {
   return client.adresses.filter(({ archive }) => !archive);
 }
 
@@ -287,8 +318,11 @@ function comparerSelon(tri: TriClients): (premier: Client, second: Client) => nu
   };
 }
 
-/** La liste ne montre que les adresses en service ; la fiche les montre toutes. */
-function listerClients(jeu: JeuDeDemonstration, filtres: FiltresClients): Client[] {
+/**
+ * La liste ne montre que les adresses en service ; la fiche les montre toutes. L'export (US32)
+ * part de la même liste : mêmes filtres, même ordre, une ligne par adresse en service.
+ */
+export function listerClients(jeu: JeuDeDemonstration, filtres: FiltresClients): Client[] {
   return jeu.clients
     .filter((client) => correspond(client, filtres))
     .sort(comparerSelon(filtres.tri))
@@ -387,7 +421,7 @@ function trouverAdresseDuClient(client: Client, id: number): Adresse {
   return adresse;
 }
 
-function creerAdresse(nouvelle: NouvelleAdresse, id: number): Adresse {
+export function creerAdresse(nouvelle: NouvelleAdresse, id: number): Adresse {
   return {
     id,
     rue: nouvelle.rue,
@@ -401,8 +435,15 @@ function creerAdresse(nouvelle: NouvelleAdresse, id: number): Adresse {
 }
 
 /** Les identifiants ne sont attribués qu'une fois le corps accepté : un 400 n'en consomme pas. */
-function creerClient(contexte: Contexte, corps: unknown): Client {
-  const { adresse, ...identite } = lireNouveauClient(corps);
+function creerClient(contexte: ContexteDesClients, corps: unknown): Client {
+  return nouveauClientDuJeu(contexte, lireNouveauClient(corps));
+}
+
+/** Le client lu, avec ses identifiants ; l'import (US31) crée ses clients par ici (RG21). */
+export function nouveauClientDuJeu(
+  contexte: ContexteDesClients,
+  { adresse, ...identite }: NouveauClientLu,
+): Client {
   const creeLe = contexte.maintenant().toISOString();
   return {
     id: contexte.prochainIdClient(),
@@ -416,9 +457,12 @@ function creerClient(contexte: Contexte, corps: unknown): Client {
   };
 }
 
-/** La règle nom / raison sociale porte sur le client modifié, comme dans le service du back. */
-function modifierClient(
-  { jeu, maintenant }: Contexte,
+/**
+ * La règle nom / raison sociale porte sur le client modifié, comme dans le service du back ; elle
+ * est vérifiée avant toute écriture. L'import (US31, METTRE_A_JOUR) met à jour par ici.
+ */
+export function modifierClient(
+  { jeu, maintenant }: ContexteDesClients,
   client: Client,
   modification: ModificationClient,
 ): void {
@@ -431,7 +475,7 @@ function modifierClient(
   reporterSurLesInterventions(jeu, client);
 }
 
-function archiverClient({ jeu, maintenant }: Contexte, client: Client): void {
+function archiverClient({ jeu, maintenant }: ContexteDesClients, client: Client): void {
   if (client.archive) throw refuser('Ce client est déjà archivé.');
   const actives = interventionsActivesDuClient(jeu, client.id).length;
   if (actives > 0) {
@@ -458,7 +502,11 @@ function modifierAdresse(
 }
 
 /** Ordre du service du back : déjà archivée, dernière adresse en service (RG21), puis 409. */
-function archiverAdresse({ jeu, maintenant }: Contexte, client: Client, adresse: Adresse): void {
+function archiverAdresse(
+  { jeu, maintenant }: ContexteDesClients,
+  client: Client,
+  adresse: Adresse,
+): void {
   if (adresse.archive) throw refuser('Cette adresse est déjà archivée.');
   if (adressesActives(client).length <= 1) {
     throw refuser(
@@ -485,7 +533,7 @@ function archiverAdresse({ jeu, maintenant }: Contexte, client: Client, adresse:
  * avant de chercher le client : un corps invalide envoyé à un client inexistant donne 400, pas 404.
  */
 
-function routesDesClients(contexte: Contexte, urlApi: Options['urlApi']): HttpHandler[] {
+function routesDesClients(contexte: ContexteDesClients, urlApi: Options['urlApi']): HttpHandler[] {
   const { jeu } = contexte;
   return [
     http.get(urlApi('/clients'), ({ request }) =>
@@ -523,7 +571,7 @@ function routesDesClients(contexte: Contexte, urlApi: Options['urlApi']): HttpHa
   ];
 }
 
-function routeDeLHistorique({ jeu }: Contexte, urlApi: Options['urlApi']): HttpHandler {
+function routeDeLHistorique({ jeu }: ContexteDesClients, urlApi: Options['urlApi']): HttpHandler {
   return http.get(urlApi('/clients/:id/interventions'), ({ params, request }) =>
     repondre(() => {
       const id = lireIdentifiant(params.id);
@@ -534,7 +582,7 @@ function routeDeLHistorique({ jeu }: Contexte, urlApi: Options['urlApi']): HttpH
   );
 }
 
-function routesDesAdresses(contexte: Contexte, urlApi: Options['urlApi']): HttpHandler[] {
+function routesDesAdresses(contexte: ContexteDesClients, urlApi: Options['urlApi']): HttpHandler[] {
   const { jeu } = contexte;
   return [
     http.post(urlApi('/clients/:id/addresses'), ({ params, request }) =>
@@ -571,18 +619,21 @@ function routesDesAdresses(contexte: Contexte, urlApi: Options['urlApi']): HttpH
   ];
 }
 
-export function creerHandlersClients(
-  jeu: JeuDeDemonstration,
-  { urlApi, maintenant = () => new Date() }: Options,
-): HttpHandler[] {
-  const contexte: Contexte = {
-    jeu,
-    maintenant,
+/** Séquences qui continuent après les identifiants du jeu (voir compteurApres). */
+export function creerSequencesDesClients(jeu: JeuDeDemonstration): SequencesDesClients {
+  return {
     prochainIdClient: compteurApres(jeu.clients.map(({ id }) => id)),
     prochainIdAdresse: compteurApres(
       jeu.clients.flatMap(({ adresses }) => adresses.map(({ id }) => id)),
     ),
   };
+}
+
+export function creerHandlersClients(
+  jeu: JeuDeDemonstration,
+  { urlApi, maintenant = () => new Date(), sequences = creerSequencesDesClients(jeu) }: Options,
+): HttpHandler[] {
+  const contexte: ContexteDesClients = { jeu, maintenant, ...sequences };
   return [
     ...routesDesClients(contexte, urlApi),
     routeDeLHistorique(contexte, urlApi),
