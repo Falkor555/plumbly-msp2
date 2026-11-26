@@ -20,6 +20,7 @@ Ce dossier contient les ADR (*Architecture Decision Records*) de Plumbly. Un ADR
 | [0012](0012-assistant-de-saisie-par-modele-de-langage.md) | Assistant de saisie par modèle de langage (pré-remplissage d'une intervention) | Acceptée | 2026-11-25 |
 | [0013](0013-signature-client-a-la-cloture.md) | Signature du client à la clôture d'une intervention | Proposée | 2026-11-25 |
 | [0014](0014-import-export-csv.md) | Import et export CSV, sans dépendance, fichier envoyé en JSON | Proposée | 2026-11-25 |
+| [0015](0015-guide-interactif-premiere-connexion.md) | Guide interactif à la première connexion, avec Driver.js | Proposée | 2026-11-26 |
 
 ## Rédiger un nouvel ADR
 
