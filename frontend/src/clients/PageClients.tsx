@@ -247,13 +247,12 @@ function resultatDeLaListe(liste: ListePaginee<Client>, criteres: CriteresClient
   return liste.data.length > 0 ? nombreDeClients(liste.meta.total) : messageAucunClient(criteres);
 }
 
-function messageAucunClient(criteres: CriteresClients): string {
-  return criteresActifs(criteres)
+/**
+ * Seuls la recherche et le type restreignent la liste : le tri ne fait que l'ordonner, et
+ * « Inclure les archivés » l'élargit au lieu de la restreindre.
+ */
+function messageAucunClient({ recherche, typeClient }: CriteresClients): string {
+  return recherche !== undefined || typeClient !== undefined
     ? 'Aucun client ne correspond à ces critères.'
     : 'Aucun client enregistré pour le moment.';
-}
-
-/** Le tri ne restreint pas la liste : seuls la recherche, le type et les archivés comptent. */
-function criteresActifs({ recherche, typeClient, archives }: CriteresClients): boolean {
-  return recherche !== undefined || typeClient !== undefined || archives === true;
 }

@@ -442,6 +442,27 @@ describe('liste des clients (US08)', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
+  it('US08 : une liste vide, archivés inclus et sans recherche, dit qu’aucun client n’est enregistré', async () => {
+    const utilisateur = userEvent.setup();
+    const recues = servirLesClients([]);
+    afficherALAdresse(<PageClients />, '/clients');
+    await messageAffiche('Aucun client enregistré pour le moment.');
+
+    await utilisateur.click(screen.getByRole('checkbox', { name: 'Inclure les archivés' }));
+
+    // La zone du total, vidée par la nouvelle lecture, ne reprend un texte qu'à sa réponse.
+    await waitFor(() => expect(recues).toHaveLength(2));
+    expect(recues[1].get('archives')).toBe('true');
+    // Les archivés élargissent la liste : vide, elle ne compte aucun client, en service ou non.
+    await waitFor(() =>
+      expect(zoneDuTotal()).toHaveTextContent('Aucun client enregistré pour le moment.'),
+    );
+    expect(await messageAffiche('Aucun client enregistré pour le moment.')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Aucun client ne correspond à ces critères.'),
+    ).not.toBeInTheDocument();
+  });
+
   it('US08 : partant d’une liste vide, n’annonce « aucun client » pour une recherche qu’une fois sa réponse reçue', async () => {
     const utilisateur = userEvent.setup();
     servirLesClients([]);
