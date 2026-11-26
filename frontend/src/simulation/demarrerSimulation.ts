@@ -1,12 +1,14 @@
 import { setupWorker } from 'msw/browser';
 import type { Intervention } from '../api/types';
 import { jourMetier, lundiDeLaSemaine, versInstant } from '../commun/dates';
+import { COMPTES_DEMONSTRATION } from './comptesDemonstration';
 import {
   creerJeuDeDemonstration,
   fabriquerIntervention,
   type JeuDeDemonstration,
   planifier,
 } from './donneesDemonstration';
+import { creerHandlersAuthentification } from './handlersAuthentification';
 import { creerHandlersInterventions } from './handlersInterventions';
 import { creerHandlersPlanning } from './handlersPlanning';
 
@@ -14,8 +16,8 @@ const URL_API = (import.meta.env.VITE_API_URL ?? '/api/v1').replace(/\/$/, '');
 
 /**
  * Mode simulé (npm run dev:simule, développement uniquement) : MSW répond aux appels de l'API dans le navigateur
- * avec les données de démonstration, pour voir les écrans tant que l'authentification (#13)
- * et la liste des interventions (#17) ne sont pas livrées.
+ * avec les données de démonstration et une connexion simulée (comptesDemonstration.ts), pour
+ * parcourir tous les écrans sans back-end.
  */
 export async function demarrerSimulation(): Promise<void> {
   const aujourdhui = (): string => jourMetier(new Date());
@@ -23,6 +25,8 @@ export async function demarrerSimulation(): Promise<void> {
   ajouterTourneeDuJour(jeu, aujourdhui());
   const options = { urlApi: (chemin: string) => `${URL_API}${chemin}`, aujourdhui };
   const handlers = [
+    // En premier : la connexion et le profil conditionnent l'accès à tous les autres écrans.
+    ...creerHandlersAuthentification(COMPTES_DEMONSTRATION, options),
     ...creerHandlersPlanning(jeu, options),
     ...creerHandlersInterventions(jeu, options),
   ];
