@@ -54,7 +54,8 @@ const COUPLES: [texte: string, fond: string, ou: string][] = [
   ['green-800', 'succes-fond', 'badge Contenu intact (BlocSignature)'],
   ['chantier', 'chantier-clair', 'badge d’urgence'],
   ['erreur-texte', 'erreur-fond', 'alertes, badges En retard et Contenu modifié'],
-  ['erreur-texte', 'white', 'bouton destructif bordé'],
+  ['succes-texte', 'white', 'règles respectées du mot de passe, coche de la signature (#64)'],
+  ['erreur-texte', 'white', 'bouton destructif bordé, erreurs de la connexion et du mot de passe'],
   ['white', 'erreur-texte', 'bouton plein de FenetreConfirmation, survol du bouton d’annulation'],
   ['white', 'erreur', 'bouton plein « Annuler l’intervention » (FenetreAnnulation, #18)'],
   ['white', 'sarcelle', 'boutons principaux, vue et jour choisis, pastille d’étape'],
@@ -79,6 +80,14 @@ describe('contrastes des couples de couleurs de la charte', () => {
 
     expect(valeurDe('erreur')).toBe('#dc2626');
     expect(rapport).toBeCloseTo(4.41, 2);
+    expect(rapport).toBeLessThan(CONTRASTE_MINIMAL_TEXTE);
+  });
+
+  it('RGAA 3.2 : mesure sous 4,5:1 l’ancien vert de succès posé sur blanc (#64)', () => {
+    const rapport = rapportDeContraste(valeurDe('succes'), valeurDe('white'));
+
+    expect(valeurDe('succes')).toBe('#16a34a');
+    expect(rapport).toBeCloseTo(3.3, 1);
     expect(rapport).toBeLessThan(CONTRASTE_MINIMAL_TEXTE);
   });
 
