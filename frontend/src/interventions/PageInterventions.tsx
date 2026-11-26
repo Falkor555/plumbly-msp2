@@ -1,8 +1,8 @@
 import { type ChangeEvent, type FormEvent, useCallback, useId, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { type FiltresInterventions, interventionsApi } from '../api/interventions.api';
-import type { Intervention, ListePaginee } from '../api/types';
-import { dateMetierCourte } from '../commun/dates';
+import type { DateIso, Intervention, ListePaginee } from '../api/types';
+import { dateMetierCourte, jourMetier } from '../commun/dates';
 import { useChargement } from '../commun/useChargement';
 import { BadgesIntervention } from '../planning/BadgesIntervention';
 import {
@@ -16,7 +16,10 @@ import {
   type Brouillon,
   depuisBrouillon,
   erreursDuBrouillon,
+  type FiltrePret,
+  filtresPrets,
   lireFiltres,
+  memesFiltres,
   STATUTS,
   URGENCES,
   versBrouillon,
@@ -32,12 +35,21 @@ const BOUTON_PRINCIPAL =
 const BOUTON_SECONDAIRE =
   'h-11 rounded border border-gray-300 bg-white px-4 text-sm font-semibold text-sarcelle-profonde hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle disabled:cursor-not-allowed disabled:opacity-50';
 const CELLULE = 'px-3 py-2 align-top';
+const PASTILLE =
+  'h-11 rounded-full border px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sarcelle';
+const PASTILLE_INACTIVE = `${PASTILLE} border-gray-300 bg-white text-sarcelle-profonde hover:bg-sarcelle-claire`;
+const PASTILLE_ACTIVE = `${PASTILLE} border-sarcelle-profonde bg-sarcelle-profonde text-white`;
+
+interface Props {
+  /** Jour de La Réunion, injecté par les tests pour figer « Aujourd'hui » et « Cette semaine ». */
+  aujourdhui?: DateIso;
+}
 
 /**
  * US15 : liste des interventions pour le bureau, les plus urgentes d'abord (RG18). Les filtres
  * sont gardés dans l'adresse : ils survivent au rechargement et se partagent par lien.
  */
-export function PageInterventions() {
+export function PageInterventions({ aujourdhui = jourMetier(new Date()) }: Props) {
   const [parametres, setParametres] = useSearchParams();
   const adresse = parametres.toString();
   const filtres = useMemo(() => lireFiltres(new URLSearchParams(adresse)), [adresse]);
@@ -76,6 +88,8 @@ export function PageInterventions() {
         </p>
       )}
 
+      <FiltresPrets prets={filtresPrets(aujourdhui)} actuels={filtres} onAppliquer={appliquer} />
+
       {/* La clé recrée le formulaire quand l'adresse change (précédent, lien partagé). */}
       <FormulaireFiltres key={adresse} initial={filtres} onAppliquer={appliquer} />
 
@@ -97,6 +111,34 @@ export function PageInterventions() {
         <Resultats liste={etat.donnees} onPage={(page) => appliquer({ ...filtres, page })} />
       )}
     </main>
+  );
+}
+
+interface PropsFiltresPrets {
+  prets: FiltrePret[];
+  actuels: FiltresInterventions;
+  onAppliquer: (filtres: FiltresInterventions) => void;
+}
+
+/** #49 : un clic remplit les filtres ci-dessous, qui restent modifiables (« Effacer » les retire). */
+function FiltresPrets({ prets, actuels, onAppliquer }: PropsFiltresPrets) {
+  return (
+    <div role="group" aria-label="Filtres prêts à l’emploi" className="flex flex-wrap gap-2">
+      {prets.map(({ libelle, filtres }) => {
+        const actif = memesFiltres(filtres, actuels);
+        return (
+          <button
+            key={libelle}
+            type="button"
+            aria-pressed={actif}
+            onClick={() => onAppliquer(filtres)}
+            className={actif ? PASTILLE_ACTIVE : PASTILLE_INACTIVE}
+          >
+            {libelle}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
